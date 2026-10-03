@@ -1,0 +1,10 @@
+# 运行时产物（不入库）
+bin/
+dist/
+data/
+config.json
+config.json.tmp
+
+# templ 生成物（*_templ.go）为入库形态——CI 无工具链直接构建依赖（发布准备批次
+# go:generate 锚+release.yml 口径）；禁止添加忽略规则（2026-10-03 缺陷修复批次
+# 移除原无效规则 *.templ.go——与生成物命名不匹配且具误导性，登记#2 处置）
