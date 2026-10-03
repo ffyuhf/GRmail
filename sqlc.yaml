@@ -1,0 +1,70 @@
+# sqlc 配置：SQL → 类型安全 Go 代码（Q5 裁决；U11 Q2-A 三套生成）
+# 三库分工程生成；动态查询（IMAP SEARCH/组合过滤）不在此处，由 Bob 承担
+# 修改历史：
+#   2026-09-16 04:44:00 | 新建 | U1 工程骨架
+#   2026-09-20 05:24:00 | 重构 | U11 三库验收（queries 拆分三目录，mysql/postgres 工程并入）
+#   2026-09-29 21:48:00 | 修正 | RFC候选修正批次 RF-J：is_answered/is_draft 布尔
+#   overrides 补齐（沿 is_read/is_flagged 先例——F-I16 五系统标志列）
+#   2026-09-30 19:01:00 | 修正 | RFCSHOULD修正批次：delivery_queue.ret_full 布尔
+#   overrides 补齐（sqlite/postgres——F-L3 RET=FULL 持久化列）
+#   2026-10-01 16:47:00 | 修正 | U24双因素认证批次：mailboxes.two_factor_required 布尔
+#   overrides 补齐（sqlite/postgres——沿 users.is_admin 先例；FR-018 强制标记列）
+version: "2"
+sql:
+  - engine: "sqlite"
+    schema: "migrations/sqlite"
+    queries: "queries/sqlite"
+    gen:
+      go:
+        package: "dbgen"
+        out: "internal/storage/dbgen/sqlite"
+        emit_json_tags: false
+        emit_empty_slices: true
+        overrides:
+          - column: "mailbox_messages.is_read"
+            go_type: "bool"
+          - column: "mailbox_messages.is_flagged"
+            go_type: "bool"
+          - column: "mailbox_messages.is_answered"
+            go_type: "bool"
+          - column: "mailbox_messages.is_draft"
+            go_type: "bool"
+          - column: "delivery_queue.ret_full"
+            go_type: "bool"
+          - column: "users.is_admin"
+            go_type: "bool"
+          - column: "mailboxes.two_factor_required"
+            go_type: "bool"
+  - engine: "mysql"
+    schema: "migrations/mysql"
+    queries: "queries/mysql"
+    gen:
+      go:
+        package: "dbgen"
+        out: "internal/storage/dbgen/mysql"
+        emit_json_tags: false
+        emit_empty_slices: true
+  - engine: "postgresql"
+    schema: "migrations/postgres"
+    queries: "queries/postgres"
+    gen:
+      go:
+        package: "dbgen"
+        out: "internal/storage/dbgen/postgres"
+        emit_json_tags: false
+        emit_empty_slices: true
+        overrides:
+          - column: "mailbox_messages.is_read"
+            go_type: "bool"
+          - column: "mailbox_messages.is_flagged"
+            go_type: "bool"
+          - column: "mailbox_messages.is_answered"
+            go_type: "bool"
+          - column: "mailbox_messages.is_draft"
+            go_type: "bool"
+          - column: "delivery_queue.ret_full"
+            go_type: "bool"
+          - column: "users.is_admin"
+            go_type: "bool"
+          - column: "mailboxes.two_factor_required"
+            go_type: "bool"

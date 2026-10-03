@@ -1,0 +1,105 @@
+// GRmail 2FA 页面组（U24——FR-018 Webmail 双因素认证呈现层）。
+// TwoFactorView：mailbox 主体 /settings/2fa 绑定管理页（AppLayout 骨架——登录后）；
+// Login2FAView：登录二步验证页（Layout 骨架——会话建立前，沿 login.templ 先例；
+// CSRF 主防线 SameSite=Strict——pending 凭据一次性绑定）。
+// 数据流：web/twofactor.go 构造 TwoFactorData → 本组件渲染（二维码 base64 PNG 内联
+// ——pschlump/goqrcode web 层产图；恢复码明文仅 Confirm 响应一次性呈现）。
+// SRS 条目：FR-018（3.11，判定①②③）；IR-009；G1-W Q2-A 独立最小页裁决（2026-10-01 16:37:58）。
+// 修改历史：
+//   2026-10-01 17:00:00 | 新建 | U24 双因素认证（G2 批准 2026-10-01 16:41:08）
+package templates
+
+// TwoFactorData 2FA 管理页渲染数据（web 包构造、本包消费——沿 viewmodels 拍平先例；
+// 三态互斥渲染：Bound=已绑定停用态/Pending=绑定确认态（二维码+密钥）/未发起=启用入口态；
+// RecoveryCodes 仅确认成功响应一次性非空——TC-027 判定①「恢复码一次性展示」锚）。
+type TwoFactorData struct {
+	Lang          Lang
+	Label         string   // 主体呈现名（AppLayout 顶栏）
+	CSRF          string   // 会话绑定 CSRF token（全部表单埋域——契约 3.4）
+	Bound         bool     // 绑定完成（account.TwoFactorState.Bound 同源）
+	Pending       bool     // 绑定中（密钥已生成待确认）
+	QRDataURI     string   // 二维码 data:image/png;base64,…（Pending 态呈现）
+	Secret        string   // Base32 密钥明文（Pending 态手动输入通道——判定①双形态）
+	RecoveryCodes []string // 恢复码明文集（确认响应一次性展示——TC-027 判定①）
+	Forced        bool     // 管理员强制引导（登录重定向而来——TC-028 判定③）
+	ErrText       string   // 操作错误提示（哨兵映射文案）
+}
+
+// TwoFactorView 2FA 绑定管理页（GET /settings/2fa 与三 POST 操作响应统一渲染）。
+templ TwoFactorView(d TwoFactorData) {
+	@appLayout2FA(d) {
+		<div class="main content-page">
+		<div class="page-head"><h2>{ Tr(d.Lang, "twofactor.title") }</h2></div>
+		<p>{ Tr(d.Lang, "twofactor.intro") }</p>
+		if d.Forced {
+			<p class="notice">{ Tr(d.Lang, "twofactor.forced") }</p>
+		}
+		if d.ErrText != "" {
+			<p class="error" role="alert">{ d.ErrText }</p>
+		}
+		if d.Bound {
+			<p>{ Tr(d.Lang, "twofactor.bound") }</p>
+			<form method="post" action="/settings/2fa/disable">
+				<input type="hidden" name="csrf_token" value={ d.CSRF }/>
+				<label>{ Tr(d.Lang, "twofactor.disableCode") } <input type="text" name="code" required maxlength="64" autocomplete="off"/></label>
+				<button class="danger" type="submit">{ Tr(d.Lang, "twofactor.disable") }</button>
+			</form>
+		} else {
+			if d.Pending {
+				<p>{ Tr(d.Lang, "twofactor.qr") }</p>
+				if d.QRDataURI != "" {
+					<span class="qr-box"><img src={ d.QRDataURI } alt="TOTP QR" width="256" height="256"/></span>
+				}
+				<p>{ Tr(d.Lang, "twofactor.secret") }: <code>{ d.Secret }</code></p>
+				<form method="post" action="/settings/2fa/confirm">
+					<input type="hidden" name="csrf_token" value={ d.CSRF }/>
+					<label>{ Tr(d.Lang, "twofactor.confirmCode") } <input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" required maxlength="64" autofocus/></label>
+					<button class="primary" type="submit">{ Tr(d.Lang, "twofactor.confirm") }</button>
+				</form>
+			} else {
+				<form method="post" action="/settings/2fa/setup">
+					<input type="hidden" name="csrf_token" value={ d.CSRF }/>
+					<button class="primary" type="submit">{ Tr(d.Lang, "twofactor.setup") }</button>
+				</form>
+			}
+		}
+		if len(d.RecoveryCodes) > 0 {
+			<h2>{ Tr(d.Lang, "twofactor.recovery") }</h2>
+			<p>{ Tr(d.Lang, "twofactor.recoveryTip") }</p>
+			<ul class="recovery-codes">
+				for _, code := range d.RecoveryCodes {
+					<li><code>{ code }</code></li>
+				}
+			</ul>
+		}
+		</div>
+	}
+}
+
+// F03：card→main content-page 容器（对齐 admin/content-page 形态——Webmail界面精修批次 2026-10-03）
+// appLayout2FA 2FA 页骨架适配（AppLayout isAdmin 恒 false——2FA 绑定主体为 mailbox 账号，
+// admin 主体（User）不在 FR-018 范围）。
+templ appLayout2FA(d TwoFactorData) {
+	@AppLayout(d.Lang, Tr(d.Lang, "twofactor.title"), d.Label, false, d.CSRF) {
+		{ children... }
+	}
+}
+
+// Login2FAView 登录二步验证页（GET/POST /webmail/login/2fa——密码步通过后渲染；
+// t 为短时一次性 pending 凭据〔S4-W Q1-A 内存态 5 分钟〕——隐藏域承载；
+// code 字段统一接受 TOTP 验证码或恢复码——handler 经 account.VerifyLoginFactor 双路径）。
+// 参数：lang 界面语言；t pending 凭据；errText 验证失败提示（统一模糊口径）。
+templ Login2FAView(lang Lang, t string, errText string) {
+	@Layout(lang, Tr(lang, "login2fa.title"), errText) {
+		<div class="card">
+			<div class="card-head"><h1>GRmail</h1><span class="chip">{ Tr(lang, "login2fa.stepChip") }</span></div>
+			<form method="post" action="/webmail/login/2fa">
+				<input type="hidden" name="t" value={ t }/>
+				<label>{ Tr(lang, "login2fa.code") } <input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" required maxlength="64" autofocus/></label>
+				<button class="primary" type="submit">{ Tr(lang, "login2fa.submit") }</button>
+			</form>
+			<p class="hint">{ Tr(lang, "login2fa.recovery") }</p>
+			<p class="hint lang-switch"><a href={ langSwitchHref(lang) }>{ Tr(lang, "top.lang") }</a></p>
+			</div>
+		}
+	}
