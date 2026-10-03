@@ -1,0 +1,88 @@
+// GRmail 插件 gRPC 契约（FR-016；SRS 3.10.1；IR-006）
+// 依据：U15 计划书 v1.0.0 1.5①（Q2-A 最小完备钩子集裁决 2026-09-24 10:43:43）；
+// REQ-023 裁决「独立进程+gRPC…HashiCorp go-plugin」（2026-09-15 10:28:29）。
+// 契约性质：本文件为插件接口签名唯一事实来源（NFR-014——主程序与插件均仅经
+// 生成代码消费；契约变更→重新生成→主程序重编译即适配，无额外耦合改动）。
+// 生成：make generate-proto（protoc+protoc-gen-go+protoc-gen-go-grpc；生成物入库）。
+syntax = "proto3";
+
+package grmail.plugin.v1;
+
+option go_package = "GRmail/proto/grmailplugin";
+
+// GRmailPlugin 插件服务（宿主与插件进程的强类型契约面）。
+service GRmailPlugin {
+  // GetInfo 插件元信息（名称/版本/能力声明——宿主启动期调用，日志呈现）。
+  rpc GetInfo(GetInfoRequest) returns (PluginInfo);
+
+  // OnInbound 收信钩子（Deliver 编排：四项验证后、Sieve/落库前——FR-005
+  // 管道语义「认证验证→插件链→Sieve→落库」）。
+  rpc OnInbound(InboundContext) returns (HookDecision);
+
+  // OnSubmit 发信钩子（Submit 编排：授权与 DKIM 后、入队前——DFD P2 发信钩子）。
+  rpc OnSubmit(SubmitContext) returns (HookDecision);
+
+  // RegisterProtocol 协议注册双向流（FR-016「契约具备协议处理注册能力」——
+  // 流向：宿主开启通道（请求流=回执载体），插件经返回流逐条推送协议声明，
+  // 宿主登记+日志呈现并经请求流回执；本期不路由到监听器（FR-017 愿望清单）。
+  rpc RegisterProtocol(stream ProtocolAck) returns (stream ProtocolRegistration);
+}
+
+// GetInfoRequest 元信息请求（无参——插件自述）。
+message GetInfoRequest {}
+
+// PluginInfo 插件元信息。
+message PluginInfo {
+  string name = 1;             // 插件名（日志与监管呈现）
+  string version = 2;          // 插件版本
+  repeated string capabilities = 3; // 能力声明：inbound_hook/submit_hook/protocol
+}
+
+// InboundContext 收信钩子输入（验证结论+原始字节——DATA 完成态，未含宿主注入头）。
+message InboundContext {
+  Envelope envelope = 1;       // SMTP 会话信封
+  VerifyResults verification = 2; // 四项验证结论（SPF/DKIM/DMARC/ARC）
+  bytes raw_message = 3;       // 原始邮件字节（保真）
+}
+
+// SubmitContext 发信钩子输入（提交会话形态）。
+message SubmitContext {
+  Envelope envelope = 1;       // SMTP 会话信封
+  string auth_user = 2;        // 认证身份（邮箱地址或管理员用户名，FR-002 授权判定输入）
+  repeated string recipients = 3; // RCPT TO 全量收件人
+  bytes raw_message = 4;       // 提交原始字节
+}
+
+// Envelope SMTP 信封三元组。
+message Envelope {
+  string helo = 1;             // EHLO 名
+  string remote_ip = 2;        // 对端 IP
+  string mail_from = 3;        // MAIL FROM（空=<> null path）
+}
+
+// VerifyResults 四项验证结论（none|pass|fail|softfail|temperror|permerror...）。
+message VerifyResults {
+  string spf = 1;
+  string dkim = 2;
+  string dmarc = 3;
+  string arc = 4;
+}
+
+// HookDecision 钩子决策。
+message HookDecision {
+  bool allow = 1;              // true=放行；false=拒绝
+  int32 smtp_code = 2;         // 拒绝应答码（400-599；宿主校验越界按放行+告警）
+  string message = 3;          // 拒绝原因（对端应答文本）/说明
+}
+
+// ProtocolRegistration 协议注册声明（返回流消息——插件→宿主方向）。
+message ProtocolRegistration {
+  string protocol_name = 1;    // 协议名（如 caldav/carddav——FR-017 形态预留）
+  string endpoint = 2;         // 建议端点路径
+}
+
+// ProtocolAck 协议注册确认（请求流消息——宿主→插件回执方向）。
+message ProtocolAck {
+  bool accepted = 1;           // 登记结果（本期恒 true——登记不路由）
+  string note = 2;             // 备注（宿主登记说明）
+}

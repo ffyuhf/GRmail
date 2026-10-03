@@ -1,0 +1,44 @@
+// GRmail 登录双端点页（Q2-B 裁决：管理员 /login 与邮箱账号 /webmail/login 分离）。
+// CSRF 说明：登录前无会话——表单以 SameSite=Strict 为主防线（契约 3.4），限流为辅（Q4-B）；
+// 会话绑定 CSRF token 在登录成功后生成并埋入后续表单（home.templ 登出表单）。
+// U16 增量（Q2-A）：lang 贯通+文案 Tr 化（登录页双语——用户首见页优先覆盖）。
+// 视觉重构增量（批次阶段5）：表单包 .card 容器（参考网盘前端 HeadlessFrame——全屏灰底
+// 垂直居中窄卡片+grow-in 进入动画）；表单结构/端点/字段零变更。
+// 设计系统重构增量（阶段D）：主体类型 Chip 呈现+主按钮 primary 化；结构/端点零变更。
+// 修改历史：
+//   2026-09-19 05:10:00 | 新建 | U8 Web 会话与登录（计划书步骤 7）
+//   2026-09-24 16:54:00 | 扩展 | U16 Webmail 体验收尾（计划书步骤 4，G2 批准 2026-09-24 11:51:57）
+//   2026-10-02 13:50:00 | 扩展 | Webmail视觉重构批次阶段5（G2 批准 2026-10-02 13:20:06）
+package templates
+
+// AdminLoginView 管理员登录页（/login：用户名不含 @，走 UserRepo+VerifyPassword）。
+// 参数：lang 界面语言；errText 登录失败统一模糊提示（防枚举）。
+templ AdminLoginView(lang Lang, errText string) {
+	@Layout(lang, Tr(lang, "login.adminTitle"), errText) {
+		<div class="card">
+			<div class="card-head"><h1>GRmail</h1><span class="chip">{ Tr(lang, "home.adminKind") }</span></div>
+			<form method="post" action="/login">
+				<label>{ Tr(lang, "login.username") } <input type="text" name="username" autocomplete="username" required autofocus maxlength="64"/></label>
+				<label>{ Tr(lang, "login.password") } <input type="password" name="password" autocomplete="current-password" required maxlength="1024"/></label>
+				<button class="primary" type="submit">{ Tr(lang, "login.submit") }</button>
+				</form>
+				<p class="hint lang-switch"><a href={ langSwitchHref(lang) }>{ Tr(lang, "top.lang") }</a></p>
+			</div>
+		}
+	}
+
+// MailboxLoginView 邮箱账号登录页（/webmail/login：地址含 @，走 account.VerifyCredentials）。
+// 参数：lang 界面语言；errText 同 AdminLoginView（统一模糊口径复用 U2 防枚举语义）。
+templ MailboxLoginView(lang Lang, errText string) {
+	@Layout(lang, Tr(lang, "login.mailTitle"), errText) {
+		<div class="card">
+			<div class="card-head"><h1>GRmail</h1><span class="chip">{ Tr(lang, "home.mailKind") }</span></div>
+			<form method="post" action="/webmail/login">
+				<label>{ Tr(lang, "login.address") } <input type="text" name="address" autocomplete="username" required placeholder="user@example.com" autofocus maxlength="320"/></label>
+				<label>{ Tr(lang, "login.password") } <input type="password" name="password" autocomplete="current-password" required maxlength="1024"/></label>
+				<button class="primary" type="submit">{ Tr(lang, "login.submit") }</button>
+				</form>
+				<p class="hint lang-switch"><a href={ langSwitchHref(lang) }>{ Tr(lang, "top.lang") }</a></p>
+			</div>
+		}
+	}

@@ -1,0 +1,135 @@
+// GRmail Setup 六步向导页（U10：FR-015/NFR-010——Q3-A 80 明文承载不携会话；
+// 步骤序沿手册第 1 章：库→密码→域名→DNS→SSL→完成；U18 深级双语收口——U16 登记项③：
+// 六步全量文案 Tr 化——向导无会话但 cookie lang 可读（语言偏好先于认证承载，/lang 先例））。
+// 修改历史：
+//   2026-09-20 01:25:00 | 新建 | U10 Setup 向导与 ACME（计划书步骤 6）
+//   2026-09-26 15:54:00 | 扩展 | U18 登记项收尾：深级文案 Tr 化（setup 域键+步骤导航
+//   双语化——缺省 zh 渲染与 U17 末态零变化锚）
+//   （依据：U18 计划书 v1.0.0 步骤 3/1.5④，G2 批准 2026-09-26 15:25:47）
+package templates
+
+// SetupView 向导步骤页（六步共用组件按 Step 分支渲染；当前值回填支持部分完成态恢复）。
+// 参数：data 步骤数据（SetupData——web 包 buildSetupData 装配；Lang 承载界面语言）。
+templ SetupView(data SetupData) {
+	{{ lang := NormalizeLang(data.Lang) }}
+	@Layout(lang, Tr(lang, "setup.title"), data.Error) {
+		<div class="card">
+		<h1>{ Trf(lang, "setup.h1", data.Step, data.Total, data.Title) }</h1>
+		if data.Step == 1 {
+			<form method="post" action="/setup/database">
+				<fieldset>
+					<legend>{ Tr(lang, "setup.s1Legend") }</legend>
+					<label><input type="radio" name="driver" value="sqlite" checked={ data.Driver == "sqlite" }/> { Tr(lang, "setup.sqlite") }</label>
+					<label><input type="radio" name="driver" value="mysql" checked={ data.Driver == "mysql" }/> MySQL</label>
+					<label><input type="radio" name="driver" value="postgres" checked={ data.Driver == "postgres" }/> PostgreSQL</label>
+					<label>{ Tr(lang, "setup.dsn") }
+						<input type="text" name="dsn" value={ data.DSN } placeholder="user:pass@tcp(host:3306)/grmail" size="48"/>
+					</label>
+				</fieldset>
+				<p class="hint">{ Tr(lang, "setup.s1Hint") }</p>
+				<button class="primary" type="submit">{ Tr(lang, "setup.next") }</button>
+			</form>
+		}
+		if data.Step == 2 {
+			<form method="post" action="/setup/admin">
+				<fieldset>
+					<legend>{ Tr(lang, "setup.s2Legend") }</legend>
+					<label>{ Tr(lang, "login.username") } <input type="text" name="username" value={ data.Username } required maxlength="64"/></label>
+					<label>{ Tr(lang, "login.password") } <input type="password" name="password" required maxlength="1024"/></label>
+					<label>{ Tr(lang, "setup.confirm") } <input type="password" name="confirm" required maxlength="1024"/></label>
+				</fieldset>
+				<button class="primary" type="submit">{ Tr(lang, "setup.createGo") }</button>
+			</form>
+			<form method="post" action="/setup/admin">
+				<input type="hidden" name="action" value="skip"/>
+				<p class="hint">{ Tr(lang, "setup.s2Hint") }<button type="submit" class="linklike">{ Tr(lang, "setup.skip") }</button></p>
+			</form>
+		}
+		if data.Step == 3 {
+			<form method="post" action="/setup/domain">
+				<fieldset>
+					<legend>{ Tr(lang, "setup.s3Legend") }</legend>
+					<label>{ Tr(lang, "setup.domain") } <input type="text" name="domain" value={ data.Domain } required placeholder="mail.example.com" maxlength="255"/></label>
+				</fieldset>
+				<button class="primary" type="submit">{ Tr(lang, "setup.next") }</button>
+			</form>
+		}
+		if data.Step == 4 {
+			<form method="post" action="/setup/dns">
+				<fieldset>
+					<legend>{ Tr(lang, "setup.s4Legend") }</legend>
+					<div class="table-wrap">
+						<table>
+							<tr><th>{ Tr(lang, "setup.colType") }</th><th>{ Tr(lang, "setup.colHost") }</th><th>{ Tr(lang, "setup.colValue") }</th><th>{ Tr(lang, "setup.colNote") }</th></tr>
+							for _, r := range data.DNSRecords {
+								<tr><td>{ r.Type }</td><td>{ r.Name }</td><td><code>{ r.Value }</code></td><td>{ r.Note }</td></tr>
+							}
+						</table>
+					</div>
+				</fieldset>
+				<button class="primary" type="submit">{ Tr(lang, "setup.dnsDone") }</button>
+			</form>
+		}
+		if data.Step == 5 {
+			<form method="post" action="/setup/ssl">
+				<fieldset>
+					<legend>{ Tr(lang, "setup.s5Legend") }</legend>
+					<label><input type="radio" name="mode" value="acme" checked={ data.SSLMode != "manual" }/> { Tr(lang, "setup.acme") }</label>
+					<label>{ Tr(lang, "setup.acmeMail") } <input type="text" name="acmeEmail" value={ data.ACMEMail } placeholder="admin@example.com" size="36"/></label>
+					<label><input type="checkbox" name="acmeStaging" checked={ data.ACMEStaging }/> { Tr(lang, "setup.staging") }</label>
+					<label><input type="radio" name="acmeChallenge" value="http" checked={ data.ACMEChallenge != "dns" }/> { Tr(lang, "setup.http01") }</label>
+					<label><input type="radio" name="acmeChallenge" value="dns" checked={ data.ACMEChallenge == "dns" }/> { Tr(lang, "setup.dns01") }</label>
+					<label>{ Tr(lang, "setup.dnsToken") } <input type="password" name="acmeDnsToken" size="48" autocomplete="off"/></label>
+					<hr/>
+					<label><input type="radio" name="mode" value="manual" checked={ data.SSLMode == "manual" }/> { Tr(lang, "setup.manual") }</label>
+					<label>{ Tr(lang, "setup.certFile") } <input type="text" name="certFile" value={ data.CertFile } size="48"/></label>
+					<label>{ Tr(lang, "setup.keyFile") } <input type="text" name="keyFile" value={ data.KeyFile } size="48"/></label>
+				</fieldset>
+				<button class="primary" type="submit">{ Tr(lang, "setup.next") }</button>
+			</form>
+		}
+		if data.Step == 6 {
+			<form method="post" action="/setup/done">
+				<fieldset>
+					<legend>{ Tr(lang, "setup.s6Legend") }</legend>
+					<p>{ Tr(lang, "setup.s6Intro") }</p>
+					<ul>
+						<li>{ Tr(lang, "setup.s6Domain") }<code>{ data.DomainFinal }</code></li>
+						<li>{ Tr(lang, "setup.s6Restart") }</li>
+						<li>{ Tr(lang, "setup.s6Acme") }</li>
+					</ul>
+				</fieldset>
+				<button class="primary" type="submit">{ Tr(lang, "setup.finish") }</button>
+			</form>
+		}
+		<nav class="steps" aria-label="setup steps">
+			<span>{ Tr(lang, "setup.stepsNav") }</span>
+			for i, s := range setupStepTitles(lang) {
+				if i+1 == data.Step {
+					<strong>{ s }</strong>
+				} else {
+					<span>{ s }</span>
+				}
+				if i < 5 {
+					<span>·</span>
+				}
+			}
+		</nav>
+		<p class="hint lang-switch"><a href={ langSwitchHref(lang) }>{ Tr(lang, "top.lang") }</a></p>
+		</div>
+	}
+}
+
+// setupStepTitles 步骤标题清单（导航条渲染源——与 web.setupSteps 同序，模板侧独立
+// 承载避免跨包引用；U18 双语化——lang 参数注入；strconvItoa/strconvItoa64 定义于
+// settings.templ 同包共用）。
+func setupStepTitles(lang Lang) []string {
+	return []string{
+		Tr(lang, "setup.stepDB"),
+		Tr(lang, "setup.stepAdmin"),
+		Tr(lang, "setup.stepDomain"),
+		Tr(lang, "setup.stepDNS"),
+		Tr(lang, "setup.stepSSL"),
+		Tr(lang, "setup.stepDone"),
+	}
+}

@@ -1,0 +1,101 @@
+// GRmail Web admin API Token 管理页（U14，Q3-B 独立端点族 /admin/tokens；
+// U18 深级双语收口——U16 登记项③：lang 首参贯通+tokens 域键消费）。
+// FR-013「设置面板含 Token 管理」子项（28 项之一）；G19 参照：有效期三档（永久/7天/30天）
+// +一次性明文展示（哈希存储语义——仅生成时可见）+撤销；Bearer 并列认证（Q1-A）的管理面。
+// 修改历史：
+//   2026-09-24 02:52:00 | 新建 | U14 API Token 管理（计划书步骤 4，G2 批准 2026-09-24 02:30:51）
+//   2026-09-26 15:43:00 | 扩展 | U18 登记项收尾：深级文案 Tr 化（formatTokenExpiry/
+//   clientIPOf 双语化——缺省 zh 渲染与 U17 末态零变化锚）
+//   （依据：U18 计划书 v1.0.0 步骤 3/1.5④，G2 批准 2026-09-26 15:25:47）
+package templates
+
+import (
+	"fmt"
+	"time"
+
+	"GRmail/internal/storage"
+)
+
+// formatTokenTime Token 行时间呈现（零值=「—」——未使用/永久语义辅助）。
+func formatTokenTime(t time.Time) string {
+	if t.IsZero() {
+		return "—"
+	}
+	return t.UTC().Format("2006-01-02 15:04")
+}
+
+// formatTokenExpiry 有效期呈现（零值=永久——expires_at NULL 承载；U18 双语化）。
+func formatTokenExpiry(lang Lang, t time.Time) string {
+	if t.IsZero() {
+		return Tr(lang, "tokens.forever")
+	}
+	return formatTokenTime(t)
+}
+
+// clientIPOf 绑定 IP 呈现（空=「不绑定」；U18 双语化）。
+func clientIPOf(lang Lang, ip string) string {
+	if ip == "" {
+		return Tr(lang, "tokens.notBound")
+	}
+	return ip
+}
+
+// TokensView Token 管理页。
+// 参数：lang 界面语言（U18 深级贯通）；list 当前列表；newToken 生成成功时的一次性明文
+// （空=无生成态——仅此一次可见）；errText 操作错误提示；csrf 会话 token。
+templ TokensView(lang Lang, list []*storage.ApiToken, newToken string, errText string, csrf string) {
+	@AppLayout(lang, Tr(lang, "tokens.title"), Tr(lang, "home.adminKind"), true, csrf) {
+		<div class="main content-page">
+			if errText != "" {
+				<p class="error" role="alert">{ errText }</p>
+			}
+			if newToken != "" {
+				<div class="token-reveal">
+					<p><strong>{ Tr(lang, "tokens.generated") }</strong></p>
+					<code>{ newToken }</code>
+				</div>
+			}
+			<div class="page-head"><h2>{ Tr(lang, "tokens.h2Gen") }</h2></div>
+			<form method="post" action="/admin/tokens" class="actions">
+				<input type="hidden" name="csrf_token" value={ csrf }/>
+				<label class="inline">{ Tr(lang, "tokens.expires") }
+					<select name="expires">
+						<option value="forever">{ Tr(lang, "tokens.forever") }</option>
+						<option value="7d">{ Tr(lang, "tokens.7d") }</option>
+						<option value="30d">{ Tr(lang, "tokens.30d") }</option>
+					</select>
+				</label>
+				<label class="inline">{ Tr(lang, "tokens.bindIP") }
+					<input type="text" name="client_ip" placeholder={ Tr(lang, "tokens.ipPh") }/>
+				</label>
+				<button class="primary" type="submit">{ Tr(lang, "common.create") }</button>
+			</form>
+			<div class="page-head"><h2>{ Tr(lang, "tokens.h2List") }</h2></div>
+			<div class="table-wrap">
+				<table class="mails">
+					<thead><tr><th>{ Tr(lang, "tokens.colCreate") }</th><th>{ Tr(lang, "tokens.colExp") }</th><th>{ Tr(lang, "tokens.colIP") }</th><th>{ Tr(lang, "tokens.colUsed") }</th><th>{ Tr(lang, "admin.colAction") }</th></tr></thead>
+					<tbody>
+						if len(list) == 0 {
+							<tr><td colspan="5" class="empty-cell">{ Tr(lang, "tokens.empty") }</td></tr>
+						}
+						for _, t := range list {
+							<tr>
+								<td>{ formatTokenTime(t.CreatedAt) }</td>
+								<td>{ formatTokenExpiry(lang, t.ExpiresAt) }</td>
+								<td>{ clientIPOf(lang, t.ClientIP) }</td>
+								<td>{ formatTokenTime(t.LastUsedAt) }</td>
+								<td>
+									<form method="post" action={ "/admin/tokens/" + fmt.Sprintf("%d", t.ID) + "/revoke" } class="inline">
+										<input type="hidden" name="csrf_token" value={ csrf }/>
+										<button class="btn-sm danger" type="submit">{ Tr(lang, "tokens.revoke") }</button>
+									</form>
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+			<p class="hint">{ Tr(lang, "tokens.progHead") } <code>{ "Authorization: Bearer <Token>" }</code> { Tr(lang, "tokens.progTail") }</p>
+		</div>
+	}
+}
