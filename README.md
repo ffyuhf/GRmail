@@ -105,6 +105,18 @@ make build          # 本地构建（版本标识 = dev + 短提交哈希 + 构�
 make release VERSION=v1.0.0   # 五平台交叉构建 + tar.gz + SHA256SUMS（dist/）
 ```
 
+### 受限端口环境（-p 参数）
+
+设备无法绑定 80 端口时（容器 PaaS / 非特权用户 / 端口已被占用），用 `-p` 指定 HTTP 明文端口启动：
+
+```sh
+./mail-server -p 8080        # Setup 向导监听 8080——浏览器访问 http://<主机>:8080/ 进入向导
+```
+
+- `-p` 仅覆盖 HTTP 明文端口（Setup 向导承载 / ACME 挑战直答 / 301 跳转源），仅本次进程生效，不写入 `config.json`（重启无参数即回落 80）
+- HTTPS 端口（默认 443）经 `config.json` 的 `server.httpPort` 字段配置
+- **ACME 注意**：HTTP-01 挑战要求 CA 连入 80 端口——使用 `-p` 后 HTTP-01 不可用，请在向导 SSL 步选择 DNS-01（Cloudflare）或手动导入证书
+
 ## 版本查询
 
 ```sh
