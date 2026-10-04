@@ -61,6 +61,11 @@
 //	flag 包标准形态，-version/--version 等价；配置加载前处理，纯静态信息不依赖
 //	config.json/数据库；依据：发布准备计划书 v1.0.0 1.2-VB 组，G2 批准 2026-10-03
 //	17:09:00；NFR-013 构建产物元数据运维锚/CON-001 守恒）
+//	2026-10-04 11:33:00 | 扩展 | HTTP端口参数化批次：-p <port> 指定 HTTP 明文端口
+//	（parseHTTPPortFlag——两处 ":80" 硬编码消除：Setup 向导态+完成态 ACME 挑战/301 源；
+//	覆盖值仅本次进程生效不持久化〔S3-W Q2 裁决〕；HTTPS/协议端口零触碰〔S3-W Q1 裁决〕；
+//	依据：HTTP端口参数化计划书 v1.0.0 1.2-CLI/WA 组，G2 批准 2026-10-04 11:32:10；
+//	SRS FR-015 判定标准「无需手工编辑任何配置文件」在无 80 权限设备的可达性收口）
 package main
 
 import (
@@ -76,6 +81,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -150,11 +156,79 @@ func parseVersionFlag(args []string) bool {
 	return true
 }
 
+// defaultHTTPPlainPort HTTP 明文端口缺省档（两处监听接线的统一兜底值——无 -p 参数
+// 时保持既有 80 口径零变化；HTTPS 443 与协议端口不在此列，各归既有承载）。
+const defaultHTTPPlainPort = 80
+
+// parseHTTPPortFlag 解析命令行参数中的 HTTP 明文端口覆盖请求（HTTP端口参数化批次——
+// 计划书 1.2-CLI 组）。
+// -p <port>（flag 包标准形态：-p 8080 / -p=8080）指定 HTTP 明文端口——Setup 向导态与
+// 完成态 80 端点（ACME 挑战直答+301 跳转源）统一覆盖；使无 80 绑定权限的设备（容器
+// PaaS/非特权用户）可进入 Setup 向导完成引导部署（FR-015 判定标准可达性收口）。
+// 参数：args 命令行参数（os.Args[1:]）。返回：端口值（0=未指定不覆盖）；错误=调用方
+// 明确使用 -p 但值非法（非数字/越界 1~65535）——main 据此 stderr 提示+退出 2。
+// 语义边界（S3-W 两裁决）：仅 HTTP 明文端口（HTTPS 经既有 config.json server.httpPort
+// 承载）；覆盖值仅本次进程生效不持久化（config.json 零触碰——CON-003 链路零参与）。
+// 非 -p 参数引发的解析错误静默返回 0（沿 parseVersionFlag 未知 flag 先例——交由既有
+// 启动流程自然处理，服务行为零变化）。
+func parseHTTPPortFlag(args []string) (int, error) {
+	fs := flag.NewFlagSet("mail-server-http-port", flag.ContinueOnError)
+	fs.SetOutput(io.Discard) // 静默解析：usage/错误输出不混入端口覆盖路径
+	port := fs.Int("p", 0, "HTTP 明文端口（Setup 向导/ACME 挑战/301 跳转源；缺省 80）")
+	if err := fs.Parse(args); err != nil {
+		// 区分错误归属：-p 显式出现但值非法（如 -p abc）按错误上报；其他参数
+		// 引发的解析失败静默（未知 flag 沿 parseVersionFlag 先例）。
+		if hasPortFlagArg(args) {
+			return 0, fmt.Errorf("无效的 -p 参数: %w", err)
+		}
+		return 0, nil
+	}
+	// fs.Visit 精确判定 -p 是否被显式设置（0 不可作哨兵——显式 -p=0 为越界值
+	// 须报错，与"未指定不覆盖"不可混淆）
+	portSet := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "p" {
+			portSet = true
+		}
+	})
+	if !portSet {
+		return 0, nil // 未指定——不覆盖（缺省 80 兜底由 main 接线处承载）
+	}
+	if *port < 1 || *port > 65535 {
+		return 0, fmt.Errorf("-p 端口值 %d 越界（合法范围 1~65535）", *port)
+	}
+	return *port, nil
+}
+
+// hasPortFlagArg 检查参数集中是否显式出现 -p（单双横线与 = 赋值三形态——
+// parseHTTPPortFlag 解析失败时的错误归属判定依据）。
+func hasPortFlagArg(args []string) bool {
+	for _, a := range args {
+		if a == "-p" || a == "--p" || strings.HasPrefix(a, "-p=") || strings.HasPrefix(a, "--p=") {
+			return true
+		}
+	}
+	return false
+}
+
 func main() {
 	// 0.5 版本查询早退（发布准备批次）：早于横幅与配置加载——--version 为纯静态信息
 	// 查询（NFR-013 产物元数据锚），查询路径不触碰任何启动编排与外部依赖。
 	if parseVersionFlag(os.Args[1:]) {
 		os.Exit(0)
+	}
+
+	// 0.6 HTTP 明文端口覆盖解析（HTTP端口参数化批次）：位于版本早退后、配置加载前——
+	// -p <port> 使无 80 绑定权限的设备可进向导（FR-015 可达性收口）；值非法（明确使用
+	// -p 但非数字/越界）stderr 提示+退出 2（启动期参数错误标准形态）。覆盖值仅本次进程
+	// 生效（S3-W Q2 裁决——不持久化，config.json 零触碰）；缺省兜底 80（无参数零变化）。
+	httpPort, err := parseHTTPPortFlag(os.Args[1:])
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "参数错误: %v（用法: mail-server -p <端口 1~65535>）\n", err)
+		os.Exit(2)
+	}
+	if httpPort <= 0 {
+		httpPort = defaultHTTPPlainPort
 	}
 
 	// 1. 启动横幅：版本/提交/构建时间（可观测性锚点，供运维核对产物）
@@ -217,10 +291,11 @@ func main() {
 		return configWatcher.Reload()
 	}
 
-	// 6.6 U10 Setup 引导分流（Q4-A：setupCompleted=false=仅 80 向导端点，其余端点零启动；
-	// 完成向导后重启全量拉起——「监听器启动期绑定」既有口径）
+	// 6.6 U10 Setup 引导分流（Q4-A：setupCompleted=false=仅 HTTP 向导端点，其余端点零启动；
+	// 完成向导后重启全量拉起——「监听器启动期绑定」既有口径。HTTP端口参数化批次：
+	// httpPort 为 0.6 段解析值——-p 覆盖向导监听端口〔缺省 80 兜底已在此前完成〕）
 	if !cfg.SetupCompleted {
-		runSetupMode(rootCtx, logger, configWatcher, saveConfig, db)
+		runSetupMode(rootCtx, logger, configWatcher, saveConfig, db, httpPort)
 		return
 	}
 
@@ -555,13 +630,16 @@ func main() {
 			return transport.STSPolicyText(cur.Server.Domain, cur.MTASts), cur.MTASts.Enabled
 		},
 	}, sessionRepo, userRepo, loginAttemptRepo, accounts) // U18：7.4.2h/i 变量化复用（语义等价改写）
-	// U10 Q3-A：80 双态（完成态=ACME 挑战直答+其余 301 https；向导已完成故不走向导分支）
+	// U10 Q3-A：HTTP 端点双态（完成态=ACME 挑战直答+其余 301 https；向导已完成故不走向导
+	// 分支）。HTTP端口参数化批次：监听端口经 httpPort 接线（-p 覆盖/缺省 80——0.6 段兜底后
+	// 恒为有效值 1~65535）
 	go func() {
-		if err := webServer.ListenAndServeHTTP(":80"); err != nil {
-			logger.Error("Web 80 端点异常退出", "error", err)
+		if err := webServer.ListenAndServeHTTP(fmt.Sprintf(":%d", httpPort)); err != nil {
+			logger.Error("Web HTTP 端点异常退出", "error", err, "port", httpPort)
 			os.Exit(1)
 		}
 	}()
+	logger.Info("Web HTTP 端点已启动", "port", httpPort, "用途", "ACME 挑战直答+301 跳转 HTTPS")
 	go func() {
 		webPort := configWatcher.Current().Server.HTTPPort
 		if webPort <= 0 {

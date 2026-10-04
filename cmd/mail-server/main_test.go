@@ -1,15 +1,20 @@
 // cmd/mail-server 后台清理任务单测（U14b——NFR-015：临时 SQLite 库+短周期注入，零网络端点）
-// 与版本查询参数单测（发布准备批次——parseVersionFlag 四断言）。
+// 与版本查询参数单测（发布准备批次——parseVersionFlag 四断言）、HTTP 端口参数单测
+// （HTTP端口参数化批次——parseHTTPPortFlag 五断言）。
 // 覆盖锚点：runTokenPurgeLoop 四断言（首轮清过期行/未过期与永久行保留/周期 tick 续清
 // 新过期行/ctx 取消即返回）；U14b 计划书 1.5⑤；数据模型 v1.2.0 3.11 过期语义
 // （expires_at NULL=永久——零值行不可被清理）；发布准备计划书 1.2-VB 组（--version
-// 早退路径——NFR-013 构建产物元数据运维查询锚）。
+// 早退路径——NFR-013 构建产物元数据运维查询锚）；HTTP端口参数化计划书 1.2-CLI 组
+// （-p 解析/值域/错误归属——FR-015 受限端口环境可达性锚）。
 // 修改历史：
 //
 //	2026-09-24 03:20:00 | 新建 | U14b Token 清理（计划书步骤 2，G2 批准 2026-09-24 03:12:52）
 //	2026-10-03 17:11:00 | 扩展 | 发布准备批次：TestParseVersionFlag 四断言（--version
 //	命中打印三元组/-version 等价/无参数不命中零输出/未知 flag 静默不命中；G2 批准
 //	2026-10-03 17:09:00——计划书阶段 1 检查点）
+//	2026-10-04 11:35:00 | 扩展 | HTTP端口参数化批次：TestParseHTTPPortFlag 五断言
+//	（-p=8080 等价形态/越界 0 与 65536 报错/缺省 nil 零值不覆盖/-p abc 报错归属/
+//	未知 flag 静默零值；G2 批准 2026-10-04 11:32:10——计划书阶段 1 检查点）
 package main
 
 import (
@@ -177,5 +182,51 @@ func TestParseVersionFlag(t *testing.T) {
 	out, hit = captureStdout(t, func() bool { return parseVersionFlag([]string{"--unknown-flag"}) })
 	if hit || out != "" {
 		t.Fatalf("未知 flag 路径异常（hit=%v output=%q——期望静默不命中）", hit, out)
+	}
+}
+
+// TestParseHTTPPortFlag HTTP 明文端口参数五断言（HTTP端口参数化批次——FR-015 受限
+// 端口环境可达性锚）：①-p=8080 赋值形态与 -p 8080 空格形态等价 ②越界值（0 与 65536）
+// 返回错误（值域 1~65535——main 据此退出 2）③无参数返回 0,nil（不覆盖——缺省 80
+// 兜底归 main 接线）④-p abc 非数字返回错误（错误归属：调用方明确使用 -p）
+// ⑤未知 flag（非 -p 引发）静默返回 0,nil（沿 parseVersionFlag 先例——交由既有启动流程）。
+func TestParseHTTPPortFlag(t *testing.T) {
+	// 断言①：-p=8080 与 -p 8080 两形态等价解析为 8080
+	port, err := parseHTTPPortFlag([]string{"-p=8080"})
+	if err != nil || port != 8080 {
+		t.Fatalf("-p=8080 解析异常（port=%d err=%v——期望 8080,nil）", port, err)
+	}
+	port, err = parseHTTPPortFlag([]string{"-p", "18080"})
+	if err != nil || port != 18080 {
+		t.Fatalf("-p 18080 解析异常（port=%d err=%v——期望 18080,nil）", port, err)
+	}
+
+	// 断言②：越界值 0 与 65536 报错（值域 1~65535；合法边界 1 与 65535 通过）
+	for _, bad := range []string{"-p=0", "-p=65536"} {
+		if _, err := parseHTTPPortFlag([]string{bad}); err == nil {
+			t.Fatalf("%s 越界值未报错（期望值域错误）", bad)
+		}
+	}
+	for _, ok := range []string{"-p=1", "-p=65535"} {
+		if _, err := parseHTTPPortFlag([]string{ok}); err != nil {
+			t.Fatalf("%s 合法边界值报错: %v", ok, err)
+		}
+	}
+
+	// 断言③：无参数返回 0,nil（未指定不覆盖——缺省 80 兜底由 main 0.6 段承载）
+	port, err = parseHTTPPortFlag(nil)
+	if err != nil || port != 0 {
+		t.Fatalf("无参数路径异常（port=%d err=%v——期望 0,nil）", port, err)
+	}
+
+	// 断言④：-p abc 非数字报错（错误归属判定——调用方明确使用 -p，值解析失败上报）
+	if _, err := parseHTTPPortFlag([]string{"-p", "abc"}); err == nil {
+		t.Fatal("-p abc 非数字值未报错（期望错误上报供 main 退出 2）")
+	}
+
+	// 断言⑤：未知 flag 静默返回 0,nil（非 -p 引发的解析失败——沿 parseVersionFlag 先例）
+	port, err = parseHTTPPortFlag([]string{"--unknown-flag"})
+	if err != nil || port != 0 {
+		t.Fatalf("未知 flag 路径异常（port=%d err=%v——期望静默 0,nil）", port, err)
 	}
 }
