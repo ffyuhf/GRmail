@@ -1,0 +1,24 @@
+// GRmail 认证后占位首页（U8：会话主体可见性验证载体；Webmail 业务页归 U9）。
+// 登出表单埋会话绑定 CSRF token（Q5-B：subtle.ConstantTimeCompare 校验）。
+// U16 增量（Q2-A）：lang 贯通+文案 Tr 化。
+// 修改历史：
+//   2026-09-19 05:10:00 | 新建 | U8 Web 会话与登录（计划书步骤 7）
+//   2026-09-24 16:55:00 | 扩展 | U16 Webmail 体验收尾（计划书步骤 4，G2 批准 2026-09-24 11:51:57）
+package templates
+
+// HomeView 占位首页：呈现已认证主体身份与登出入口。
+// 参数：lang 界面语言；subjectLabel 主体标识；kindText 主体类型文案；csrfToken 会话绑定 token。
+templ HomeView(lang Lang, subjectLabel string, kindText string, csrfToken string) {
+	@Layout(lang, "GRmail", "") {
+		<div class="card">
+			<div class="card-head"><h1>GRmail</h1><span class="chip">{ kindText }</span></div>
+			<p>{ Tr(lang, "home.loggedin") }{ colonFor(lang) }{ subjectLabel }</p>
+			<p>{ Tr(lang, "home.wip") }</p>
+			<form method="post" action="/logout">
+				<input type="hidden" name="csrf_token" value={ csrfToken }/>
+				<button type="submit">{ Tr(lang, "common.logout") }</button>
+			</form>
+			<p><a href="/">{ Tr(lang, "home.goMail") }</a></p>
+		</div>
+	}
+}

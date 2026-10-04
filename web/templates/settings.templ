@@ -1,0 +1,99 @@
+// GRmail /admin/settings 全量配置页（U10：Q3-C 归属+Q7-C 四节范围——认证栈/catch-all/
+// 邮件限值/会话与限流；保存经 SaveConfig 原子读改写→热加载生效——流程设计第五章；
+// U13 增传输安全节——MTA-STS/TLS-RPT 开关与参数+DNS 建议值只读区，FR-010 判定③
+// 「Web 关闭即端点停发」的配置载体；U18 深级双语收口——U16 登记项③：全部深级文案 Tr 化）。
+// CSRF：认证会话表单埋 csrf_token 隐藏域（U8 csrfProtect 常数时间比对）。
+// F01 骨架统一（Webmail界面精修批次 2026-10-03 16:30:00）：Layout→AppLayout（admin 主体）
+// +.main content-page 容器（对齐 admin/tokens 形态）+Message/Notice 分型（错误 .error/
+// 成功 .notice）+删除底部旧导航 hint。
+// 修改历史：
+//   2026-09-20 01:26:00 | 新建 | U10 Setup 向导与 ACME（计划书步骤 7）
+//   2026-09-23 08:46:00 | 扩展 | U13 传输安全全量：传输安全节（计划书步骤 4；契约 v1.9.0 3.3）
+//   2026-09-26 15:52:00 | 扩展 | U18 登记项收尾：深级文案 Tr 化（settings 域键全量接线——
+//   U16 已埋 legend 键本单元消费+label 键族增补；缺省 zh 渲染与 U17 末态零变化锚）
+//   （依据：U18 计划书 v1.0.0 步骤 3/1.5④，G2 批准 2026-09-26 15:25:47）
+//   2026-10-03 16:30:00 | 重构 | Webmail界面精修批次 F01（G2 批准 2026-10-03 16:22:31）
+package templates
+
+import "fmt"
+
+// SettingsView 设置页（五节一表单整体提交；当前值回填）。
+// 参数：data 设置数据（SettingsData——web 包 buildSettingsData 装配；Lang 承载界面语言）。
+templ SettingsView(data SettingsData) {
+	{{ lang := NormalizeLang(data.Lang) }}
+	@appLayoutSettings(lang, data.CSRFToken) {
+		<div class="main content-page">
+		<div class="page-head"><h2>{ Tr(lang, "settings.h1") }</h2></div>
+		if data.Notice != "" {
+			<p class="notice" role="status">{ data.Notice }</p>
+		}
+		if data.Message != "" {
+			<p class="error" role="alert">{ data.Message }</p>
+		}
+		<form method="post" action="/admin/settings">
+			<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+			<fieldset>
+				<legend>{ Tr(lang, "settings.authLegend") }</legend>
+				<label><input type="checkbox" name="spfEnabled" { checkedAttrs(data.SPFEnabled)... }/> { Tr(lang, "settings.spf") }</label>
+				<label><input type="checkbox" name="dkimEnabled" { checkedAttrs(data.DKIMEnabled)... }/> { Tr(lang, "settings.dkim") }</label>
+				<label><input type="checkbox" name="dmarcEnabled" { checkedAttrs(data.DMARCEnabled)... }/> { Tr(lang, "settings.dmarc") }</label>
+				<label><input type="checkbox" name="arcEnabled" { checkedAttrs(data.ARCEnabled)... }/> { Tr(lang, "settings.arc") }</label>
+				<label>{ Tr(lang, "settings.dkimSel") } <input type="text" name="dkimSelector" value={ data.DKIMSelector } placeholder="s1024" maxlength="64"/></label>
+				<label>{ Tr(lang, "settings.dkimKey") } <input type="text" name="dkimKeyPath" value={ data.DKIMKeyPath } placeholder="data/dkim.pem" size="40"/></label>
+				<label>{ Tr(lang, "settings.dkimAlgo") }
+					<input type="text" name="dkimAlgorithm" value={ data.DKIMAlgo } placeholder={ Tr(lang, "settings.dkimAlgoPh") } size="40"/>
+				</label>
+			</fieldset>
+			<fieldset>
+				<legend>{ Tr(lang, "settings.deliveryLegend") }</legend>
+				<label><input type="checkbox" name="catchAll" { checkedAttrs(data.CatchAll)... }/> { Tr(lang, "settings.catchAll") }</label>
+				<label>{ Tr(lang, "settings.maxSize") } <input type="number" name="maxMessageSizeMB" min="1" value={ strconvItoa64(data.MaxMessageSizeMB) }/></label>
+				<label>{ Tr(lang, "settings.retryBase") } <input type="number" name="retryBaseSeconds" min="1" value={ strconvItoa(data.RetryBaseSeconds) }/></label>
+				<label>{ Tr(lang, "settings.retryFactor") } <input type="number" name="retryFactor" min="1" value={ strconvItoa(data.RetryFactor) }/></label>
+				<label>{ Tr(lang, "settings.retryCap") } <input type="number" name="retryCapSeconds" min="1" value={ strconvItoa(data.RetryCapSeconds) }/></label>
+				<label>{ Tr(lang, "settings.maxAttempts") } <input type="number" name="maxAttempts" min="1" value={ strconvItoa(data.MaxAttempts) }/></label>
+			</fieldset>
+			<fieldset>
+				<legend>{ Tr(lang, "settings.sessionLegend") }</legend>
+				<label>{ Tr(lang, "settings.idle") } <input type="number" name="idleMinutes" min="1" value={ strconvItoa(data.IdleMinutes) }/></label>
+				<label>{ Tr(lang, "settings.absolute") } <input type="number" name="absoluteHours" min="1" value={ strconvItoa(data.AbsoluteHours) }/></label>
+				<label>{ Tr(lang, "settings.limitWin") } <input type="number" name="limitWindowMinutes" min="1" value={ strconvItoa(data.LimitWindowMinutes) }/></label>
+				<label>{ Tr(lang, "settings.limitThr") } <input type="number" name="limitThreshold" min="1" value={ strconvItoa64(data.LimitThreshold) }/></label>
+			</fieldset>
+			<fieldset>
+				<legend>{ Tr(lang, "settings.tlsLegend") }</legend>
+				<label><input type="checkbox" name="mtaStsEnabled" { checkedAttrs(data.MTAStsEnabled)... }/> { Tr(lang, "settings.stsPub") }</label>
+				<label>{ Tr(lang, "settings.stsMode") } <input type="text" name="mtaStsMode" value={ data.MTAStsMode } placeholder="enforce | testing" size="16"/></label>
+				<label>{ Tr(lang, "settings.stsAge") } <input type="number" name="mtaStsMaxAgeSeconds" min="1" max="31557600" value={ strconvItoa(data.MTAStsMaxAgeSeconds) }/></label>
+				<label><input type="checkbox" name="tlsrptEnabled" { checkedAttrs(data.TLSRPTEnabled)... }/> { Tr(lang, "settings.tlsrptPub") }</label>
+				<label>{ Tr(lang, "settings.rua") } <input type="text" name="tlsrptRuaAddress" value={ data.TLSRPTRuaAddress } placeholder={ Tr(lang, "settings.ruaPh") } size="32"/></label>
+			</fieldset>
+			<fieldset>
+				<legend>{ Tr(lang, "settings.dnsLegend") }</legend>
+				<p class="hint">{ Tr(lang, "settings.stsHint") }<code>{ data.StsPolicyURL }</code>{ Tr(lang, "settings.stsSanHint") }</p>
+				<p class="hint">TXT <code>_mta-sts.{ Tr(lang, "settings.hostPh") }</code>{ colonFor(lang) }<code>{ data.StsTXTRecord }</code></p>
+				<p class="hint">TXT <code>_smtp._tls.{ Tr(lang, "settings.hostPh") }</code>{ colonFor(lang) }<code>{ data.TLSRPTRecord }</code></p>
+			</fieldset>
+			<button class="primary" type="submit">{ Tr(lang, "common.save") }</button>
+			</form>
+			</div>
+		}
+	}
+	
+// appLayoutSettings 设置页骨架（AppLayout admin 主体——F01 统一；无 .layout 侧栏：管理
+// 全量页沿 content-page 单流形态，对齐 admin/tokens）。
+templ appLayoutSettings(lang Lang, csrf string) {
+	@AppLayout(lang, Tr(lang, "settings.title"), Tr(lang, "home.adminKind"), true, csrf) {
+		{ children... }
+	}
+}
+
+// strconvItoa int→string（模板表达式包装）。
+func strconvItoa(v int) string {
+	return fmt.Sprintf("%d", v)
+}
+
+// strconvItoa64 int64→string（模板表达式包装）。
+func strconvItoa64(v int64) string {
+	return fmt.Sprintf("%d", v)
+}

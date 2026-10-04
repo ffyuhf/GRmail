@@ -1,0 +1,135 @@
+// Sieve 脚本管理页（FR-011 Web 编辑器——U12；纯文本 textarea 沿 U9 写信先例；
+// U18 深级双语收口——U16 登记项③：Lang 数据字段贯通+sieve 域键消费）。
+// 修改历史：
+//
+//	2026-09-21 01:05:00 | 新建 | U12 Sieve 过滤与 ManageSieve（计划书步骤 9）
+//	2026-09-26 15:42:00 | 扩展 | U18 登记项收尾：深级文案 Tr 化（SieveListData/SieveEditData
+//	增 Lang 字段+activeLabel 双语化——缺省 zh 渲染与 U17 末态零变化锚）
+//	（依据：U18 计划书 v1.0.0 步骤 3/1.5④，G2 批准 2026-09-26 15:25:47）
+//	2026-10-04 22:00:00 | 修正 | Sieve编辑器缺口修复批次：#30 新建死锁（SieveEditData 增
+//	NameEditable——new 态渲染名称输入框，表单名经 handler 优先于 URL 参数）+#31 取消激活
+//	（激活行增「取消激活」对称按钮）；new 态标题独立键 sieve.newH2（原「编辑脚本：new」缺陷顺带收口）
+//	（依据：Sieve编辑器缺口修复_计划 v1.0.0 步骤 1/2，G2 批准 2026-10-04 21:56:23；
+//	WEB模板缺陷修正批次转 W 遗留 #30/#31 承载——FR-011 双入口语义收口）
+package templates
+
+// activeLabel 激活态标签（templ 表达式辅助——U18 双语化）。
+func activeLabel(lang Lang, active bool) string {
+	if active {
+		return Tr(lang, "sieve.active")
+	}
+	return Tr(lang, "sieve.inactive")
+}
+
+// SieveScriptRow 脚本列表行（视图模型）。
+type SieveScriptRow struct {
+	Name   string
+	Active bool
+}
+
+// SieveListData 列表页数据。
+type SieveListData struct {
+	Lang    Lang // U18：深级双语承载（web 装配处 langOf(c) 注入）
+	CSRF    string
+	Scripts []SieveScriptRow
+	Error   string
+}
+
+// SieveEditData 编辑页数据。
+type SieveEditData struct {
+	Lang         Lang // U18：深级双语承载
+	CSRF         string
+	Name         string
+	NameEditable bool   // #30：新建态=true（名称输入框承载）；编辑态=false（名称只读呈现）
+	Content      string
+	Error        string
+}
+
+templ SieveListView(d *SieveListData) {
+	@AppLayout(d.Lang, Tr(d.Lang, "sieve.title"), Tr(d.Lang, "sieve.nav"), false, d.CSRF) {
+		<div class="main content-page">
+		<section class="sieve-page">
+			<div class="page-head">
+				<h2>{ Tr(d.Lang, "sieve.h2") }</h2>
+				<a class="primary" href="/sieve/new">{ Tr(d.Lang, "sieve.newLink") }</a>
+			</div>
+			if d.Error != "" {
+				<p class="error" role="alert">{ d.Error }</p>
+			}
+			<p class="hint">{ Tr(d.Lang, "sieve.manageHint") }</p>
+			if len(d.Scripts) == 0 {
+				<div class="empty-state">
+					<h3>{ Tr(d.Lang, "sieve.emptyTitle") }</h3>
+					<p>{ Tr(d.Lang, "sieve.empty") }</p>
+				</div>
+			} else {
+				<div class="table-wrap">
+					<table class="sieve-list">
+						<thead><tr><th>{ Tr(d.Lang, "sieve.colName") }</th><th>{ Tr(d.Lang, "mail.colStatus") }</th><th>{ Tr(d.Lang, "admin.colAction") }</th></tr></thead>
+						<tbody>
+							for _, sc := range d.Scripts {
+								<tr>
+									<td><a href={ templ.SafeURL("/sieve/" + sc.Name) }>{ sc.Name }</a></td>
+									<td>{ activeLabel(d.Lang, sc.Active) }</td>
+									<td>
+										if !sc.Active {
+											<form method="post" action={ templ.SafeURL("/sieve/" + sc.Name + "/activate") } class="inline">
+												<input type="hidden" name="csrf_token" value={ d.CSRF }/>
+												<button class="btn-sm" type="submit">{ Tr(d.Lang, "admin.activate") }</button>
+											</form>
+										} else {
+											// #31：取消激活 Web 承载——与协议侧 SETACTIVE "" 语义对称（显式按钮）
+											<form method="post" action={ templ.SafeURL("/sieve/" + sc.Name + "/deactivate") } class="inline">
+												<input type="hidden" name="csrf_token" value={ d.CSRF }/>
+												<button class="btn-sm" type="submit">{ Tr(d.Lang, "admin.deactivate") }</button>
+											</form>
+										}
+										<form method="post" action={ templ.SafeURL("/sieve/" + sc.Name + "/delete") } class="inline">
+											<input type="hidden" name="csrf_token" value={ d.CSRF }/>
+											<button class="btn-sm danger" type="submit">{ Tr(d.Lang, "common.delete") }</button>
+										</form>
+									</td>
+								</tr>
+							}
+						</tbody>
+					</table>
+				</div>
+			}
+		</section>
+		</div>
+	}
+}
+
+templ SieveEditView(d *SieveEditData) {
+	@AppLayout(d.Lang, Tr(d.Lang, "sieve.editTitle"), Tr(d.Lang, "sieve.nav"), false, d.CSRF) {
+		<div class="main content-page">
+		<section class="sieve-edit">
+			<div class="page-head">
+				// #30：new 态独立标题（原「编辑脚本：new」缺陷顺带收口）
+				if d.NameEditable {
+					<h2>{ Tr(d.Lang, "sieve.newH2") }</h2>
+				} else {
+					<h2>{ Trf(d.Lang, "sieve.editH2", d.Name) }</h2>
+				}
+			</div>
+			if d.Error != "" {
+				<p class="error" role="alert">{ d.Error }</p>
+			}
+			<form method="post" action={ templ.SafeURL("/sieve/" + d.Name) }>
+				<input type="hidden" name="csrf_token" value={ d.CSRF }/>
+				// #30：新建态名称输入框（表单 name 字段——handler 侧优先于 URL :name 参数；
+				// 长度上限 128 与 handler 校验同口径；无 placeholder——label 文案承载指引）
+				if d.NameEditable {
+					<label>{ Tr(d.Lang, "sieve.nameLabel") }<input type="text" name="name" value={ d.Name } maxlength="128" required="required"/></label>
+				}
+				<textarea name="content" rows="18" spellcheck="false">{ d.Content }</textarea>
+				<div class="compose-actions">
+					<button class="primary" type="submit">{ Tr(d.Lang, "sieve.save") }</button>
+					<a class="btn-text" href="/sieve">{ Tr(d.Lang, "sieve.backList") }</a>
+				</div>
+			</form>
+			<p class="hint">{ Tr(d.Lang, "sieve.syntaxHint") }</p>
+		</section>
+		</div>
+	}
+}

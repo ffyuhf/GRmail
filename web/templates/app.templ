@@ -1,0 +1,116 @@
+// GRmail Webmail 应用骨架 v2（Webmail设计系统重构批次——信息架构重排）。
+// 结构（参考网盘前端 NavBarFrame/TopAppBar/AppDrawer 设计语义，templ+HTMX 等效实现）：
+//   应用栏 .app-bar——左区（汉堡+品牌+主体标签）/右区 .app-bar-actions（写信主按钮+
+//   管理菜单 menu-host[admin 主体] 或 2FA 入口[mailbox 主体]+账户菜单：语言/登出）；
+//   抽屉状态 #nav-toggle（checked 默认=桌面 persistent 展开；移动 Slide 浮层+遮罩）；
+//   交互脚本 /static/grmail.js（菜单外点关闭/选中计数/抽屉联动——零依赖自研）。
+// 零变更红线（计划书 1.3）：全部链接 href/表单 action/CSRF 埋域/语言切换端点与
+// U9 末态一致；业务语义/HTMX 端点零触碰。
+// 修改历史：
+//   2026-09-19 15:04:00 | 新建 | U9 Webmail 核心（计划书步骤 5）
+//   2026-09-24 16:52:00 | 扩展 | U16 Webmail 体验收尾（计划书步骤 4/5，G2 批准 2026-09-24 11:51:57）
+//   2026-10-02 13:40:00 | 扩展 | Webmail视觉重构批次阶段3（G2 批准 2026-10-02 13:20:06）
+//   2026-10-02 17:50:00 | 重构 | Webmail设计系统重构批次阶段A（G2 批准 2026-10-02 17:34:40）
+package templates
+
+// iconMenu 汉堡菜单图标（F05：☰ 字符改 SVG——基准 TopAppBar Material Menu 同构；
+// Webmail界面精修批次 2026-10-03）。
+var iconMenu = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/></svg>`
+
+// iconMore 竖三点图标（账户/管理菜单触发器——内联 SVG currentColor）。
+var iconMore = `<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>`
+
+// iconCaret 下箭头（菜单指示——open 态 CSS 旋转 180°）。
+var iconCaret = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>`
+
+// iconEdit 写信图标（主按钮——内联 SVG currentColor）。
+var iconEdit = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`
+
+// iconLang 语言图标（菜单项）。
+var iconLang = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`
+
+// iconLogout 登出图标（菜单项）。
+var iconLogout = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>`
+
+// iconShield 2FA 盾牌图标（菜单项）。
+var iconShield = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`
+
+// AppLayout Webmail 页面骨架（登录后各页统一应用栏+抽屉容器）。
+// 参数：lang 界面语言；title 页面标题；label 主体呈现名；isAdmin admin 主体标记；csrf 会话绑定 token。
+templ AppLayout(lang Lang, title string, label string, isAdmin bool, csrf string) {
+	<!DOCTYPE html>
+	<html lang={ string(lang) }>
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<title>{ title } - GRmail</title>
+			<script src="/static/htmx.min.js"></script>
+			<script src="/static/grmail.js" defer></script>
+			<link rel="stylesheet" href="/static/app.css"/>
+		</head>
+		<body>
+			<input type="checkbox" id="nav-toggle" class="nav-toggle-input" checked hidden/>
+			<header class="app-bar">
+				<label class="nav-toggle" for="nav-toggle" aria-label="menu"><span class="ic" aria-hidden="true">@templ.Raw(iconMenu)</span></label>
+				<a class="app-bar-brand" href="/">GRmail<span class="app-bar-label">{ label }</span></a>
+				<div class="app-bar-actions">
+					<a class="primary" href="/compose">
+						<span class="ic" aria-hidden="true">@templ.Raw(iconEdit)</span>
+						{ Tr(lang, "top.compose") }
+					</a>
+					if isAdmin {
+						<details class="menu-host">
+							<summary>
+								<span class="ic" aria-hidden="true">@templ.Raw(iconShield)</span>
+								{ Tr(lang, "top.manage") }
+								<span class="ic ic-caret" aria-hidden="true">@templ.Raw(iconCaret)</span>
+							</summary>
+							<div class="menu">
+								<a href="/admin/mailboxes">{ Tr(lang, "top.adminMail") }</a>
+								<a href="/admin/mailboxes/unregistered">{ Tr(lang, "top.aggregate") }</a>
+								<a href="/admin/settings">{ Tr(lang, "top.settings") }</a>
+								<a href="/admin/tokens">{ Tr(lang, "top.tokens") }</a>
+							</div>
+						</details>
+					}
+					<details class="menu-host">
+						<summary aria-label={ Tr(lang, "top.account") }>
+							<span class="ic" aria-hidden="true">@templ.Raw(iconMore)</span>
+						</summary>
+						<div class="menu">
+							if !isAdmin {
+								<a href="/settings/2fa">
+									<span class="ic" aria-hidden="true">@templ.Raw(iconShield)</span>
+									{ Tr(lang, "top.twofactor") }
+								</a>
+							}
+							<a href={ langSwitchHref(lang) }>
+								<span class="ic" aria-hidden="true">@templ.Raw(iconLang)</span>
+								{ Tr(lang, "top.lang") }
+							</a>
+							<hr/>
+							<form method="post" action="/logout">
+								<input type="hidden" name="csrf_token" value={ csrf }/>
+								<button type="submit" class="menu-danger">
+									<span class="ic" aria-hidden="true">@templ.Raw(iconLogout)</span>
+									{ Tr(lang, "common.logout") }
+								</button>
+							</form>
+						</div>
+					</details>
+				</div>
+			</header>
+			{ children... }
+		</body>
+	</html>
+}
+
+// langSwitchHref 语言切换链接（GET /lang——l 取目标语言（当前取反）、next 回当前路径）。
+// 参数：lang 当前语言。返回：切换端点 href。
+func langSwitchHref(lang Lang) string {
+	target := "en"
+	if lang == LangEN {
+		target = "zh"
+	}
+	return "/lang?l=" + target
+}

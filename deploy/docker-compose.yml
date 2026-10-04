@@ -1,0 +1,37 @@
+# GRmail 三库集成实测环境（U11 Q3-A：MySQL/PG 容器承载 TC-014；
+# 与 TC-026 Docker 冒烟一体——冒烟用 Dockerfile，本 compose 仅承载数据库依赖）
+# 用法：docker compose -f deploy/docker-compose.yml up -d
+#       （测试完毕：docker compose -f deploy/docker-compose.yml down -v——零宿主残留）
+# 修改历史：
+#   2026-09-20 05:52:00 | 新建 | U11 三库验收（计划书步骤 7）
+services:
+  mysql:
+    image: mysql:8
+    container_name: grmail-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: grmail
+      MYSQL_DATABASE: grmail
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_bin
+    ports:
+      - "127.0.0.1:13306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-pgrmail"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  postgres:
+    image: postgres:16
+    container_name: grmail-postgres
+    environment:
+      POSTGRES_PASSWORD: grmail
+      POSTGRES_DB: grmail
+    ports:
+      - "127.0.0.1:15432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d grmail"]
+      interval: 3s
+      timeout: 3s
+      retries: 20

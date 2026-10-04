@@ -1,0 +1,59 @@
+# GRmail 发布工作流（发布准备批次——计划书 1.2-GA 组；NFR-013 CI 构建矩阵自动化承载）
+# 触发面两态：
+#   ① tag 推送（v* 前缀）→ 五平台交叉构建 + 版本注入 tag 名 + 产物发布至 GitHub Release 页
+#   ② workflow_dispatch 手动触发 → 验证构建（无标签标识 dev-<短提交哈希>，不发布）
+# 版本注入链：make release VERSION=<标识> → LDFLAGS -X main.version → --version 可查询
+# 产物：五平台 tar.gz + SHA256SUMS（沿 U20 release 目标形态——CON-001 单二进制解包即得）
+# 修改历史：
+#   2026-10-03 17:16:00 | 新建 | 发布准备批次（G2 批准 2026-10-03 17:09:00）
+#   2026-10-03 22:23:00 | 修正 | 工作流落位修正批次：文件迁入 server/（仓库根=server/——
+#   G2 批准 2026-10-03 22:21:37 含前提确认）；三处根假设消除——defaults.working-directory
+#   删除（make 于仓库根直达）/cache-dependency-path 与 Release files 去除 server/ 前缀
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch: # 手动验证构建（无标签——dev 标识，产物不发布）
+
+permissions:
+  contents: write # tag 触发时发布 Release 所需（softprops/action-gh-release）
+
+jobs:
+  release:
+    name: 五平台构建与发布
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26" # 与 go.mod 基线一致（T1-A 裁决：goose v3.28.0 要求 ≥1.26）
+          cache: true
+          cache-dependency-path: go.sum # 仓库根=server/（工作流落位修正批次——go.sum 即仓库根相对路径）
+
+      - name: 构建发布产物（tag 构建注入 tag 名；无标签注入 dev-短哈希）
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          if [ "$GITHUB_REF_TYPE" != "tag" ]; then
+            # 无标签构建标识：dev 前缀 + 七位短提交哈希（构建时间由 Makefile LDFLAGS 自动注入）
+            VERSION="dev-${GITHUB_SHA::7}"
+          fi
+          echo "构建版本标识: ${VERSION}"
+          make release VERSION="${VERSION}"
+
+      - name: 版本注入抽检（--version 实机运行）
+        run: |
+          chmod +x dist/mail-server-linux-amd64
+          ./dist/mail-server-linux-amd64 --version
+
+      - name: 发布至 GitHub Release（仅 tag 触发）
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.tar.gz
+            dist/SHA256SUMS
+          generate_release_notes: true # GitHub 自动生成发布说明（commit/PR 清单——发布说明载体）

@@ -1,0 +1,248 @@
+// GRmail Webmail 列表页与列表片段 v2（Webmail设计系统重构批次——信息架构重排）。
+// 重排要点（参考网盘前端 SideNavItem/NavHeader/ListView Row/ContextMenu 设计语义）：
+//   侧栏——文件夹胶囊项（20px 图标+未读 Chip）+「管理文件夹」单一聚合折叠区（创建/
+//   逐文件夹重命名删除收纳——替代旧版 N 份重复折叠块）；工具条——搜索框（图标内嵌）+
+//   未读筛选胶囊+总数（高频直达）；批量条——选中态上下文条 .batch-bar（CSS :has 驱动
+//   显隐——选中即现未选中不占位，替代旧版常驻四步下拉流）；列表行——未读主色圆点+
+//   星标图标（替代字符状态列）；分页 RadiusFrame 保持。
+// 零变更红线（计划书 1.3）：HTMX 端点/目标（hx-target #mail-list）/表单字段名
+// （ids/all/action/target/folder/keyword/page/pagesize/unread）/批量关联机制
+// （checkbox form="batch-form"）与 U9/U16 末态一致；FR-012 平铺红线保持。
+// 依据：FR-012（平铺侧边栏+未读计数）；FR-013（G10 批量/G11 状态可视化/G12 每页
+// 条数/G15 精确批量）；契约 v1.5.0 3.2/3.4。
+// 修改历史：
+//   2026-09-19 15:06:00 | 新建 | U9 Webmail 核心（计划书步骤 5）
+//   2026-09-24 16:58:00 | 扩展 | U16 Webmail 体验收尾（计划书步骤 4/5，G2 批准 2026-09-24 11:51:57）
+//   2026-10-02 13:45:00 | 扩展 | Webmail视觉重构批次阶段3/4（G2 批准 2026-10-02 13:20:06）
+//   2026-10-02 17:55:00 | 重构 | Webmail设计系统重构批次阶段B（G2 批准 2026-10-02 17:34:40）
+package templates
+
+import (
+	"fmt"
+	"net/url"
+)
+
+// iconMailBox 收件箱信封图标（系统文件夹——内联 SVG）。
+var iconMailBox = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>`
+
+// iconMailFolder 文件夹图标（自定义文件夹——内联 SVG）。
+var iconMailFolder = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>`
+
+// iconSearch 放大镜图标（搜索框内嵌——内联 SVG）。
+var iconSearch = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>`
+
+// iconStar 星标图标（列表行——填充态内联 SVG）。
+var iconStar = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="m12 2 3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>`
+
+// MailPageView 列表整页（AppLayout+侧边栏+#mail-list 片段容器+骨架指示器）。
+// 参数：d 列表数据（Lang 驱动双语渲染）。
+templ MailPageView(d *MailListData) {
+	@AppLayout(NormalizeLang(d.Lang), Tr(NormalizeLang(d.Lang), "mail.title"), d.Label, d.IsAdmin, d.CSRF) {
+		<div class="layout">
+			@Sidebar(d)
+			<div class="main">
+				<div id="folder-hint" class="hint"></div>
+				<div id="mail-list">
+					@MailListFragment(d)
+				</div>
+				<div id="mail-loading" class="htmx-indicator" aria-hidden="true">
+					<div class="skeleton-row"></div>
+					<div class="skeleton-row"></div>
+					<div class="skeleton-row"></div>
+					<div class="skeleton-row"></div>
+					<div class="skeleton-row"></div>
+				</div>
+			</div>
+		</div>
+	}
+}
+
+// Sidebar 侧边栏（平铺无嵌套——REQ-021 红线；文件夹切换 hx-get 片段；「管理文件夹」
+// 单一聚合折叠区：创建表单+逐自定义文件夹紧凑管理行——重命名/删除收纳于二级展开）。
+// 参数：d 列表数据（Folders/ActiveFolder/CSRF/Lang）。
+templ Sidebar(d *MailListData) {
+	{{ lang := NormalizeLang(d.Lang) }}
+	<nav class="sidebar">
+		<div class="side-caption">{ Tr(lang, "mail.folders") }</div>
+		for _, f := range d.Folders {
+			<div class={ "folder-item", templ.KV("active", f.Active) } tabindex="0" role="link"
+				hx-get={ fmt.Sprintf("/mails?folder=%d&page=1&pagesize=%d", f.ID, d.Pagesize) }
+				hx-target="#mail-list" hx-indicator="#mail-loading">
+				if f.Kind == "custom" {
+					<span class="ficon" aria-hidden="true">@templ.Raw(iconMailFolder)</span>
+				} else {
+					<span class="ficon" aria-hidden="true">@templ.Raw(iconMailBox)</span>
+				}
+				<span class="fname">{ f.Name }</span>
+				if f.Unread > 0 {
+					<span class="unread">{ fmt.Sprintf("%d", f.Unread) }</span>
+				}
+			</div>
+		}
+		<details>
+			<summary>{ Tr(lang, "mail.manageFolders") }</summary>
+			<form hx-post="/folders" hx-target="#mail-list">
+				<input type="hidden" name="csrf_token" value={ d.CSRF }/>
+				<input type="text" name="name" placeholder={ Tr(lang, "mail.folderName") }/>
+				<button class="btn-sm" type="submit">{ Tr(lang, "common.create") }</button>
+			</form>
+			for _, f := range d.Folders {
+				if f.Kind == "custom" {
+					<details>
+						<summary>{ f.Name }</summary>
+						<div class="folder-manage-row">
+							<form hx-post={ fmt.Sprintf("/folders/%d/rename", f.ID) } hx-target="#mail-list">
+								<input type="hidden" name="csrf_token" value={ d.CSRF }/>
+								<input type="text" name="name" placeholder={ Tr(lang, "mail.newName") }/>
+								<button class="btn-sm" type="submit">{ Tr(lang, "common.rename") }</button>
+							</form>
+							<form hx-post={ fmt.Sprintf("/folders/%d/delete", f.ID) } hx-target="#mail-list">
+								<input type="hidden" name="csrf_token" value={ d.CSRF }/>
+								<button class="btn-sm danger" type="submit">{ Tr(lang, "common.delete") }</button>
+							</form>
+						</div>
+					</details>
+				}
+			}
+		</details>
+	</nav>
+}
+
+// MailListFragment 列表片段（HTMX 目标 #mail-list——翻页/过滤/搜索/批量后替换）。
+// 结构：工具条（搜索+筛选+计数）→ 选中上下文批量条（.batch-bar——:has 显隐）→
+// 列表/空状态 → 分页。批量表单 id=batch-form（行内 checkbox form 属性关联——既有机制）。
+templ MailListFragment(d *MailListData) {
+	{{ lang := NormalizeLang(d.Lang) }}
+	<div class="list-area">
+		<div class="tool-bar">
+			<form hx-get="/search" hx-target="#mail-list" hx-indicator="#mail-loading">
+				<span class="search-box">
+					<span class="ic" aria-hidden="true">@templ.Raw(iconSearch)</span>
+					<input type="search" name="keyword" placeholder={ Tr(lang, "mail.searchHint") } value={ d.Keyword }/>
+				</span>
+				<button class="secondary" type="submit">{ Tr(lang, "mail.search") }</button>
+			</form>
+			if d.UnreadOnly {
+				<a class="filter-link" href={ fmt.Sprintf("/mails?folder=%d&unread=0&page=1", d.ActiveFolder) }>{ Tr(lang, "mail.clearUnread") }</a>
+			} else {
+				<a class="filter-link" href={ fmt.Sprintf("/mails?folder=%d&unread=1&page=1", d.ActiveFolder) }>{ Tr(lang, "mail.unreadOnly") }</a>
+			}
+			<span class="tool-spacer"></span>
+			<span class="tool-count">{ Trf(lang, "mail.totalFmt", d.Total) }</span>
+			if d.IsSearch {
+				<a class="filter-link" hx-get={ fmt.Sprintf("/mails?folder=%d&page=1", d.ActiveFolder) } hx-target="#mail-list">{ Tr(lang, "mail.exitSearch") }</a>
+			}
+		</div>
+		<div class="batch-bar">
+			<span class="sel-count" data-fmt={ Tr(lang, "mail.selectedFmt") }>0</span>
+			<form hx-post="/mails/batch" hx-target="#mail-list" id="batch-form">
+				<input type="hidden" name="csrf_token" value={ d.CSRF }/>
+				<input type="hidden" name="folder" value={ fmt.Sprintf("%d", d.ActiveFolder) }/>
+				<label class="inline"><input type="checkbox" name="all" onclick="document.querySelectorAll('.mail-id').forEach(e=>e.checked=this.checked)"/>{ Tr(lang, "mail.selectAll") }</label>
+				<select name="action" class="btn-sm">
+					<option value="mark-read">{ Tr(lang, "mail.markRead") }</option>
+					<option value="mark-unread">{ Tr(lang, "mail.markUnread") }</option>
+					<option value="mark-flag">{ Tr(lang, "mail.addFlag") }</option>
+					<option value="unmark-flag">{ Tr(lang, "mail.removeFlag") }</option>
+					<option value="move">{ Tr(lang, "mail.moveTo") }</option>
+					<option value="delete">{ Tr(lang, "common.delete") }</option>
+				</select>
+				if len(d.Folders) > 0 {
+					<select name="target" class="btn-sm">
+						for _, f := range d.Folders {
+							<option value={ fmt.Sprintf("%d", f.ID) }>{ f.Name }</option>
+						}
+					</select>
+				}
+				<button class="primary btn-sm" type="submit">{ Tr(lang, "common.execute") }</button>
+			</form>
+		</div>
+		if len(d.Items) == 0 {
+			<div class="empty-state">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 9l9-6 9 6v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="m3 10 9 6 9-6"/></svg>
+				if d.IsSearch {
+					<h3>{ Tr(lang, "mail.noResultTitle") }</h3>
+					<p>{ Trf(lang, "mail.noMatchFmt", d.Keyword) }</p>
+				} else {
+					<h3>{ Tr(lang, "mail.emptyTitle") }</h3>
+					<p>{ Tr(lang, "mail.emptyFolder") }</p>
+				}
+			</div>
+		} else {
+			<div class="table-wrap">
+				<table class="mails">
+					<thead>
+						<tr><th></th><th>{ Tr(lang, "mail.colStatus") }</th><th>{ Tr(lang, "mail.colSubject") }</th><th>{ Tr(lang, "mail.colFrom") }</th><th>{ Tr(lang, "mail.colTime") }</th></tr>
+					</thead>
+					<tbody>
+						for _, m := range d.Items {
+							<tr class={ templ.KV("unread", !m.IsRead) }>
+								<td><input class="mail-id" type="checkbox" name="ids" value={ fmt.Sprintf("%d", m.ID) } form="batch-form" aria-label={ Tr(lang, "mail.colSubject") }/></td>
+								<td class="status-cell">
+									if m.IsFlagged {
+										<span class="flag" title={ Tr(lang, "mail.flagged") }>@templ.Raw(iconStar)</span>
+									}
+									if !m.IsRead {
+										<span class="dot" title={ Tr(lang, "mail.unreadDot") }></span>
+									}
+								</td>
+								<td class="cell-trunc"><a hx-get={ fmt.Sprintf("/mails/%d", m.ID) } hx-target="#mail-list" title={ subjectOr(lang, m.Subject) }>{ subjectOr(lang, m.Subject) }</a></td>
+								<td class="cell-trunc"><span title={ m.FromAddr }>{ m.FromAddr }</span></td>
+								<td class="time-cell">{ m.SentAt }</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+			<div class="pager">
+				if d.Page > 1 {
+					<a hx-get={ pageHref(d, d.Page-1) } hx-target="#mail-list" hx-indicator="#mail-loading">{ Tr(lang, "mail.prevPage") }</a>
+				}
+				<span>{ Trf(lang, "mail.pageFmt", d.Page, d.PageCount) }</span>
+				if d.Page < d.PageCount {
+					<a hx-get={ pageHref(d, d.Page+1) } hx-target="#mail-list" hx-indicator="#mail-loading">{ Tr(lang, "mail.nextPage") }</a>
+				}
+				<span class="pagesize">{ Tr(lang, "mail.pagesizeSelect") }
+					for _, n := range []int{15, 25, 50, 100} {
+						<a hx-get={ pagesizeHref(d, n) } hx-target="#mail-list" class={ templ.KV("active", n == d.Pagesize) }>{ fmt.Sprintf("%d", n) }</a>
+					}
+				</span>
+			</div>
+		}
+	</div>
+}
+
+// pageHref 翻页链接（当前上下文保留：folder/unread/keyword；组D：keyword 经
+// url.QueryEscape——含 &/=/?/#/空格 的搜索词旧形态直接拼串致链接参数截断，修复）。
+func pageHref(d *MailListData, page int) string {
+	href := fmt.Sprintf("/mails?page=%d&pagesize=%d", page, d.Pagesize)
+	if d.ActiveFolder > 0 {
+		href += fmt.Sprintf("&folder=%d", d.ActiveFolder)
+	}
+	if d.UnreadOnly {
+		href += "&unread=1"
+	}
+	if d.IsSearch && d.Keyword != "" {
+		href = fmt.Sprintf("/search?keyword=%s&page=%d&pagesize=%d", url.QueryEscape(d.Keyword), page, d.Pagesize)
+	}
+	return href
+}
+
+// pagesizeHref 每页条数切换链接（G12——切换重置回第 1 页；纯链接零 JS；组D：keyword 编码同 pageHref）。
+func pagesizeHref(d *MailListData, pagesize int) string {
+	if d.IsSearch && d.Keyword != "" {
+		return fmt.Sprintf("/search?keyword=%s&page=1&pagesize=%d", url.QueryEscape(d.Keyword), pagesize)
+	}
+	if d.ActiveFolder > 0 {
+		return fmt.Sprintf("/mails?folder=%d&page=1&pagesize=%d", d.ActiveFolder, pagesize)
+	}
+	return fmt.Sprintf("/mails?page=1&pagesize=%d", pagesize)
+}
+
+// subjectOr 空主题兜底（双语——U16）。
+func subjectOr(lang Lang, s string) string {
+	if s == "" {
+		return Tr(lang, "mail.noSubject")
+	}
+	return s
+}

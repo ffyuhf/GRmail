@@ -1,0 +1,114 @@
+// GRmail Web admin 邮箱管理与聚合视图页（U9，Q3-C 归属；U18 深级双语收口——U16 登记项③）。
+// FR-002 管理呈现（三态徽标+四操作）；FR-003 shadow 聚合视图。
+// 修改历史：
+//   2026-09-19 15:16:00 | 新建 | U9 Webmail 核心（计划书步骤 10）
+//   2026-09-26 15:41:00 | 扩展 | U18 登记项收尾：深级文案 Tr 化（lang 首参贯通+
+//   admin 域键消费——缺省 zh 渲染与 U17 末态零变化锚）
+//   （依据：U18 计划书 v1.0.0 步骤 3/1.5④，G2 批准 2026-09-26 15:25:47）
+//   2026-10-01 17:10:00 | 扩展 | U24 双因素认证：管理页增「2FA 强制策略」操作区
+//   （require2fa/unrequire2fa 两 action——FR-018 判定④；Q3-B 强制标记承载面）
+package templates
+
+import (
+	"fmt"
+
+	"GRmail/internal/storage"
+)
+
+// statusLabel 状态枚举双语映射（F09——badge 呈现层；类锚保持英文枚举——Webmail界面精修批次）。
+func statusLabel(lang Lang, status string) string {
+	switch status {
+	case "active":
+		return Tr(lang, "admin.statusActive")
+	case "shadow":
+		return Tr(lang, "admin.statusShadow")
+	case "disabled":
+		return Tr(lang, "admin.statusDisabled")
+	}
+	return status
+}
+
+// AdminMailboxesView 邮箱管理页（列表+操作表单组）。
+// 参数：lang 界面语言（U18 深级贯通）；list 三态合并全量；errText 操作结果提示；csrf 会话 token。
+templ AdminMailboxesView(lang Lang, list []*storage.Mailbox, errText string, csrf string) {
+	@AppLayout(lang, Tr(lang, "admin.title"), Tr(lang, "home.adminKind"), true, csrf) {
+		<div class="main content-page">
+			<div class="page-head"><h2>{ Tr(lang, "admin.h2") }</h2></div>
+			if errText != "" {
+				<p class="error" role="alert">{ errText }</p>
+			}
+			<div class="table-wrap">
+				<table class="mails">
+					<thead><tr><th>{ Tr(lang, "admin.colAddr") }</th><th>{ Tr(lang, "mail.colStatus") }</th><th>{ Tr(lang, "admin.colAction") }</th></tr></thead>
+					<tbody>
+						for _, m := range list {
+							<tr>
+								<td>{ m.Address }</td>
+								<td><span class={ "badge", string(m.Status) }>{ statusLabel(lang, string(m.Status)) }</span></td>
+								<td>
+									<form method="post" action="/admin/mailboxes" class="inline">
+										<input type="hidden" name="csrf_token" value={ csrf }/>
+										<input type="hidden" name="address" value={ m.Address }/>
+										if m.Status == "disabled" {
+											<button class="btn-sm" type="submit" name="action" value="enable">{ Tr(lang, "admin.enable") }</button>
+										} else if m.Status == "active" {
+											<button class="btn-sm secondary" type="submit" name="action" value="disable">{ Tr(lang, "admin.disable") }</button>
+										} else if m.Status == "shadow" {
+											<input type="password" name="password" placeholder={ Tr(lang, "admin.setPass") }/>
+											<button class="btn-sm" type="submit" name="action" value="activate">{ Tr(lang, "admin.activate") }</button>
+										}
+									</form>
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+			<h3>{ Tr(lang, "admin.createMailbox") }</h3>
+			<form method="post" action="/admin/mailboxes" class="actions">
+				<input type="hidden" name="csrf_token" value={ csrf }/>
+				<input type="text" name="address" placeholder={ Tr(lang, "admin.addrPh") }/>
+				<input type="password" name="password" placeholder={ Tr(lang, "admin.passPh") }/>
+				<button class="primary" type="submit" name="action" value="create">{ Tr(lang, "common.create") }</button>
+			</form>
+			<h3>{ Tr(lang, "admin.2faSection") }</h3>
+			<form method="post" action="/admin/mailboxes" class="actions">
+				<input type="hidden" name="csrf_token" value={ csrf }/>
+				<input type="text" name="address" required maxlength="320" placeholder={ Tr(lang, "admin.2faAddr") }/>
+				<button class="secondary" type="submit" name="action" value="require2fa">{ Tr(lang, "admin.require2fa") }</button>
+				<button class="secondary" type="submit" name="action" value="unrequire2fa">{ Tr(lang, "admin.unrequire2fa") }</button>
+			</form>
+		</div>
+	}
+}
+
+// AdminUnregisteredView catch-all 聚合视图（FR-003：shadow 邮箱巡览）。
+// 参数：lang 界面语言（U18）；list shadow 邮箱列表；csrf 会话 token。
+templ AdminUnregisteredView(lang Lang, list []*storage.Mailbox, csrf string) {
+	@AppLayout(lang, Tr(lang, "admin.aggTitle"), Tr(lang, "home.adminKind"), true, csrf) {
+		<div class="main content-page">
+			<div class="page-head"><h2>{ Tr(lang, "admin.aggH2") }</h2></div>
+			if len(list) == 0 {
+				<div class="empty-state">
+					<h3>{ Tr(lang, "admin.aggEmptyTitle") }</h3>
+					<p>{ Tr(lang, "admin.aggEmpty") }</p>
+				</div>
+			} else {
+				<div class="table-wrap">
+					<table class="mails">
+						<thead><tr><th>{ Tr(lang, "admin.colAddr") }</th><th>{ Tr(lang, "mail.colStatus") }</th><th>{ Tr(lang, "admin.aggArchived") }</th></tr></thead>
+						<tbody>
+							for _, m := range list {
+								<tr>
+									<td>{ m.Address }</td>
+									<td><span class={ "badge", string(m.Status) }>{ statusLabel(lang, string(m.Status)) }</span></td>
+									<td>{ fmt.Sprintf(Tr(lang, "admin.shadowFmt"), m.ID) }</td>
+								</tr>
+							}
+						</tbody>
+					</table>
+				</div>
+			}
+		</div>
+	}
+}
