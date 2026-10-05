@@ -47,6 +47,10 @@ func (s *Server) adminSettingsGET(c *gin.Context) {
 	if c.Query("saved") == "1" {
 		data.Notice = templates.Tr(langOf(c), "settings.saved")
 	}
+	// Webmail管理职能批次 G1：管理员改密成功反馈（/admin/password 303 回带 ?pwchanged=1）
+	if c.Query("pwchanged") == "1" {
+		data.PWChanged = true
+	}
 	renderPage(c, http.StatusOK, templates.SettingsView(data))
 }
 
@@ -56,6 +60,7 @@ func (s *Server) buildSettingsData(c *gin.Context, cfg *config.Config, msg strin
 	data := templates.SettingsData{
 		Lang:               string(langOf(c)),
 		CSRFToken:          sess.CSRFToken,
+		Nav:                s.sidebarDataFor(c), // D3 B 形态——全站侧栏（覆盖全部 SettingsView 渲染点）
 		Message:            msg,
 		SPFEnabled:         cfg.Auth.SPFEnabled,
 		DKIMEnabled:        cfg.Auth.DKIMEnabled,

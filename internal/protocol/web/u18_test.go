@@ -146,10 +146,11 @@ func TestU18PlainTextPathZeroRegression(t *testing.T) {
 // TestU18DeepI18nRender 五对管理模板深级双语（U16 登记项③收口）：
 // en 态关键文案呈现+缺省 zh 零回归（管理域键族消费验证）。
 func TestU18DeepI18nRender(t *testing.T) {
-	// admin/tokens：lang 首参组件直驱（en）
+	// admin/tokens：lang 首参组件直驱（en；G4 增强行形态——AdminMailboxRow 视图模型；
+	// D3 B 形态签名增 nav 参——直驱形态传 nil〔AppFrame 降级分支〕）
 	w := httptest.NewRecorder()
 	if err := templates.AdminMailboxesView(templates.LangEN,
-		[]*storage.Mailbox{{Address: "en@t.io", Status: storage.MailboxStatusShadow}}, "", "csrf").Render(context.Background(), w); err != nil {
+		[]*templates.AdminMailboxRow{{Address: "en@t.io", Status: string(storage.MailboxStatusShadow)}}, "", "csrf", nil).Render(context.Background(), w); err != nil {
 		t.Fatalf("admin en 渲染: %v", err)
 	}
 	for _, want := range []string{"Mailbox accounts", "Create mailbox", "Address", "Actions"} {
@@ -158,7 +159,7 @@ func TestU18DeepI18nRender(t *testing.T) {
 		}
 	}
 	w = httptest.NewRecorder()
-	if err := templates.TokensView(templates.LangEN, nil, "raw-token-x", "", "csrf").Render(context.Background(), w); err != nil {
+	if err := templates.TokensView(templates.LangEN, nil, "raw-token-x", "", "csrf", nil).Render(context.Background(), w); err != nil {
 		t.Fatalf("tokens en 渲染: %v", err)
 	}
 	for _, want := range []string{"Generate token", "Existing tokens", "No tokens yet", "shown only once"} {

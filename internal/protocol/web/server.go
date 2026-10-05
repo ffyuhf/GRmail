@@ -101,6 +101,9 @@ type ServerConfig struct {
 
 	// ── U24 增量注入位（v1.20.0；nil=/settings/2fa 端点族 503+登录二步判定跳过——渐进部署形态）──
 	TwoFactor *account.TwoFactorService // 2FA 域服务（FR-018；account 包承载——web→account 单向合法）
+
+	// ── Webmail管理职能批次增量注入位（nil=/admin/plugins 端点 503——渐进部署形态）──
+	Plugins PluginStatusSource // 插件状态只读供给（G6——main 装配桥接 supervisor.StatusSnapshot）
 }
 
 // Server Web 服务端（Gin 引擎宿主）。
@@ -120,6 +123,7 @@ type Server struct {
 	stsPolicy    STSPolicyProvider         // U13（v1.9.0——mta-sts 端点；nil=404 停发态）
 	tokens       storage.TokenRepo         // U14（v1.10.0——Bearer 通道+/admin/tokens；nil=渐进态）
 	twoFactor    *account.TwoFactorService // U24（v1.20.0——/settings/2fa+登录二步；nil=渐进态）
+	plugins      PluginStatusSource        // Webmail管理职能批次（G6——/admin/plugins；nil=渐进态）
 	pending2fa   *pendingLoginStore        // U24：短时一次性登录凭据仓（S4-W Q1-A 内存态）
 	engine       *gin.Engine
 	httpSrv      *http.Server
@@ -149,6 +153,7 @@ func NewServer(cfg ServerConfig, sessions storage.SessionRepo, users storage.Use
 		stsPolicy:    cfg.STSPolicy,
 		tokens:       cfg.Tokens,
 		twoFactor:    cfg.TwoFactor,
+		plugins:      cfg.Plugins,
 		pending2fa:   newPendingLoginStore(),
 	}
 	s.engine = gin.New()
@@ -225,6 +230,14 @@ func (s *Server) mountRoutes() {
 	auth.POST("/settings/2fa/confirm", s.twoFactorConfirmPOST)
 	auth.POST("/settings/2fa/disable", s.twoFactorDisablePOST)
 
+	// Webmail管理职能批次（G1/G2——D1/D6）：个人设置枢纽+改密双通道
+	// （mailbox 改密 /settings/password；admin 改密 /admin/password——分域承载防主体混淆）
+	auth.GET("/settings", s.settingsHubGET)
+	auth.GET("/settings/password", s.passwordFormGET)
+	auth.POST("/settings/password", s.passwordChangePOST)
+	s.engine.GET("/admin/password", requireAuth(), s.passwordFormGET)
+	s.engine.POST("/admin/password", requireAuth(), s.adminPasswordChangePOST)
+
 	// admin（Q3-C 拆分：邮箱管理+聚合视图归 U9；/admin/settings 归 U10）
 	s.engine.GET("/admin", requireAuth(), func(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/admin/mailboxes")
@@ -243,6 +256,10 @@ func (s *Server) mountRoutes() {
 	s.engine.GET("/admin/tokens", requireAuth(), s.tokensListGET)
 	s.engine.POST("/admin/tokens", requireAuth(), s.tokensCreatePOST)
 	s.engine.POST("/admin/tokens/:id/revoke", requireAuth(), s.tokensRevokePOST)
+
+	// Webmail管理职能批次（G6——D7）：插件只读状态页（admin 门卫在 handler 内；
+	// Plugins nil=503 渐进态——S3-W Q3-A 只读裁决，零进程管理扩展）
+	s.engine.GET("/admin/plugins", requireAuth(), s.adminPluginsGET)
 }
 
 // entryMiddleware 入口中间件：每 HTTP 请求生成 LogID（架构 5.1：HTTP 入口义务）

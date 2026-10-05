@@ -34,24 +34,22 @@ var iconSearch = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" str
 // iconStar 星标图标（列表行——填充态内联 SVG）。
 var iconStar = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="m12 2 3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>`
 
-// MailPageView 列表整页（AppLayout+侧边栏+#mail-list 片段容器+骨架指示器）。
-// 参数：d 列表数据（Lang 驱动双语渲染）。
+// MailPageView 列表整页（AppFrame 统一骨架——D3 B 形态迁移：侧栏经 AppFrame 承载，
+// 与全站设置族页同构；#mail-list 片段容器+骨架指示器保持）。
+// 参数：d 列表数据（Lang 驱动双语渲染；兼作 AppFrame 侧栏数据源）。
 templ MailPageView(d *MailListData) {
-	@AppLayout(NormalizeLang(d.Lang), Tr(NormalizeLang(d.Lang), "mail.title"), d.Label, d.IsAdmin, d.CSRF) {
-		<div class="layout">
-			@Sidebar(d)
-			<div class="main">
-				<div id="folder-hint" class="hint"></div>
-				<div id="mail-list">
-					@MailListFragment(d)
-				</div>
-				<div id="mail-loading" class="htmx-indicator" aria-hidden="true">
-					<div class="skeleton-row"></div>
-					<div class="skeleton-row"></div>
-					<div class="skeleton-row"></div>
-					<div class="skeleton-row"></div>
-					<div class="skeleton-row"></div>
-				</div>
+	@AppFrame(NormalizeLang(d.Lang), Tr(NormalizeLang(d.Lang), "mail.title"), d.Label, d.IsAdmin, d.CSRF, d) {
+		<div class="main">
+			<div id="folder-hint" class="hint"></div>
+			<div id="mail-list">
+				@MailListFragment(d)
+			</div>
+			<div id="mail-loading" class="htmx-indicator" aria-hidden="true">
+				<div class="skeleton-row"></div>
+				<div class="skeleton-row"></div>
+				<div class="skeleton-row"></div>
+				<div class="skeleton-row"></div>
+				<div class="skeleton-row"></div>
 			</div>
 		</div>
 	}
@@ -60,6 +58,8 @@ templ MailPageView(d *MailListData) {
 // Sidebar 侧边栏（平铺无嵌套——REQ-021 红线；文件夹切换 hx-get 片段；「管理文件夹」
 // 单一聚合折叠区：创建表单+逐自定义文件夹紧凑管理行——重命名/删除收纳于二级展开）。
 // 参数：d 列表数据（Folders/ActiveFolder/CSRF/Lang）。
+// D5（2026-10-05）：系统文件夹名按 kind 经 folderDisplayName 本地化（custom 回退原 Name）；
+// D3（2026-10-05）：Sidebar 自本批次起为全站侧栏（AppFrame 承载——设置族页统一导航）。
 templ Sidebar(d *MailListData) {
 	{{ lang := NormalizeLang(d.Lang) }}
 	<nav class="sidebar">
@@ -73,7 +73,7 @@ templ Sidebar(d *MailListData) {
 				} else {
 					<span class="ficon" aria-hidden="true">@templ.Raw(iconMailBox)</span>
 				}
-				<span class="fname">{ f.Name }</span>
+				<span class="fname">{ folderDisplayName(lang, f.Kind, f.Name) }</span>
 				if f.Unread > 0 {
 					<span class="unread">{ fmt.Sprintf("%d", f.Unread) }</span>
 				}
@@ -122,10 +122,16 @@ templ MailListFragment(d *MailListData) {
 				</span>
 				<button class="secondary" type="submit">{ Tr(lang, "mail.search") }</button>
 			</form>
+			<!-- D2（2026-10-05）：筛选链接 hx-get 局部更新化——原裸 href 整页导航至片段端点
+			/mails（无布局无 htmx 运行时）致显示错误+后续交互失效；href 保留作降级锚 -->
 			if d.UnreadOnly {
-				<a class="filter-link" href={ fmt.Sprintf("/mails?folder=%d&unread=0&page=1", d.ActiveFolder) }>{ Tr(lang, "mail.clearUnread") }</a>
+				<a class="filter-link" href={ fmt.Sprintf("/mails?folder=%d&unread=0&page=1&pagesize=%d", d.ActiveFolder, d.Pagesize) }
+					hx-get={ fmt.Sprintf("/mails?folder=%d&unread=0&page=1&pagesize=%d", d.ActiveFolder, d.Pagesize) }
+					hx-target="#mail-list" hx-indicator="#mail-loading">{ Tr(lang, "mail.clearUnread") }</a>
 			} else {
-				<a class="filter-link" href={ fmt.Sprintf("/mails?folder=%d&unread=1&page=1", d.ActiveFolder) }>{ Tr(lang, "mail.unreadOnly") }</a>
+				<a class="filter-link" href={ fmt.Sprintf("/mails?folder=%d&unread=1&page=1&pagesize=%d", d.ActiveFolder, d.Pagesize) }
+					hx-get={ fmt.Sprintf("/mails?folder=%d&unread=1&page=1&pagesize=%d", d.ActiveFolder, d.Pagesize) }
+					hx-target="#mail-list" hx-indicator="#mail-loading">{ Tr(lang, "mail.unreadOnly") }</a>
 			}
 			<span class="tool-spacer"></span>
 			<span class="tool-count">{ Trf(lang, "mail.totalFmt", d.Total) }</span>
@@ -150,7 +156,7 @@ templ MailListFragment(d *MailListData) {
 				if len(d.Folders) > 0 {
 					<select name="target" class="btn-sm">
 						for _, f := range d.Folders {
-							<option value={ fmt.Sprintf("%d", f.ID) }>{ f.Name }</option>
+							<option value={ fmt.Sprintf("%d", f.ID) }>{ folderDisplayName(lang, f.Kind, f.Name) }</option>
 						}
 					</select>
 				}

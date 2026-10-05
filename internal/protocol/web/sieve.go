@@ -61,7 +61,7 @@ func (s *Server) sieveListGET(c *gin.Context) {
 		c.String(http.StatusServiceUnavailable, templates.Tr(langOf(c), "sieve.errDisabled"))
 		return
 	}
-	data := &templates.SieveListData{Lang: langOf(c), CSRF: s.csrfOf(c), Scripts: []templates.SieveScriptRow{}}
+	data := &templates.SieveListData{Lang: langOf(c), CSRF: s.csrfOf(c), Scripts: []templates.SieveScriptRow{}, Nav: s.sidebarDataFor(c)}
 	scripts, err := repo.ListScripts(c.Request.Context(), mboxID)
 	if err != nil {
 		data.Error = templates.Trf(langOf(c), "sieve.errList", err.Error())
@@ -80,7 +80,7 @@ func (s *Server) sieveEditGET(c *gin.Context) {
 		return
 	}
 	name := c.Param("name")
-	data := &templates.SieveEditData{Lang: langOf(c), CSRF: s.csrfOf(c), Name: name, NameEditable: name == "new"}
+	data := &templates.SieveEditData{Lang: langOf(c), CSRF: s.csrfOf(c), Name: name, NameEditable: name == "new", Nav: s.sidebarDataFor(c)}
 	if name != "new" {
 		sc, err := repo.GetScript(c.Request.Context(), mboxID, name)
 		if err != nil {
@@ -110,7 +110,7 @@ func (s *Server) sieveEditPOST(c *gin.Context) {
 		name = formName
 	}
 	content := c.PostForm("content")
-	data := &templates.SieveEditData{Lang: langOf(c), CSRF: s.csrfOf(c), Name: name, NameEditable: isNewEntry, Content: content}
+	data := &templates.SieveEditData{Lang: langOf(c), CSRF: s.csrfOf(c), Name: name, NameEditable: isNewEntry, Content: content, Nav: s.sidebarDataFor(c)}
 	if !validSieveScriptName(name) {
 		data.Error = templates.Tr(langOf(c), "sieve.errName")
 		renderPage(c, http.StatusBadRequest, templates.SieveEditView(data))

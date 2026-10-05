@@ -26,6 +26,7 @@ type TwoFactorData struct {
 	RecoveryCodes []string // 恢复码明文集（确认响应一次性展示——TC-027 判定①）
 	Forced        bool     // 管理员强制引导（登录重定向而来——TC-028 判定③）
 	ErrText       string   // 操作错误提示（哨兵映射文案）
+	Nav           *MailListData // 全站侧栏数据（D3 B 形态——AppFrame 承载；nil=降级）
 }
 
 // TwoFactorView 2FA 绑定管理页（GET /settings/2fa 与三 POST 操作响应统一渲染）。
@@ -83,7 +84,7 @@ templ TwoFactorView(d TwoFactorData) {
 // appLayout2FA 2FA 页骨架适配（AppLayout isAdmin 恒 false——2FA 绑定主体为 mailbox 账号，
 // admin 主体（User）不在 FR-018 范围）。
 templ appLayout2FA(d TwoFactorData) {
-	@AppLayout(d.Lang, Tr(d.Lang, "twofactor.title"), d.Label, false, d.CSRF) {
+	@AppFrame(d.Lang, Tr(d.Lang, "twofactor.title"), d.Label, false, d.CSRF, d.Nav) {
 		{ children... }
 	}
 }

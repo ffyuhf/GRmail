@@ -1009,7 +1009,7 @@ func ComposeView(d *ComposeData) templ.Component {
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = AppLayout(lang, Tr(lang, "compose.title"), Tr(lang, "compose.title"), d.IsAdmin, d.CSRF).Render(templ.WithChildren(ctx, templ_7745c5c3_Var2), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = AppFrame(lang, Tr(lang, "compose.title"), Tr(lang, "compose.title"), d.IsAdmin, d.CSRF, d.Nav).Render(templ.WithChildren(ctx, templ_7745c5c3_Var2), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

@@ -1,0 +1,56 @@
+// GRmail 个人设置枢纽页（Webmail管理职能批次 G2——D6 缺陷收口；S3-W Q1-A 裁决：
+// 枢纽分区导航形态）。mailbox 主体四分区：账户信息（地址呈现）/修改密码/双因素认证/
+// 过滤规则——全部设置能力一跳可达（规则入口 G3——D5 导航孤儿收口承载位之一）。
+// 依据：Webmail管理职能计划书 v1.0.0 1.2 G2/G3（G2 批准 2026-10-05 15:15:22）；SRS FR-013/FR-011。
+// 修改历史：
+//
+//	2026-10-05 15:20:00 | 新建 | Webmail管理职能批次（计划书阶段 3）
+package templates
+
+// SettingsHubData 个人设置枢纽数据（视图模型）。
+type SettingsHubData struct {
+	Lang      string // 界面语言
+	CSRFToken string // 会话绑定 CSRF token（未直接消费——AppLayout 骨架参数）
+	Address   string // 当前邮箱地址（账户信息分区呈现；反查失败为空串）
+	PWChanged bool   // 改密成功反馈（303 回带 ?pwchanged=1——成功态 notice）
+	Nav       *MailListData // 全站侧栏数据（D3 B 形态——AppFrame 承载；nil=无邮箱异常态降级）
+}
+
+// SettingsHubView 个人设置枢纽（四分区导航卡片——hub-grid 网格布局）。
+// 参数：d 枢纽数据。
+templ SettingsHubView(d *SettingsHubData) {
+	{{ lang := NormalizeLang(d.Lang) }}
+	@AppFrame(lang, Tr(lang, "hub.title"), Tr(lang, "home.mailKind"), false, d.CSRFToken, d.Nav) {
+		<div class="main content-page">
+			<div class="page-head"><h2>{ Tr(lang, "hub.title") }</h2></div>
+			if d.PWChanged {
+				<p class="notice" role="status">{ Tr(lang, "pw.changed") }</p>
+			}
+			if d.Address != "" {
+				<p class="hint">{ Tr(lang, "hub.account") }{ colonFor(lang) }<code>{ d.Address }</code></p>
+			}
+			<div class="hub-grid">
+				<a class="hub-card" href="/settings/password">
+					<span class="hub-ic" aria-hidden="true">🔑</span>
+					<span class="hub-name">{ Tr(lang, "hub.password") }</span>
+					<span class="hub-desc">{ Tr(lang, "hub.passwordDesc") }</span>
+				</a>
+				<a class="hub-card" href="/settings/2fa">
+					<span class="hub-ic" aria-hidden="true">🛡️</span>
+					<span class="hub-name">{ Tr(lang, "hub.twofactor") }</span>
+					<span class="hub-desc">{ Tr(lang, "hub.twofactorDesc") }</span>
+				</a>
+				<a class="hub-card" href="/sieve">
+					<span class="hub-ic" aria-hidden="true">📑</span>
+					<span class="hub-name">{ Tr(lang, "hub.rules") }</span>
+					<span class="hub-desc">{ Tr(lang, "hub.rulesDesc") }</span>
+				</a>
+				<a class="hub-card" href="/">
+					<span class="hub-ic" aria-hidden="true">📧</span>
+					<span class="hub-name">{ Tr(lang, "hub.mails") }</span>
+					<span class="hub-desc">{ Tr(lang, "hub.mailsDesc") }</span>
+				</a>
+			</div>
+		</div>
+	}
+}

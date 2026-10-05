@@ -21,9 +21,21 @@ import "fmt"
 // 参数：data 设置数据（SettingsData——web 包 buildSettingsData 装配；Lang 承载界面语言）。
 templ SettingsView(data SettingsData) {
 	{{ lang := NormalizeLang(data.Lang) }}
-	@appLayoutSettings(lang, data.CSRFToken) {
+	@appLayoutSettings(lang, data.CSRFToken, data.Nav) {
 		<div class="main content-page">
 		<div class="page-head"><h2>{ Tr(lang, "settings.h1") }</h2></div>
+		<nav class="settings-nav" aria-label={ Tr(lang, "settings.navTitle") }>
+			<span class="active">{ Tr(lang, "settings.navService") }</span>
+			<a href="/admin/mailboxes">{ Tr(lang, "settings.navMailboxes") }</a>
+			<a href="/admin/mailboxes/unregistered">{ Tr(lang, "settings.navAggregate") }</a>
+			<a href="/admin/tokens">{ Tr(lang, "settings.navTokens") }</a>
+			<a href="/admin/plugins">{ Tr(lang, "settings.navPlugins") }</a>
+			<a href="/sieve">{ Tr(lang, "hub.rules") }</a>
+			<a href="/admin/password">{ Tr(lang, "settings.navAdminPw") }</a>
+		</nav>
+		if data.PWChanged {
+			<p class="notice" role="status">{ Tr(lang, "pw.changed") }</p>
+		}
 		if data.Notice != "" {
 			<p class="notice" role="status">{ data.Notice }</p>
 		}
@@ -82,8 +94,9 @@ templ SettingsView(data SettingsData) {
 	
 // appLayoutSettings 设置页骨架（AppLayout admin 主体——F01 统一；无 .layout 侧栏：管理
 // 全量页沿 content-page 单流形态，对齐 admin/tokens）。
-templ appLayoutSettings(lang Lang, csrf string) {
-	@AppLayout(lang, Tr(lang, "settings.title"), Tr(lang, "home.adminKind"), true, csrf) {
+// D3（2026-10-05 B 形态）：nav 为全站侧栏数据（AppFrame 承载；nil=无邮箱异常态降级）。
+templ appLayoutSettings(lang Lang, csrf string, nav *MailListData) {
+	@AppFrame(lang, Tr(lang, "settings.title"), Tr(lang, "home.adminKind"), true, csrf, nav) {
 		{ children... }
 	}
 }

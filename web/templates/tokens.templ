@@ -44,8 +44,9 @@ func clientIPOf(lang Lang, ip string) string {
 // TokensView Token 管理页。
 // 参数：lang 界面语言（U18 深级贯通）；list 当前列表；newToken 生成成功时的一次性明文
 // （空=无生成态——仅此一次可见）；errText 操作错误提示；csrf 会话 token。
-templ TokensView(lang Lang, list []*storage.ApiToken, newToken string, errText string, csrf string) {
-	@AppLayout(lang, Tr(lang, "tokens.title"), Tr(lang, "home.adminKind"), true, csrf) {
+// D3（2026-10-05 B 形态）：nav 为全站侧栏数据（AppFrame 承载；nil=无邮箱异常态降级）。
+templ TokensView(lang Lang, list []*storage.ApiToken, newToken string, errText string, csrf string, nav *MailListData) {
+	@AppFrame(lang, Tr(lang, "tokens.title"), Tr(lang, "home.adminKind"), true, csrf, nav) {
 		<div class="main content-page">
 			if errText != "" {
 				<p class="error" role="alert">{ errText }</p>

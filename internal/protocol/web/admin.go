@@ -30,22 +30,24 @@ func (s *Server) adminGuard(c *gin.Context) bool {
 	return true
 }
 
-// adminMailboxesGET 邮箱全量列表（GET /admin/mailboxes——三态合并：active/shadow/disabled）。
+// adminMailboxesGET 邮箱全量列表（GET /admin/mailboxes——三态合并：active/shadow/disabled；
+// G4 增强行装配——2FA 态/创建时间列）。
 func (s *Server) adminMailboxesGET(c *gin.Context) {
 	if !s.adminGuard(c) {
 		return
 	}
-	list, err := s.listAllMailboxes(c)
+	rows, err := s.adminMailboxRows(c)
 	if err != nil {
 		c.Status(http.StatusInternalServerError)
 		return
 	}
 	sess, _ := currentSession(c)
-	renderPage(c, http.StatusOK, templates.AdminMailboxesView(langOf(c), list, "", sess.CSRFToken))
+	renderPage(c, http.StatusOK, templates.AdminMailboxesView(langOf(c), rows, "", sess.CSRFToken, s.sidebarDataFor(c)))
 }
 
-// adminMailboxesPOST 邮箱管理操作（POST /admin/mailboxes——action 四态）：
-// create（地址+密码）/ activate（影子激活设密——FR-004 原地继承）/ disable / enable。
+// adminMailboxesPOST 邮箱管理操作（POST /admin/mailboxes——action 五态）：
+// create（地址+密码）/ activate（影子激活设密——FR-004 原地继承）/ disable / enable /
+// setpassword（Webmail管理职能批次 G1——FR-002「编辑」：管理员对任一邮箱改密）。
 func (s *Server) adminMailboxesPOST(c *gin.Context) {
 	if !s.adminGuard(c) {
 		return
@@ -72,6 +74,10 @@ func (s *Server) adminMailboxesPOST(c *gin.Context) {
 		if opErr = s.accounts.SetMailboxStatus(ctx, addr, storage.MailboxStatusActive); opErr == nil {
 			sessLogger(c).Info("admin 启用邮箱", "addr", addr)
 		}
+	case "setpassword": // G1（FR-002）：管理员对任一 active/disabled 邮箱改密（影子拒绝——归激活流程）
+		if opErr = s.accounts.SetMailboxPassword(ctx, addr, password); opErr == nil {
+			sessLogger(c).Info("admin 修改邮箱密码", "addr", addr)
+		}
 	case "require2fa": // U24（FR-018 判定④）：管理员强制 2FA 标记（TC-028 判定⑤锚）
 		if opErr = s.adminSetTwoFactorRequired(ctx, addr, true); opErr == nil {
 			sessLogger(c).Info("admin 设置 2FA 强制标记", "addr", addr)
@@ -89,13 +95,42 @@ func (s *Server) adminMailboxesPOST(c *gin.Context) {
 	if opErr != nil {
 		errText = adminErrText(langOf(c), opErr)
 	}
-	list, err := s.listAllMailboxes(c)
+	rows, err := s.adminMailboxRows(c)
 	if err != nil {
 		c.Status(http.StatusInternalServerError)
 		return
 	}
 	sess, _ := currentSession(c)
-	renderPage(c, http.StatusOK, templates.AdminMailboxesView(langOf(c), list, errText, sess.CSRFToken))
+	renderPage(c, http.StatusOK, templates.AdminMailboxesView(langOf(c), rows, errText, sess.CSRFToken, s.sidebarDataFor(c)))
+}
+
+// adminMailboxRows 管理列表增强行装配（G4——D4：2FA 绑定/强制态+创建时间列；
+// TwoFactor 未注入或单点查询故障时该行 2FA 态呈现未知——尽力语义，列表主数据不受阻）。
+// 参数：c Gin 上下文。返回：增强行集；三态合并查询故障返回 error。
+func (s *Server) adminMailboxRows(c *gin.Context) ([]*templates.AdminMailboxRow, error) {
+	ctx := c.Request.Context()
+	all, err := s.listAllMailboxes(c)
+	if err != nil {
+		return nil, err
+	}
+	rows := make([]*templates.AdminMailboxRow, 0, len(all))
+	for _, m := range all {
+		row := &templates.AdminMailboxRow{
+			Address:   m.Address,
+			Status:    string(m.Status),
+			CreatedAt: m.CreatedAt.Format("2006-01-02"),
+			MailboxID: m.ID,
+		}
+		if s.twoFactor != nil {
+			if st, stErr := s.twoFactor.State(ctx, m.ID); stErr == nil {
+				row.TwoFABound = st.Bound()
+				row.TwoFARequired = st.Required
+				row.TwoFAKnown = true
+			}
+		}
+		rows = append(rows, row)
+	}
+	return rows, nil
 }
 
 // adminSetTwoFactorRequired 管理员强制 2FA 标记操作（U24——FR-018 判定④）：
@@ -113,18 +148,24 @@ func (s *Server) adminSetTwoFactorRequired(ctx context.Context, addr string, req
 }
 
 // adminUnregisteredGET catch-all 聚合视图（GET /admin/mailboxes/unregistered——
-// FR-003：shadow 邮箱列表巡览，未注册来信按址归档载体）。
+// FR-003：shadow 邮箱列表巡览，未注册来信按址归档载体；G4 增强行形态承载）。
 func (s *Server) adminUnregisteredGET(c *gin.Context) {
 	if !s.adminGuard(c) {
 		return
 	}
-	shadows, err := s.accounts.ListShadowMailboxes(c.Request.Context())
+	rows, err := s.adminMailboxRows(c)
 	if err != nil {
 		c.Status(http.StatusInternalServerError)
 		return
 	}
+	shadows := make([]*templates.AdminMailboxRow, 0, len(rows))
+	for _, r := range rows {
+		if r.Status == string(storage.MailboxStatusShadow) {
+			shadows = append(shadows, r)
+		}
+	}
 	sess, _ := currentSession(c)
-	renderPage(c, http.StatusOK, templates.AdminUnregisteredView(langOf(c), shadows, sess.CSRFToken))
+	renderPage(c, http.StatusOK, templates.AdminUnregisteredView(langOf(c), shadows, sess.CSRFToken, s.sidebarDataFor(c)))
 }
 
 // listAllMailboxes 三态合并全量列表（active/shadow/disabled；单管理员规模 REQ-001——

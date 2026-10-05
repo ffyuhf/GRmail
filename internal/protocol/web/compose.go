@@ -67,7 +67,7 @@ func (s *Server) composeGET(c *gin.Context) {
 		return
 	}
 	sess, _ := currentSession(c)
-	data := &templates.ComposeData{Lang: string(langOf(c)), IsAdmin: view.IsAdmin, CSRF: sess.CSRFToken}
+	data := &templates.ComposeData{Lang: string(langOf(c)), IsAdmin: view.IsAdmin, CSRF: sess.CSRFToken, Nav: s.sidebarDataFor(c)}
 	s.applyEditorConf(data) // D8#11：压缩参数快照注入（CfgSnapshot 热加载态——每渲染取最新）
 	ctx := c.Request.Context()
 
@@ -134,7 +134,8 @@ func (s *Server) composePOST(c *gin.Context) {
 	}
 	sess, _ := currentSession(c)
 	data := &templates.ComposeData{
-		Lang: string(langOf(c)), // U16 Q2-A：双语渲染
+		Nav:  s.sidebarDataFor(c), // D3 B 形态——全站侧栏
+		Lang: string(langOf(c)),   // U16 Q2-A：双语渲染
 		To:   c.PostForm("to"), Cc: c.PostForm("cc"), Bcc: c.PostForm("bcc"),
 		Subject: c.PostForm("subject"), Body: c.PostForm("body"),
 		From: strings.TrimSpace(c.PostForm("from")), IsAdmin: view.IsAdmin,

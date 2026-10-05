@@ -209,3 +209,45 @@ func (s *Server) renderNoMailboxView(c *gin.Context) {
 func renderFragment(c *gin.Context, code int, component templ.Component) {
 	renderPage(c, code, component)
 }
+
+// sidebarDataFor 全站侧栏数据装配（D3 B 形态——侧栏交互缺陷修复批次：设置族页
+// AppFrame 统一承载侧栏，folders+unread 查询链复用 renderMailListPage 既有形态；
+// S3-W Q1=B 裁决 2026-10-05 18:28:52）。降级语义：无邮箱视图（admin 异常态）返回
+// nil（AppFrame 退化为无侧栏直出）；folders/未读查询失败降级空列表不阻断页面渲染
+// （Warn 记录）。pagesize 取 defaultPageSize（文件夹切换链接的一致分页基数）。
+// 参数：c 请求上下文（会话/语言/邮箱视图三源）。返回：侧栏数据（nil=降级）。
+func (s *Server) sidebarDataFor(c *gin.Context) *templates.MailListData {
+	if s.folders == nil {
+		return nil // Folders 未注入渐进态（ServerConfig nil 惯例——测试环境/降级装配；AppFrame 降级直出）
+	}
+	view, err := s.currentMailboxView(c)
+	if err != nil {
+		return nil // 无邮箱异常态——AppFrame 降级直出（既有各页行为保持）
+	}
+	ctx := c.Request.Context()
+	folders, err := s.folders.List(ctx, view.MailboxID)
+	if err != nil {
+		sessLogger(c).Warn("侧栏文件夹查询失败（降级空侧栏）", "error", err)
+		folders = nil
+	}
+	unread := map[int64]int64{}
+	if u, uerr := s.folders.UnreadCounts(ctx, view.MailboxID); uerr == nil {
+		unread = u
+	} else {
+		sessLogger(c).Warn("侧栏未读计数查询失败（降级空计数）", "error", uerr)
+	}
+	csrf := ""
+	if sess, ok := currentSession(c); ok {
+		csrf = sess.CSRFToken
+	}
+	nav := &templates.MailListData{
+		Lang: string(langOf(c)), CSRF: csrf, Pagesize: defaultPageSize,
+		Folders: make([]templates.FolderEntry, 0, len(folders)),
+	}
+	for _, f := range folders {
+		nav.Folders = append(nav.Folders, templates.FolderEntry{
+			ID: f.ID, Name: f.Name, Kind: string(f.Kind), Unread: unread[f.ID],
+		})
+	}
+	return nav
+}

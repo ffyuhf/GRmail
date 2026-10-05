@@ -71,9 +71,7 @@ templ AppLayout(lang Lang, title string, label string, isAdmin bool, csrf string
 							</summary>
 							<div class="menu">
 								<a href="/admin/mailboxes">{ Tr(lang, "top.adminMail") }</a>
-								<a href="/admin/mailboxes/unregistered">{ Tr(lang, "top.aggregate") }</a>
 								<a href="/admin/settings">{ Tr(lang, "top.settings") }</a>
-								<a href="/admin/tokens">{ Tr(lang, "top.tokens") }</a>
 							</div>
 						</details>
 					}
@@ -82,11 +80,10 @@ templ AppLayout(lang Lang, title string, label string, isAdmin bool, csrf string
 							<span class="ic" aria-hidden="true">@templ.Raw(iconMore)</span>
 						</summary>
 						<div class="menu">
-							if !isAdmin {
-								<a href="/settings/2fa">
-									<span class="ic" aria-hidden="true">@templ.Raw(iconShield)</span>
-									{ Tr(lang, "top.twofactor") }
-								</a>
+							if isAdmin {
+								<a href="/admin/password">{ Tr(lang, "top.password") }</a>
+							} else {
+								<a href="/settings">{ Tr(lang, "top.settingsHub") }</a>
 							}
 							<a href={ langSwitchHref(lang, "/") }>
 								<span class="ic" aria-hidden="true">@templ.Raw(iconLang)</span>
@@ -107,6 +104,26 @@ templ AppLayout(lang Lang, title string, label string, isAdmin bool, csrf string
 			{ children... }
 		</body>
 	</html>
+}
+
+// AppFrame 带侧栏的应用骨架（D3——侧栏交互缺陷修复批次 B 形态定稿：S3-W Q1=B
+// 2026-10-05 18:28:52）。设置族页统一渲染 Sidebar（全站侧栏导航——汉堡按钮全站
+// 行为一致，移动端设置页可经侧栏返回邮箱）；children 自带 .main 容器（compose 页
+// id/data 属性等页面级定制保持）。nav 为 nil 时退化为无侧栏形态（无邮箱异常态防御
+// ——AppLayout 原直出语义）。
+// 参数：前五参同 AppLayout；nav 侧栏数据（MailListData 的 Folders/CSRF/Lang/Pagesize
+// 字段子集——Items/Total 等列表域字段零值不消费）。
+templ AppFrame(lang Lang, title string, label string, isAdmin bool, csrf string, nav *MailListData) {
+	@AppLayout(lang, title, label, isAdmin, csrf) {
+		if nav != nil {
+			<div class="layout">
+				@Sidebar(nav)
+				{ children... }
+			</div>
+		} else {
+			{ children... }
+		}
+	}
 }
 
 // langSwitchHref 语言切换链接（GET /lang——l 取目标语言（当前取反）、next 回当前路径）。

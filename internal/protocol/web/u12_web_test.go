@@ -78,8 +78,11 @@ func TestSieveWebNewScriptLifecycle(t *testing.T) {
 	if !strings.Contains(body, "keep;") {
 		t.Error("编辑页应回读脚本内容 keep;")
 	}
-	if strings.Contains(body, `name="name"`) {
-		t.Error("编辑态（既有脚本）不应渲染名称输入框")
+	// D3 B 形态（2026-10-05 侧栏交互缺陷修复批次）：全站侧栏「管理文件夹」创建表单
+	// 含 name="name" 输入框（mail_list.templ 侧栏组件）——断言收窄至脚本名输入框特征
+	// 形态（maxlength="128"——#30 脚本名输入框专属，侧栏创建框无此属性）
+	if strings.Contains(body, `name="name" maxlength="128"`) {
+		t.Error("编辑态（既有脚本）不应渲染脚本名输入框")
 	}
 }
 

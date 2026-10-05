@@ -64,6 +64,61 @@ var messages = map[string][2]string{
 	"common.cancel":  {"取消", "Cancel"},
 	// F15：危险操作确认（data-confirm 属性默认文案——Webmail界面精修批次 2026-10-03）
 	"common.confirm": {"确定执行该操作？", "Proceed with this action?"},
+	// ── Webmail管理职能批次键族（G1 密码三通道/G2 双枢纽/G3 规则入口/G4 管理增强/G6 插件页；
+	// S3-W 三裁决 A A A——2026-10-05 15:14）──
+	"top.settingsHub": {"个人设置", "My settings"},
+	"top.password":    {"修改密码", "Change password"},
+	// 改密页（pw.*——双通道共用：mailbox /settings/password·admin /admin/password）
+	"pw.title":       {"修改密码", "Change Password"},
+	"pw.user":        {"管理员用户名", "Admin username"},
+	"pw.old":         {"当前密码", "Current password"},
+	"pw.new":         {"新密码", "New password"},
+	"pw.confirm":     {"确认新密码", "Confirm new password"},
+	"pw.hint":        {"修改成功后将自动重建会话（其他已登录设备需重新登录）。", "Your session will be renewed after changing (other devices must sign in again)."},
+	"pw.submit":      {"修改密码", "Change password"},
+	"pw.errEmpty":    {"新密码不能为空。", "New password cannot be empty."},
+	"pw.errMismatch": {"两次输入的新密码不一致。", "The two new passwords do not match."},
+	"pw.errWrongOld": {"当前密码验证失败。", "Current password verification failed."},
+	"pw.changed":     {"密码已修改，会话已重建。", "Password changed, session renewed."},
+	// 个人设置枢纽（hub.*——mailbox 主体四分区）
+	"hub.title":         {"个人设置", "My Settings"},
+	"hub.account":       {"当前账号", "Account"},
+	"hub.password":      {"修改密码", "Change Password"},
+	"hub.passwordDesc":  {"更改本邮箱账号的登录密码。", "Change the login password of this mailbox."},
+	"hub.twofactor":     {"双因素认证", "Two-Factor Auth"},
+	"hub.twofactorDesc": {"绑定 TOTP 验证器，为登录增加第二道防线。", "Bind a TOTP authenticator for a second login factor."},
+	"hub.rules":         {"过滤规则", "Filter Rules"},
+	"hub.rulesDesc":     {"管理 Sieve 过滤脚本（移动/转发/丢弃来信）。", "Manage Sieve filter scripts (file/redirect/discard)."},
+	"hub.mails":         {"返回邮箱", "Back to Mailbox"},
+	"hub.mailsDesc":     {"回到收件箱列表。", "Back to the inbox list."},
+	// 管理枢纽导航（settings.nav*——/admin/settings 六分区）
+	"settings.navTitle":     {"管理导航", "Admin navigation"},
+	"settings.navService":   {"服务配置", "Service Config"},
+	"settings.navMailboxes": {"邮箱管理", "Mailboxes"},
+	"settings.navAggregate": {"聚合视图", "Aggregate View"},
+	"settings.navTokens":    {"API Token", "API Tokens"},
+	"settings.navPlugins":   {"插件", "Plugins"},
+	"settings.navAdminPw":   {"管理员改密", "Admin Password"},
+	// 邮箱管理增强（admin.* G4——2FA 列/创建时间/搜索/行内改密）
+	"admin.colCreated":     {"创建日期", "Created"},
+	"admin.tfBound":        {"已绑定", "bound"},
+	"admin.tfNone":         {"未绑定", "not bound"},
+	"admin.tfUnboundReq":   {"未绑定·强制", "not bound · forced"},
+	"admin.tfRequiredMark": {"管理员已设强制标记", "forced by admin"},
+	"admin.setPwd":         {"改密", "Set password"},
+	"admin.newPassPh":      {"新密码", "new password"},
+	"admin.searchPh":       {"过滤地址…", "Filter addresses…"},
+	// 插件状态页（plugins.* G6——只读呈现）
+	"plugins.title":      {"插件", "Plugins"},
+	"plugins.hint":       {"只读运行状态（插件崩溃后重启主程序恢复——不支持自动重拉）。", "Read-only status (restart the server to recover a crashed plugin — no auto-restart)."},
+	"plugins.colName":    {"名称", "Name"},
+	"plugins.colVer":     {"版本", "Version"},
+	"plugins.colCaps":    {"能力", "Capabilities"},
+	"plugins.colStatus":  {"状态", "Status"},
+	"plugins.alive":      {"运行中", "running"},
+	"plugins.dead":       {"已崩溃", "crashed"},
+	"plugins.emptyTitle": {"暂无插件", "No plugins"},
+	"plugins.empty":      {"将插件二进制放入 plugins/ 目录后重启主程序即可加载。", "Place plugin binaries in the plugins/ directory and restart to load them."},
 	// ── 登录页 ──
 	"login.adminTitle": {"GRmail · 管理员登录", "GRmail · Admin Login"},
 	"login.mailTitle":  {"GRmail · 邮箱登录", "GRmail · Mailbox Login"},
@@ -475,6 +530,27 @@ var messages = map[string][2]string{
 	"sieve.emptyTitle":    {"暂无脚本", "No scripts"},
 	"sieve.backList":      {"返回列表", "Back to list"},
 	"home.goMail":         {"进入邮箱", "Go to mailbox"},
+	// ── 侧栏交互缺陷修复批次（D5——系统文件夹名 i18n；folders.name 列存英文规范名，
+	// 呈现层按 kind 经 Tr 映射；custom 与未知 kind 回退原 Name——DB 零改动）──
+	"folder.inbox":        {"收件箱", "INBOX"},
+	"folder.sent":         {"已发送", "Sent"},
+	"folder.drafts":       {"草稿箱", "Drafts"},
+	"folder.trash":        {"已删除", "Trash"},
+	"folder.junk":         {"垃圾邮件", "Junk"},
+	"folder.unregistered": {"未注册来信", "Unregistered"},
+}
+
+// folderDisplayName 文件夹呈现名（D5——系统文件夹按 kind 本地化，custom/未知 kind 回退原 Name）。
+// 参数：lang 界面语言；kind 文件夹类型（folders.kind 规范值）；name 数据库原始名（回退承载）。
+// 返回：当前语言的呈现名。依据：侧栏交互缺陷修复计划书 v1.0.0 1.2 G4（2026-10-05 18:41:43 G2 批准）。
+func folderDisplayName(lang Lang, kind, name string) string {
+	if tr, ok := messages["folder."+kind]; ok {
+		if lang == LangEN {
+			return tr[1]
+		}
+		return tr[0]
+	}
+	return name
 }
 
 // Tr 双语文案取值（缺 key/缺语言回落中文原文——机械兜底保证渲染不空）。

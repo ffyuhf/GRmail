@@ -53,7 +53,7 @@ func (s *Server) tokensListGET(c *gin.Context) {
 		return
 	}
 	sess, _ := currentSession(c)
-	renderPage(c, http.StatusOK, templates.TokensView(langOf(c), s.tokenList(c, sess.SubjectID), "", "", sess.CSRFToken))
+	renderPage(c, http.StatusOK, templates.TokensView(langOf(c), s.tokenList(c, sess.SubjectID), "", "", sess.CSRFToken, s.sidebarDataFor(c)))
 }
 
 // tokensCreatePOST Token 生成（POST /admin/tokens——三档有效期+IP 绑定可选；
@@ -80,7 +80,7 @@ func (s *Server) tokensCreatePOST(c *gin.Context) {
 	case "forever", "":
 		// 零值=永久
 	default:
-		renderPage(c, http.StatusBadRequest, templates.TokensView(langOf(c), s.tokenList(c, sess.SubjectID), "", templates.Tr(langOf(c), "tokens.errTier"), sess.CSRFToken))
+		renderPage(c, http.StatusBadRequest, templates.TokensView(langOf(c), s.tokenList(c, sess.SubjectID), "", templates.Tr(langOf(c), "tokens.errTier"), sess.CSRFToken, s.sidebarDataFor(c)))
 		return
 	}
 
@@ -97,11 +97,11 @@ func (s *Server) tokensCreatePOST(c *gin.Context) {
 		CreatedAt: now,
 	}); err != nil {
 		sessLogger(c).Error("Token 生成失败", "error", err)
-		renderPage(c, http.StatusInternalServerError, templates.TokensView(langOf(c), s.tokenList(c, sess.SubjectID), "", templates.Tr(langOf(c), "tokens.errGen"), sess.CSRFToken))
+		renderPage(c, http.StatusInternalServerError, templates.TokensView(langOf(c), s.tokenList(c, sess.SubjectID), "", templates.Tr(langOf(c), "tokens.errGen"), sess.CSRFToken, s.sidebarDataFor(c)))
 		return
 	}
 	sessLogger(c).Info("Token 已生成", "user_id", sess.SubjectID, "expires", c.PostForm("expires"))
-	renderPage(c, http.StatusOK, templates.TokensView(langOf(c), s.tokenList(c, sess.SubjectID), raw, "", sess.CSRFToken))
+	renderPage(c, http.StatusOK, templates.TokensView(langOf(c), s.tokenList(c, sess.SubjectID), raw, "", sess.CSRFToken, s.sidebarDataFor(c)))
 }
 
 // tokensRevokePOST Token 撤销（POST /admin/tokens/:id/revoke——CSRF+双条件 Delete）。
@@ -123,11 +123,11 @@ func (s *Server) tokensRevokePOST(c *gin.Context) {
 	}
 	if err := s.tokens.Delete(ctx, id, sess.SubjectID); err != nil {
 		sessLogger(c).Error("Token 撤销失败", "error", err, "id", id)
-		renderPage(c, http.StatusInternalServerError, templates.TokensView(langOf(c), s.tokenList(c, sess.SubjectID), "", templates.Tr(langOf(c), "tokens.errRevoke"), sess.CSRFToken))
+		renderPage(c, http.StatusInternalServerError, templates.TokensView(langOf(c), s.tokenList(c, sess.SubjectID), "", templates.Tr(langOf(c), "tokens.errRevoke"), sess.CSRFToken, s.sidebarDataFor(c)))
 		return
 	}
 	sessLogger(c).Info("Token 已撤销", "user_id", sess.SubjectID, "id", id)
-	renderPage(c, http.StatusOK, templates.TokensView(langOf(c), s.tokenList(c, sess.SubjectID), "", "", sess.CSRFToken))
+	renderPage(c, http.StatusOK, templates.TokensView(langOf(c), s.tokenList(c, sess.SubjectID), "", "", sess.CSRFToken, s.sidebarDataFor(c)))
 }
 
 // tokenList 列表查询辅助（查询失败返回空表——管理页可用性优先）。

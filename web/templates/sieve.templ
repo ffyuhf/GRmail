@@ -33,6 +33,7 @@ type SieveListData struct {
 	CSRF    string
 	Scripts []SieveScriptRow
 	Error   string
+	Nav     *MailListData // 全站侧栏数据（D3 B 形态——AppFrame 承载；nil=降级）
 }
 
 // SieveEditData 编辑页数据。
@@ -43,10 +44,11 @@ type SieveEditData struct {
 	NameEditable bool   // #30：新建态=true（名称输入框承载）；编辑态=false（名称只读呈现）
 	Content      string
 	Error        string
+	Nav          *MailListData // 全站侧栏数据（D3 B 形态——AppFrame 承载；nil=降级）
 }
 
 templ SieveListView(d *SieveListData) {
-	@AppLayout(d.Lang, Tr(d.Lang, "sieve.title"), Tr(d.Lang, "sieve.nav"), false, d.CSRF) {
+	@AppFrame(d.Lang, Tr(d.Lang, "sieve.title"), Tr(d.Lang, "sieve.nav"), false, d.CSRF, d.Nav) {
 		<div class="main content-page">
 		<section class="sieve-page">
 			<div class="page-head">
@@ -101,7 +103,7 @@ templ SieveListView(d *SieveListData) {
 }
 
 templ SieveEditView(d *SieveEditData) {
-	@AppLayout(d.Lang, Tr(d.Lang, "sieve.editTitle"), Tr(d.Lang, "sieve.nav"), false, d.CSRF) {
+	@AppFrame(d.Lang, Tr(d.Lang, "sieve.editTitle"), Tr(d.Lang, "sieve.nav"), false, d.CSRF, d.Nav) {
 		<div class="main content-page">
 		<section class="sieve-edit">
 			<div class="page-head">

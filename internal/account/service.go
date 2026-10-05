@@ -161,6 +161,31 @@ func (s *Service) GetMailbox(ctx context.Context, addr string) (*storage.Mailbox
 	return s.mailboxes.FindByAddress(ctx, local+"@"+domain)
 }
 
+// SetMailboxPassword 修改邮箱登录密码（Webmail管理职能批次 G1——FR-002「编辑」语义收口：
+// 管理员对任一邮箱改密+邮箱用户个人改密的域承载）。
+// 语义：与影子激活 SetCredentials 同链（哈希后原地覆写凭据——历史邮件与状态零触碰）；
+// active/disabled 态均可改（禁用邮箱启用后凭据即新密码）；影子态拒绝（无凭据概念，
+// 设密路径归激活流程 ActivateMailbox——两路径分离防语义混淆）。
+// 参数：ctx 上下文；addr 邮箱地址（自动规范化）；newPassword 新登录明文（内部即刻哈希）。
+// 返回：ErrEmptyPassword / ErrMailboxNotFound / 影子态 ErrInvalidStatus；其余同仓储层。
+func (s *Service) SetMailboxPassword(ctx context.Context, addr, newPassword string) error {
+	if newPassword == "" {
+		return ErrEmptyPassword
+	}
+	m, err := s.GetMailbox(ctx, addr)
+	if err != nil {
+		return err
+	}
+	if m.Status == storage.MailboxStatusShadow {
+		return fmt.Errorf("%w: 影子邮箱无凭据（请走激活流程）", ErrInvalidStatus)
+	}
+	hash, err := HashPassword(newPassword)
+	if err != nil {
+		return err
+	}
+	return s.mailboxes.SetCredentials(ctx, m.ID, hash)
+}
+
 // SetMailboxStatus 管理员状态管理（FR-002：禁用 disabled / 激活 active）。
 func (s *Service) SetMailboxStatus(ctx context.Context, addr string, status storage.MailboxStatus) error {
 	if status != storage.MailboxStatusActive && status != storage.MailboxStatusDisabled {

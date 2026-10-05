@@ -148,10 +148,11 @@ const watchPeriod = 3 * time.Second
 
 // managedPlugin 单插件托管态。
 type managedPlugin struct {
-	name   string // GetInfo 产物（拉起期获取；获取失败以文件名兜底）
-	client *goplugin.Client
-	hook   *hookClient
-	alive  bool // 崩溃摘除标记（监管 goroutine 置 false+告警）
+	name    string // GetInfo 产物（拉起期获取；获取失败以文件名兜底）
+	version string // GetInfo 版本声明（G6 状态页呈现）
+	client  *goplugin.Client
+	hook    *hookClient
+	alive   bool // 崩溃摘除标记（监管 goroutine 置 false+告警）
 }
 
 // Supervisor 插件宿主（FR-016 supervisor/worker 模型的 supervisor 侧）。
@@ -228,10 +229,11 @@ func (s *Supervisor) launch(bin string) *managedPlugin {
 		return nil
 	}
 	mp := &managedPlugin{
-		name:   info.GetName(),
-		client: client,
-		hook:   &hookClient{name: info.GetName(), client: client, raw: stub, caps: info.GetCapabilities()},
-		alive:  true,
+		name:    info.GetName(),
+		version: info.GetVersion(),
+		client:  client,
+		hook:    &hookClient{name: info.GetName(), client: client, raw: stub, caps: info.GetCapabilities()},
+		alive:   true,
 	}
 	s.logger.Info("插件已拉起", "name", info.GetName(), "version", info.GetVersion(),
 		"capabilities", info.GetCapabilities())
@@ -322,6 +324,27 @@ func (s *Supervisor) SubmitHooks() []mail.SubmitHook {
 		}
 	}
 	return hooks
+}
+
+// StatusRow 插件运行状态快照行（Webmail管理职能批次 G6——/admin/plugins 只读呈现；
+// 纯数据无依赖，main 装配桥接转换为 web 中性接口——沿 STSPolicy 供给先例零 web import）。
+type StatusRow struct {
+	Name    string
+	Version string
+	Caps    []string
+	Alive   bool
+}
+
+// StatusSnapshot 全部托管插件状态快照（mutex 保护拷贝——含崩溃摘除态呈现；
+// 拉起失败跳过的插件不在内——启动日志承载；零插件=空切片）。
+func (s *Supervisor) StatusSnapshot() []StatusRow {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rows := make([]StatusRow, 0, len(s.plugins))
+	for _, p := range s.plugins {
+		rows = append(rows, StatusRow{Name: p.name, Version: p.version, Caps: p.hook.caps, Alive: p.alive})
+	}
+	return rows
 }
 
 // Shutdown 停止全部插件子进程（优雅退出序——协议端点链之后调用）。

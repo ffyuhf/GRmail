@@ -31,7 +31,7 @@ import "fmt"
 // ErrText 非空时呈现错误条）。
 templ ComposeView(d *ComposeData) {
 	{{ lang := NormalizeLang(d.Lang) }}
-	@AppLayout(lang, Tr(lang, "compose.title"), Tr(lang, "compose.title"), d.IsAdmin, d.CSRF) {
+	@AppFrame(lang, Tr(lang, "compose.title"), Tr(lang, "compose.title"), d.IsAdmin, d.CSRF, d.Nav) {
 		<div class="main" id="compose-page" data-img-max-edge={ fmt.Sprintf("%d", d.ImgMaxEdgeAttr()) } data-jpeg-quality={ fmt.Sprintf("%g", d.JpegQualityAttr()) } data-csv-err={ Tr(lang, "compose.csvErr") }>
 			<form method="post" action="/compose" enctype="multipart/form-data" onsubmit="return grmailComposeSync();">
 				<input type="hidden" name="csrf_token" value={ d.CSRF }/>

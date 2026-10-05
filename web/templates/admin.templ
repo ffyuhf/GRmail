@@ -1,5 +1,8 @@
 // GRmail Web admin 邮箱管理与聚合视图页（U9，Q3-C 归属；U18 深级双语收口——U16 登记项③）。
-// FR-002 管理呈现（三态徽标+四操作）；FR-003 shadow 聚合视图。
+// FR-002 管理呈现（三态徽标+五操作）；FR-003 shadow 聚合视图。
+// Webmail管理职能批次 G4 重构（D4 缺陷收口）：增强表格——2FA 绑定/强制态列+创建时间列+
+// 地址即时过滤（纯前端子串匹配——单管理员规模零后端增量）+active 行内改密（G1 setpassword
+// action 消费）+行详情展开（邮箱 ID/2FA 明细——details 原生承载零 JS）。
 // 修改历史：
 //   2026-09-19 15:16:00 | 新建 | U9 Webmail 核心（计划书步骤 10）
 //   2026-09-26 15:41:00 | 扩展 | U18 登记项收尾：深级文案 Tr 化（lang 首参贯通+
@@ -7,13 +10,26 @@
 //   （依据：U18 计划书 v1.0.0 步骤 3/1.5④，G2 批准 2026-09-26 15:25:47）
 //   2026-10-01 17:10:00 | 扩展 | U24 双因素认证：管理页增「2FA 强制策略」操作区
 //   （require2fa/unrequire2fa 两 action——FR-018 判定④；Q3-B 强制标记承载面）
+//   2026-10-05 15:25:00 | 重构 | Webmail管理职能批次 G4：AdminMailboxRow 增强行
+//   （2FA 态/创建时间列+搜索过滤+行内改密+详情展开——计划书 1.2 G4，G2 批准
+//   2026-10-05 15:15:22）
 package templates
 
 import (
 	"fmt"
-
-	"GRmail/internal/storage"
+	"strings"
 )
+
+// AdminMailboxRow 管理列表增强行（视图模型——Webmail管理职能批次 G4）。
+type AdminMailboxRow struct {
+	Address       string // 邮箱地址（小写规范化）
+	Status        string // active / shadow / disabled
+	CreatedAt     string // 创建日期（YYYY-MM-DD 呈现态）
+	MailboxID     int64  // 邮箱 ID（详情行呈现）
+	TwoFABound    bool   // 2FA 绑定态（Bound()=密钥与恢复码同时非空）
+	TwoFARequired bool   // 管理员强制标记
+	TwoFAKnown    bool   // 2FA 态可知（TwoFactor 未注入/查询故障=false→呈现未知）
+}
 
 // statusLabel 状态枚举双语映射（F09——badge 呈现层；类锚保持英文枚举——Webmail界面精修批次）。
 func statusLabel(lang Lang, status string) string {
@@ -28,23 +44,60 @@ func statusLabel(lang Lang, status string) string {
 	return status
 }
 
-// AdminMailboxesView 邮箱管理页（列表+操作表单组）。
-// 参数：lang 界面语言（U18 深级贯通）；list 三态合并全量；errText 操作结果提示；csrf 会话 token。
-templ AdminMailboxesView(lang Lang, list []*storage.Mailbox, errText string, csrf string) {
-	@AppLayout(lang, Tr(lang, "admin.title"), Tr(lang, "home.adminKind"), true, csrf) {
+// twoFALabel 2FA 态列标签（G4——绑定/未绑定+强制角标；未知态呈现 —）。
+func twoFALabel(lang Lang, r *AdminMailboxRow) string {
+	if !r.TwoFAKnown {
+		return "—"
+	}
+	if r.TwoFABound {
+		return Tr(lang, "admin.tfBound")
+	}
+	if r.TwoFARequired {
+		return Tr(lang, "admin.tfUnboundReq")
+	}
+	return Tr(lang, "admin.tfNone")
+}
+
+// AdminMailboxesView 邮箱管理页（增强列表+操作表单组——G4 形态）。
+// 参数：lang 界面语言；rows 增强行集；errText 操作结果提示；csrf 会话 token。
+// D3（2026-10-05 B 形态）：nav 参数为全站侧栏数据（AppFrame 承载；nil=无邮箱异常态降级）。
+templ AdminMailboxesView(lang Lang, rows []*AdminMailboxRow, errText string, csrf string, nav *MailListData) {
+	@AppFrame(lang, Tr(lang, "admin.title"), Tr(lang, "home.adminKind"), true, csrf, nav) {
 		<div class="main content-page">
-			<div class="page-head"><h2>{ Tr(lang, "admin.h2") }</h2></div>
+			<div class="page-head">
+				<h2>{ Tr(lang, "admin.h2") }</h2>
+				<input type="search" id="admin-filter" class="filter-input"
+					placeholder={ Tr(lang, "admin.searchPh") } autocomplete="off"
+					oninput="grAdminFilter(this.value)"/>
+			</div>
 			if errText != "" {
 				<p class="error" role="alert">{ errText }</p>
 			}
 			<div class="table-wrap">
 				<table class="mails">
-					<thead><tr><th>{ Tr(lang, "admin.colAddr") }</th><th>{ Tr(lang, "mail.colStatus") }</th><th>{ Tr(lang, "admin.colAction") }</th></tr></thead>
-					<tbody>
-						for _, m := range list {
-							<tr>
-								<td>{ m.Address }</td>
-								<td><span class={ "badge", string(m.Status) }>{ statusLabel(lang, string(m.Status)) }</span></td>
+					<thead><tr>
+						<th>{ Tr(lang, "admin.colAddr") }</th>
+						<th>{ Tr(lang, "mail.colStatus") }</th>
+						<th>2FA</th>
+						<th>{ Tr(lang, "admin.colCreated") }</th>
+						<th>{ Tr(lang, "admin.colAction") }</th>
+					</tr></thead>
+					<tbody id="admin-rows">
+						for _, m := range rows {
+							<tr data-addr={ strings.ToLower(m.Address) }>
+								<td>
+									<details class="row-details">
+										<summary>{ m.Address }</summary>
+										<div class="row-details-body">
+											<p>ID: { fmt.Sprintf("%d", m.MailboxID) }</p>
+											<p>2FA: { twoFALabel(lang, m) }{ twoFAExtra(lang, m) }</p>
+											<p>{ Tr(lang, "admin.colCreated") }: { m.CreatedAt }</p>
+										</div>
+									</details>
+								</td>
+								<td><span class={ "badge", m.Status }>{ statusLabel(lang, m.Status) }</span></td>
+								<td>{ twoFALabel(lang, m) }{ twoFAExtra(lang, m) }</td>
+								<td>{ m.CreatedAt }</td>
 								<td>
 									<form method="post" action="/admin/mailboxes" class="inline">
 										<input type="hidden" name="csrf_token" value={ csrf }/>
@@ -58,12 +111,29 @@ templ AdminMailboxesView(lang Lang, list []*storage.Mailbox, errText string, csr
 											<button class="btn-sm" type="submit" name="action" value="activate">{ Tr(lang, "admin.activate") }</button>
 										}
 									</form>
+									if m.Status == "active" || m.Status == "disabled" {
+										<form method="post" action="/admin/mailboxes" class="inline">
+											<input type="hidden" name="csrf_token" value={ csrf }/>
+											<input type="hidden" name="address" value={ m.Address }/>
+											<input type="password" name="password" placeholder={ Tr(lang, "admin.newPassPh") }/>
+											<button class="btn-sm" type="submit" name="action" value="setpassword">{ Tr(lang, "admin.setPwd") }</button>
+										</form>
+									}
 								</td>
 							</tr>
 						}
 					</tbody>
 				</table>
 			</div>
+			<script>
+				// grAdminFilter 地址即时过滤（G4——纯前端子串匹配；单管理员规模零后端增量）。
+				function grAdminFilter(q) {
+					q = q.toLowerCase();
+					document.querySelectorAll('#admin-rows tr[data-addr]').forEach(function (r) {
+						r.style.display = r.getAttribute('data-addr').indexOf(q) >= 0 ? '' : 'none';
+					});
+				}
+			</script>
 			<h3>{ Tr(lang, "admin.createMailbox") }</h3>
 			<form method="post" action="/admin/mailboxes" class="actions">
 				<input type="hidden" name="csrf_token" value={ csrf }/>
@@ -82,10 +152,19 @@ templ AdminMailboxesView(lang Lang, list []*storage.Mailbox, errText string, csr
 	}
 }
 
+// twoFAExtra 2FA 强制角标（绑定+强制并存时补注——G4 列呈现完整语义）。
+func twoFAExtra(lang Lang, r *AdminMailboxRow) string {
+	if r.TwoFAKnown && r.TwoFARequired {
+		return "（" + Tr(lang, "admin.tfRequiredMark") + "）"
+	}
+	return ""
+}
+
 // AdminUnregisteredView catch-all 聚合视图（FR-003：shadow 邮箱巡览）。
 // 参数：lang 界面语言（U18）；list shadow 邮箱列表；csrf 会话 token。
-templ AdminUnregisteredView(lang Lang, list []*storage.Mailbox, csrf string) {
-	@AppLayout(lang, Tr(lang, "admin.aggTitle"), Tr(lang, "home.adminKind"), true, csrf) {
+// D3（2026-10-05 B 形态）：nav 同 AdminMailboxesView。
+templ AdminUnregisteredView(lang Lang, list []*AdminMailboxRow, csrf string, nav *MailListData) {
+	@AppFrame(lang, Tr(lang, "admin.aggTitle"), Tr(lang, "home.adminKind"), true, csrf, nav) {
 		<div class="main content-page">
 			<div class="page-head"><h2>{ Tr(lang, "admin.aggH2") }</h2></div>
 			if len(list) == 0 {
@@ -101,8 +180,8 @@ templ AdminUnregisteredView(lang Lang, list []*storage.Mailbox, csrf string) {
 							for _, m := range list {
 								<tr>
 									<td>{ m.Address }</td>
-									<td><span class={ "badge", string(m.Status) }>{ statusLabel(lang, string(m.Status)) }</span></td>
-									<td>{ fmt.Sprintf(Tr(lang, "admin.shadowFmt"), m.ID) }</td>
+									<td><span class={ "badge", m.Status }>{ statusLabel(lang, m.Status) }</span></td>
+									<td>{ fmt.Sprintf(Tr(lang, "admin.shadowFmt"), m.MailboxID) }</td>
 								</tr>
 							}
 						</tbody>

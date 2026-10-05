@@ -211,6 +211,21 @@ func hasPortFlagArg(args []string) bool {
 	return false
 }
 
+// pluginStatusAdapter 插件状态桥接适配器（Webmail管理职能批次 G6——supervisor.StatusSnapshot
+// 的 plugin 包结构转换为 web 中性接口；沿 adminLookupAdapter 先例：web 零 plugin import，
+// 架构第四章依赖方向保持）。
+type pluginStatusAdapter struct{ sup *plugin.Supervisor }
+
+// PluginStatuses 实现 web.PluginStatusSource（只读快照——/admin/pages 数据源）。
+func (a pluginStatusAdapter) PluginStatuses() []web.PluginStatus {
+	rows := a.sup.StatusSnapshot()
+	out := make([]web.PluginStatus, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, web.PluginStatus{Name: r.Name, Version: r.Version, Caps: r.Caps, Alive: r.Alive})
+	}
+	return out
+}
+
 func main() {
 	// 0.5 版本查询早退（发布准备批次）：早于横幅与配置加载——--version 为纯静态信息
 	// 查询（NFR-013 产物元数据锚），查询路径不触碰任何启动编排与外部依赖。
@@ -622,6 +637,9 @@ func main() {
 		// ── U24 增量注入（契约 v1.20.0 2.4——/settings/2fa 端点族+登录二步+强制
 		// 引导门卫激活；mailboxRepo 同源——FR-018 Webmail 双因素认证）──
 		TwoFactor: account.NewTwoFactorService(mailboxRepo),
+		// ── Webmail管理职能批次增量注入（G6——/admin/plugins 只读状态页激活；
+		// pluginHost 406 行已构造——D7 缺陷收口）──
+		Plugins: pluginStatusAdapter{pluginHost},
 		// ── U23 增量注入（HTTP 请求摘要 debug 中间件——Q2-A 条件输出热生效）──
 		ProtocolDebug: func() bool { return configWatcher.Current().Log.ProtocolDebug },
 		// ── U13 增量注入（契约 v1.9.0 2.4——mta-sts 端点 Q2-A 443 路由级承载）──

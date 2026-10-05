@@ -246,8 +246,10 @@ func TestU9ListPageAndUnreadFilter(t *testing.T) {
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("首页状态: %d", res.StatusCode)
 	}
+	// D5（2026-10-05 侧栏交互缺陷修复批次）：zh 态系统文件夹名经 folderDisplayName
+	// 本地化——断言随批适配「INBOX」→「收件箱」（en 态等价由 folder.* 键承载）
 	page := bodyOf(t, res)
-	for _, want := range []string{"INBOX", "第一封", "第二封", "写信"} {
+	for _, want := range []string{"收件箱", "第一封", "第二封", "写信"} {
 		if !strings.Contains(page, want) {
 			t.Fatalf("首页应含 %q", want)
 		}

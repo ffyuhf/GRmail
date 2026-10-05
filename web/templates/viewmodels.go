@@ -96,8 +96,9 @@ type ComposeData struct {
 	DraftID      int64 // 编辑态（>0 覆盖旧稿）
 	ErrText      string
 	CSRF         string
-	ImageMaxEdge int     // D8#11：压缩最长边（config 注入——compose-page data-* 承载；0=缺省 1920）
-	JpegQuality  float64 // D8#11：JPEG 质量档（0=缺省 0.85）
+	ImageMaxEdge int           // D8#11：压缩最长边（config 注入——compose-page data-* 承载；0=缺省 1920）
+	JpegQuality  float64       // D8#11：JPEG 质量档（0=缺省 0.85）
+	Nav          *MailListData // 全站侧栏数据（D3 B 形态——AppFrame 承载；nil=无邮箱异常态降级）
 }
 
 // ImgMaxEdgeAttr 最长边渲染值（D8#11——零值兜底缺省 1920：模板层兜底使测试直调
@@ -165,8 +166,10 @@ type DNSRecordView struct {
 type SettingsData struct {
 	Lang      string // 界面语言（U16 Q2-A）
 	CSRFToken string
-	Message   string // 错误提示（校验拒绝/保存失败——空=无；F01 语义更正：成功走 Notice）
-	Notice    string // 成功提示（保存成功 ?saved=1 态——空=无；F01 分型：Webmail界面精修批次 2026-10-03）
+	Nav       *MailListData // 全站侧栏数据（D3 B 形态——AppFrame 承载；nil=无邮箱异常态降级）
+	Message   string        // 错误提示（校验拒绝/保存失败——空=无；F01 语义更正：成功走 Notice）
+	Notice    string        // 成功提示（保存成功 ?saved=1 态——空=无；F01 分型：Webmail界面精修批次 2026-10-03）
+	PWChanged bool          // 改密成功反馈（Webmail管理职能批次 G1——?pwchanged=1 态；admin 改密重定向回承载）
 	// 认证栈节
 	SPFEnabled   bool
 	DKIMEnabled  bool

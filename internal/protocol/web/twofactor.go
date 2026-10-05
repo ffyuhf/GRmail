@@ -178,6 +178,7 @@ func (s *Server) twoFactorViewOf(c *gin.Context) (*templates.TwoFactorData, erro
 		Bound:   st.Bound(),
 		Pending: st.PendingSecret != "" && !st.Bound(),
 		Forced:  c.Query("forced") == "1",
+		Nav:     s.sidebarDataFor(c), // D3 B 形态——全站侧栏
 	}, nil
 }
 
@@ -250,6 +251,7 @@ func (s *Server) twoFactorSetupPOST(c *gin.Context) {
 		Pending:   true,
 		QRDataURI: qrURI,
 		Secret:    mat.Secret,
+		Nav:       s.sidebarDataFor(c),
 	}))
 }
 
@@ -285,6 +287,7 @@ func (s *Server) twoFactorConfirmPOST(c *gin.Context) {
 		CSRF:          sess.CSRFToken,
 		Bound:         true,
 		RecoveryCodes: codes, // 一次性展示——TC-027 判定①锚（后续渲染恒空）
+		Nav:           s.sidebarDataFor(c),
 	}))
 }
 

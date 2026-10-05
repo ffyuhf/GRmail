@@ -1318,3 +1318,100 @@ input[type="file"]::file-selector-button:hover { background: var(--primary-soft)
 	padding: 4px 8px;
 	min-width: 3em;
 }
+
+/* ══ Webmail管理职能批次（G1/G2/G4/G5——D1~D7 缺陷收口；S3-W A A A）══
+ * 依据：Webmail管理职能计划书 v1.0.0 1.2（G2 批准 2026-10-05 15:15:22） */
+
+/* G2·D2 居中修复：内容容器宽屏左上蜗居根因（max-width 已有、缺 auto 边距收口）。
+ * .content-page 元素兼挂 .main（flex item——auto margin 吸收空闲空间居中）；
+ * .detail/#compose-page 为 .main 容器内子块（普通流 auto margin 居中）。 */
+.content-page { margin-inline: auto; }
+.detail { margin-inline: auto; }
+#compose-page { margin-inline: auto; }
+.sieve-page { margin-inline: auto; }
+
+/* G2·D6 个人设置枢纽卡片网格（四分区导航） */
+.hub-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+	gap: var(--sp-3);
+	margin-top: var(--sp-3);
+}
+.hub-card {
+	display: flex;
+	flex-direction: column;
+	gap: var(--sp-1);
+	padding: var(--sp-4);
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	background: var(--surface);
+	text-decoration: none;
+	color: var(--fg);
+	transition: border-color var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast) var(--ease-standard);
+}
+.hub-card:hover { border-color: var(--primary); box-shadow: var(--shadow-menu); }
+.hub-ic { font-size: 1.5rem; line-height: 1; }
+.hub-name { font-weight: 600; }
+.hub-desc { color: var(--fg-muted); font-size: .875rem; }
+
+/* G2·D6 管理枢纽分区导航（/admin/settings 六分区 tab 链） */
+.settings-nav {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--sp-2);
+	margin-bottom: var(--sp-3);
+	padding-bottom: var(--sp-2);
+	border-bottom: 1px solid var(--border);
+}
+.settings-nav a, .settings-nav span {
+	padding: var(--sp-1) var(--sp-3);
+	border-radius: var(--radius-sm);
+	font-size: .875rem;
+	color: var(--fg-muted);
+}
+.settings-nav a { text-decoration: none; }
+.settings-nav a:hover { color: var(--primary); background: var(--surface); }
+.settings-nav span.active { color: var(--primary); background: var(--surface); font-weight: 600; }
+
+/* G1·D1 改密表单卡片（窄幅居中形态） */
+.form-card { max-width: 28rem; padding: var(--sp-4); }
+
+/* G4·D4 管理增强：地址过滤框+行详情展开 */
+.filter-input { margin-left: auto; max-width: 16rem; }
+.row-details summary { cursor: pointer; }
+.row-details-body {
+	padding: var(--sp-2);
+	margin-top: var(--sp-2);
+	background: var(--surface);
+	border-radius: var(--radius-sm);
+	font-size: .8125rem;
+}
+.row-details-body p { margin: var(--sp-1) 0; }
+
+/* G5·D3 Quill 工具栏令牌化（亮色主形态——暗色既有补丁联动保持；vendor 零改覆盖层） */
+#compose-toolbar.ql-toolbar.ql-snow {
+	border-color: var(--border);
+	border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+	background: var(--surface);
+	padding: var(--sp-1) var(--sp-2);
+}
+#compose-toolbar button:hover { color: var(--primary) !important; }
+#compose-toolbar button:hover .ql-stroke { stroke: var(--primary); }
+#compose-toolbar .ql-picker-label { color: var(--fg-muted); }
+#compose-toolbar .ql-picker-label:hover { color: var(--primary); }
+#compose-toolbar .ql-picker-options {
+	background: var(--surface);
+	border-color: var(--border);
+	border-radius: var(--radius-sm);
+	box-shadow: var(--shadow-menu);
+}
+.compose-editor .ql-container.ql-snow { border-color: var(--border); border-radius: 0 0 var(--radius-sm) var(--radius-sm); }
+.ql-editor { font-size: .9375rem; line-height: 1.65; }
+
+/* G5·D3 compose 分区卡片化（视觉层增量——既有布局属性保持） */
+#compose-page form { display: flex; flex-direction: column; gap: var(--sp-3); }
+.compose-section {
+	border: 1px solid var(--border-soft);
+	border-radius: var(--radius);
+	background: var(--surface);
+}
