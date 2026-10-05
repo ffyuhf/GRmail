@@ -125,13 +125,21 @@ func NewACMEManager(domain string, confSnapshot func() config.ACMEConf, saveTLSP
 // 参数：enabled 快照函数（返回 true 时签发/续期清单含 mta-sts.<主域>）。
 func (m *ACMEManager) SetStsEnabled(enabled func() bool) { m.stsEnabled = enabled }
 
-// certificateDomains 签发域名清单（U13：MTA-STS 启用→[主域, mta-sts.主域]——SAN 覆盖
-// 策略宿主；禁用→单域既有形态）。
+// certificateDomains 签发域名清单（U13：MTA-STS 启用→含 mta-sts.主域——SAN 覆盖
+// 策略宿主；P9 连接子域扩展〔Setup向导新手可用性批次〕：smtp./imap./pop. 三连接
+// 主机名无条件纳入——客户端按惯例以子域地址连接时证书匹配；HTTP-01 对各域名分别
+// 挑战（80 挑战路由全站既有承载零新增设施））。
 func (m *ACMEManager) certificateDomains() []string {
-	if m.stsEnabled != nil && m.stsEnabled() {
-		return []string{m.domain, STSPolicyHost(m.domain)}
+	domains := []string{
+		m.domain,
+		"smtp." + m.domain,
+		"imap." + m.domain,
+		"pop." + m.domain,
 	}
-	return []string{m.domain}
+	if m.stsEnabled != nil && m.stsEnabled() {
+		domains = append(domains, STSPolicyHost(m.domain))
+	}
+	return domains
 }
 
 // Store 暴露挑战表（main 桥接 web 80 挑战路由）。

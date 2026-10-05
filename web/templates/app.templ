@@ -11,6 +11,10 @@
 //   2026-09-24 16:52:00 | 扩展 | U16 Webmail 体验收尾（计划书步骤 4/5，G2 批准 2026-09-24 11:51:57）
 //   2026-10-02 13:40:00 | 扩展 | Webmail视觉重构批次阶段3（G2 批准 2026-10-02 13:20:06）
 //   2026-10-02 17:50:00 | 重构 | Webmail设计系统重构批次阶段A（G2 批准 2026-10-02 17:34:40）
+//   2026-10-05 00:22:00 | 修正 | Setup向导缺陷修复批次（缺陷④b）：langSwitchHref 签名
+//   增 next 参数（空串容错省略——端点 next="/" 兜底既有）；顶栏调用点传 "/"（主界面
+//   切语言回首页——既有行为等价）；调用点编译期强校验零遗漏
+//   （依据：Setup向导缺陷修复计划书 v1.0.0 1.2 组4b，G2 批准 2026-10-05 00:21:19）
 package templates
 
 // iconMenu 汉堡菜单图标（F05：☰ 字符改 SVG——基准 TopAppBar Material Menu 同构；
@@ -84,7 +88,7 @@ templ AppLayout(lang Lang, title string, label string, isAdmin bool, csrf string
 									{ Tr(lang, "top.twofactor") }
 								</a>
 							}
-							<a href={ langSwitchHref(lang) }>
+							<a href={ langSwitchHref(lang, "/") }>
 								<span class="ic" aria-hidden="true">@templ.Raw(iconLang)</span>
 								{ Tr(lang, "top.lang") }
 							</a>
@@ -106,11 +110,15 @@ templ AppLayout(lang Lang, title string, label string, isAdmin bool, csrf string
 }
 
 // langSwitchHref 语言切换链接（GET /lang——l 取目标语言（当前取反）、next 回当前路径）。
-// 参数：lang 当前语言。返回：切换端点 href。
-func langSwitchHref(lang Lang) string {
+// 参数：lang 当前语言；next 切换后回跳的站内路径（空=省略参数，由端点 next="/" 兜底——
+// 缺陷④b 修复前该参数缺失致切换后恒跳首步/首页）。返回：切换端点 href。
+func langSwitchHref(lang Lang, next string) string {
 	target := "en"
 	if lang == LangEN {
 		target = "zh"
 	}
-	return "/lang?l=" + target
+	if next == "" {
+		return "/lang?l=" + target
+	}
+	return "/lang?l=" + target + "&next=" + next
 }

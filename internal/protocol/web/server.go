@@ -31,6 +31,11 @@
 //	  增 TwoFactor 注入位（account.TwoFactorService——nil=2FA 端点 503+登录判定跳过渐进态）；
 //	  Server 增 twoFactor/pending2fa 两字段（pendingLoginStore——S4-W Q1-A 内存态凭据）；
 //	  路由增登录二步两端点+/settings/2fa 四端点+auth 组挂 twoFactorGate（FR-018 判定④）
+//	2026-10-05 00:22:00 | 修正 | Setup向导缺陷修复批次（缺陷①）：增 GET /setup 根路由 302
+//	  /setup/1——消除无步号访问 gin 树不匹配 404（尾斜杠陷阱：/setup→301 /setup/→:step
+//	  空段不匹配）；完成态由 setupGate 前置拦截（302 /），本路由不执行零冲突
+//	  （依据：Setup向导缺陷修复计划书 v1.0.0 1.2 组1，G2 批准 2026-10-05 00:21:19；
+//	  SRS FR-015 判定标准「向导完成部署」入口可达性收口）
 package web
 
 import (
@@ -76,6 +81,7 @@ type ServerConfig struct {
 	// ── U10 增量注入位（Q2-A/Q3-A/Q7-C；nil=缺省行为）──
 	SetupDone       func() bool                             // setupCompleted 快照（nil=恒 true——既有部署/测试形态，分流不生效）
 	CfgSnapshot     func() *config.Config                   // 当前配置快照（设置页读；nil=/admin/settings 503）
+	HTTPPort        int                                     // HTTP 明文端口呈现值（Setup向导新手可用性批次 P3——setupmode 装配的 -p 覆盖值/缺省 80；零值=按 80 口径呈现；仅向导端口警示消费）
 	SaveConfig      func(modify func(*config.Config)) error // 配置原子读改写（向导每步+设置页；读 Current→modify→Save→Watcher 广播）
 	SessionSnapshot func() config.SessionConf               // 会话双超时快照（nil=缺省档 30min/12h——Q7-C 快照热生效）
 	LimitSnapshot   func() config.LoginLimitConf            // 登录限流快照（nil=缺省档 15min/5 次）
@@ -174,6 +180,11 @@ func (s *Server) mountRoutes() {
 	// 完成态经 setupGate 禁入）
 	s.engine.GET("/setup/:step", s.setupGET)
 	s.engine.POST("/setup/:step", s.setupPOST)
+	// 向导根入口（Setup向导缺陷修复批次·缺陷①）：/setup 无步号 302 首步——消除
+	// gin 树不匹配 404；完成态 setupGate 先拦（302 /），本路由不执行零冲突
+	s.engine.GET("/setup", func(c *gin.Context) {
+		c.Redirect(http.StatusFound, "/setup/1")
+	})
 
 	// 静态资源（公开——无会话承载内容）
 	s.engine.GET("/static/*filepath", s.staticHandler)

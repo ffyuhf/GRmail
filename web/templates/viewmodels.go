@@ -9,6 +9,9 @@
 //	2026-09-26 15:50:00 | 扩展 | U18 登记项收尾：SetupData 增 Lang 字段（深级双语承载——
 //	U16 登记项③收口；沿 SettingsData.Lang string 先例）
 //	（依据：U18 计划书 v1.0.0 步骤 3/1.5④，G2 批准 2026-09-26 15:25:47）
+//	2026-10-05 00:22:00 | 扩展 | Setup向导缺陷修复批次（缺陷④b）：SetupData 增
+//	LangNext 字段（语言切换回跳当前步路径——/lang?next= 承载；buildSetupData 装配）
+//	（依据：Setup向导缺陷修复计划书 v1.0.0 1.2 组4b，G2 批准 2026-10-05 00:21:19）
 package templates
 
 import "github.com/a-h/templ"
@@ -28,7 +31,16 @@ func checkedAttrs(on bool) templ.Attributes {
 // 同机理：bool false省略属性，替代selected={bool}的selected="false"字面量缺陷）。
 func selectedAttrs(on bool) templ.Attributes {
 	if on {
-		return templ.Attributes{"selected": true}
+		return templ.Attributes{"selected": "selected"}
+	}
+	return nil
+}
+
+// disabledAttrs 禁用属性三态辅助（Setup向导新手可用性批次 P6——HadAdmin 态输入禁用；
+// 同 checkedAttrs 机理：false 省略属性，避免 disabled="false" 布尔属性字面量缺陷）。
+func disabledAttrs(on bool) templ.Attributes {
+	if on {
+		return templ.Attributes{"disabled": true}
 	}
 	return nil
 }
@@ -115,9 +127,16 @@ type SetupData struct {
 	Title         string
 	Error         string          // 表单错误（空=无）
 	Next          string          // 下一 slug（导航）
+	LangNext      string          // 语言切换回跳路径（缺陷④b——/setup/<slug> 当前步；langSwitchHref next 承载）
 	Driver        string          // 步 1：sqlite/mysql/postgres
-	DSN           string          // 步 1：连接串
+	DSN           string          // 步 1：连接串（高级模式回填——分字段模式时拆解回显）
+	DSNHost       string          // 步 1 分字段：数据库主机名（P11 DSN 双模式——Setup向导新手可用性批次）
+	DSNPort       string          // 步 1 分字段：端口（空=按库缺省 mysql 3306/postgres 5432）
+	DSNUser       string          // 步 1 分字段：用户名
+	DSNPassword   string          // 步 1 分字段：密码
+	DSNDBName     string          // 步 1 分字段：数据库名
 	Username      string          // 步 2：缺省建议名
+	HadAdmin      bool            // 步 2：管理员已存在态（P6——只读呈现+徽标；skip 路径既有保持）
 	Domain        string          // 步 3
 	DKIMStrength  string          // 步 3：DKIM 密钥强度选择回显（生成档位——rsa-2048 缺省；向导占位符与布局修复批次）
 	DKIMGenerated bool            // 步 3：已有密钥提示态（config.DKIM.KeyPath 非空——向导占位符与布局修复批次）
@@ -126,16 +145,18 @@ type SetupData struct {
 	ACMEMail      string
 	ACMEStaging   bool
 	ACMEChallenge string // 步 5 ACME 挑战方式（D8#12：http/dns——dns=Cloudflare DNS-01；缺省 http）
+	HTTPPort      int    // 步 5：当前 HTTP 明文端口（P3——-p CLI 覆盖值/缺省 80；ACME 模式且 ≠80 时呈现警示条）
 	CertFile      string
 	KeyFile       string
 	DomainFinal   string // 步 6
 }
 
-// DNSRecordView DNS 建议行（步 4 只读呈现——A/MX/SPF/DMARC/DKIM）。
+// DNSRecordView DNS 建议行（步 4 只读呈现——A/MX/SPF/DMARC/DKIM/MTA-STS/TLS-RPT/连接子域）。
 type DNSRecordView struct {
 	Type  string
 	Name  string
 	Value string
+	TTL   string // TTL 建议值（P8——服务商面板直接可填；_mta-sts 短 TTL 语义 rfc8461 §3.1）
 	Note  string
 }
 

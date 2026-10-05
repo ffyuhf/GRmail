@@ -386,16 +386,24 @@ func TestU13STSPolicyHost(t *testing.T) {
 	}
 }
 
-// TestU13ACMEDomainList ACME 清单扩展（Q3-A——启用含 mta-sts 子域/禁用单域）。
+// TestU13ACMEDomainList ACME 清单扩展（Q3-A mta-sts 开关子域+P9 连接子域无条件纳入
+// ——Setup向导新手可用性批次：未注入开关=主域+三连接子域四域；启用 MTA-STS=五域）。
 func TestU13ACMEDomainList(t *testing.T) {
 	m := NewACMEManager("x.io", func() config.ACMEConf { return config.ACMEConf{} }, nil)
-	if got := m.certificateDomains(); len(got) != 1 || got[0] != "x.io" {
-		t.Fatalf("未注入开关应单域: %v", got)
+	want := []string{"x.io", "smtp.x.io", "imap.x.io", "pop.x.io"}
+	got := m.certificateDomains()
+	if len(got) != len(want) {
+		t.Fatalf("未注入开关应四域清单（主域+连接子域）: %v", got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("未注入开关清单序不符: got[%d]=%s want[%d]=%s", i, got[i], i, want[i])
+		}
 	}
 	m.SetStsEnabled(func() bool { return true })
-	got := m.certificateDomains()
-	if len(got) != 2 || got[1] != "mta-sts.x.io" {
-		t.Fatalf("启用 MTA-STS 应双域清单: %v", got)
+	got = m.certificateDomains()
+	if len(got) != 5 || got[4] != "mta-sts.x.io" {
+		t.Fatalf("启用 MTA-STS 应五域清单（含 mta-sts 子域）: %v", got)
 	}
 }
 

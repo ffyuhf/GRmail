@@ -6,6 +6,9 @@
 // 修改历史：
 //
 //	2026-09-20 01:50:00 | 新建 | U10 Setup 向导与 ACME（计划书步骤 9，G2 批准 2026-09-20 00:32:33）
+//	2026-10-05 00:22:00 | 扩展 | Setup向导缺陷修复批次：增用例 1b（TestU10SetupRootAndLangGate
+//	——缺陷① /setup 根路由 302 首步+缺陷④a 引导态 /lang 放行 cookie 落地回跳 next+完成态回归）
+//	（依据：Setup向导缺陷修复计划书 v1.0.0 第三章阶段 1，G2 批准 2026-10-05 00:21:19）
 package web
 
 import (
@@ -94,6 +97,37 @@ func TestU10SetupGateRedirects(t *testing.T) {
 	env.cfg.SetupCompleted = true
 	env.mu.Unlock()
 	if resp := get(t, env.ts, "/setup/1"); resp.StatusCode != http.StatusFound || resp.Header.Get("Location") != "/" {
+		t.Fatalf("完成态 /setup 应 302 /，得 %d %s", resp.StatusCode, resp.Header.Get("Location"))
+	}
+}
+
+// ───────────────────────── 用例 1b：向导根入口与语言切换引导态贯通（Setup向导缺陷修复批次·缺陷①④） ─────────────────────────
+
+func TestU10SetupRootAndLangGate(t *testing.T) {
+	env := newU10Env(t, nil) // 引导态
+	// 缺陷①：/setup 无步号 302 首步（修复前 gin 树不匹配 404——尾斜杠陷阱形态）
+	if resp := get(t, env.ts, "/setup"); resp.StatusCode != http.StatusFound || resp.Header.Get("Location") != "/setup/1" {
+		t.Fatalf("引导态 /setup 应 302 /setup/1，得 %d %s", resp.StatusCode, resp.Header.Get("Location"))
+	}
+	// 缺陷④a：引导态 /lang 放行（修复前被 setupGate 302 /setup/1 拦截——cookie 无法落地）
+	resp := get(t, env.ts, "/lang?l=en&next=/setup/dns")
+	if resp.StatusCode != http.StatusFound || resp.Header.Get("Location") != "/setup/dns" {
+		t.Fatalf("引导态 /lang 应 302 next=/setup/dns，得 %d %s", resp.StatusCode, resp.Header.Get("Location"))
+	}
+	langCookie := false
+	for _, ck := range resp.Cookies() {
+		if ck.Name == "lang" && ck.Value == "en" {
+			langCookie = true
+		}
+	}
+	if !langCookie {
+		t.Fatalf("/lang 响应应含 lang=en cookie")
+	}
+	// 完成态回归：/setup 根入口被 setupGate 先拦（302 / ——新路由不执行零冲突）
+	env.mu.Lock()
+	env.cfg.SetupCompleted = true
+	env.mu.Unlock()
+	if resp := get(t, env.ts, "/setup"); resp.StatusCode != http.StatusFound || resp.Header.Get("Location") != "/" {
 		t.Fatalf("完成态 /setup 应 302 /，得 %d %s", resp.StatusCode, resp.Header.Get("Location"))
 	}
 }

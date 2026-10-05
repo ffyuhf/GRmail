@@ -7,6 +7,9 @@
 // SRS 条目：FR-018（3.11，判定①②③）；IR-009；G1-W Q2-A 独立最小页裁决（2026-10-01 16:37:58）。
 // 修改历史：
 //   2026-10-01 17:00:00 | 新建 | U24 双因素认证（G2 批准 2026-10-01 16:41:08）
+//   2026-10-05 00:22:00 | 修正 | Setup向导缺陷修复批次（缺陷④A 裁决同修）：登录二步页
+//   语言切换链接传固定页路径（next 承载——切换后回本页）
+//   （依据：Setup向导缺陷修复计划书 v1.0.0 1.2 组4b，G2 批准 2026-10-05 00:21:19）
 package templates
 
 // TwoFactorData 2FA 管理页渲染数据（web 包构造、本包消费——沿 viewmodels 拍平先例；
@@ -99,7 +102,7 @@ templ Login2FAView(lang Lang, t string, errText string) {
 				<button class="primary" type="submit">{ Tr(lang, "login2fa.submit") }</button>
 			</form>
 			<p class="hint">{ Tr(lang, "login2fa.recovery") }</p>
-			<p class="hint lang-switch"><a href={ langSwitchHref(lang) }>{ Tr(lang, "top.lang") }</a></p>
+			<p class="hint lang-switch"><a href={ langSwitchHref(lang, "/webmail/login/2fa") }>{ Tr(lang, "top.lang") }</a></p>
 			</div>
 		}
 	}

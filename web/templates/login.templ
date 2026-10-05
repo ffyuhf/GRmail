@@ -9,6 +9,9 @@
 //   2026-09-19 05:10:00 | 新建 | U8 Web 会话与登录（计划书步骤 7）
 //   2026-09-24 16:54:00 | 扩展 | U16 Webmail 体验收尾（计划书步骤 4，G2 批准 2026-09-24 11:51:57）
 //   2026-10-02 13:50:00 | 扩展 | Webmail视觉重构批次阶段5（G2 批准 2026-10-02 13:20:06）
+//   2026-10-05 00:22:00 | 修正 | Setup向导缺陷修复批次（缺陷④A 裁决同修）：语言切换
+//   链接传固定页路径（next 承载——切换后回原页而非跳首页）
+//   （依据：Setup向导缺陷修复计划书 v1.0.0 1.2 组4b，G2 批准 2026-10-05 00:21:19）
 package templates
 
 // AdminLoginView 管理员登录页（/login：用户名不含 @，走 UserRepo+VerifyPassword）。
@@ -22,7 +25,7 @@ templ AdminLoginView(lang Lang, errText string) {
 				<label>{ Tr(lang, "login.password") } <input type="password" name="password" autocomplete="current-password" required maxlength="1024"/></label>
 				<button class="primary" type="submit">{ Tr(lang, "login.submit") }</button>
 				</form>
-				<p class="hint lang-switch"><a href={ langSwitchHref(lang) }>{ Tr(lang, "top.lang") }</a></p>
+				<p class="hint lang-switch"><a href={ langSwitchHref(lang, "/login") }>{ Tr(lang, "top.lang") }</a></p>
 			</div>
 		}
 	}
@@ -38,7 +41,7 @@ templ MailboxLoginView(lang Lang, errText string) {
 				<label>{ Tr(lang, "login.password") } <input type="password" name="password" autocomplete="current-password" required maxlength="1024"/></label>
 				<button class="primary" type="submit">{ Tr(lang, "login.submit") }</button>
 				</form>
-				<p class="hint lang-switch"><a href={ langSwitchHref(lang) }>{ Tr(lang, "top.lang") }</a></p>
+				<p class="hint lang-switch"><a href={ langSwitchHref(lang, "/webmail/login") }>{ Tr(lang, "top.lang") }</a></p>
 			</div>
 		}
 	}

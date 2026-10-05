@@ -18,12 +18,18 @@
 //	——占位文本全清除）③畸形 DKIM 主机名随 selector 正常化消除
 //	（依据：向导占位符与布局修复计划书 v1.0.0 1.2-DKIM/IP 组，G2 批准 2026-10-04
 //	15:03:25；干系人核心裁决 12:19+实现方向六项 15:01；SRS FR-015/FR-008/NFR-012）
+//	2026-10-05 00:22:00 | 修正 | Setup向导缺陷修复批次（缺陷④b）：buildSetupData 增
+//	LangNext 装配（"/setup/"+当前步 slug——语言切换回跳当前步；SetupData.LangNext
+//	消费侧 langSwitchHref next 承载）
+//	（依据：Setup向导缺陷修复计划书 v1.0.0 1.2 组4b，G2 批准 2026-10-05 00:21:19；
+//	SRS FR-013 双语子项向导页承载收口）
 package web
 
 import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -106,6 +112,16 @@ func (s *Server) buildSetupData(c *gin.Context, idx int, errMsg string) template
 		Title: setupSteps[idx].Title,
 		Error: errMsg,
 		Next:  setupSteps[min(idx+1, len(setupSteps)-1)].Slug,
+		// 语言切换回跳当前步（缺陷④b——Setup向导缺陷修复批次：/lang?next= 承载，
+		// 切换后留在发起步而非跳回首步）
+		LangNext: "/setup/" + setupSteps[idx].Slug,
+		// P3 端口警示（Setup向导新手可用性批次）：当前 HTTP 明文端口注入
+		// （ServerConfig.HTTPPort——setupmode 装配的 -p 覆盖值/缺省 80；零值=未注入
+		// 按 80 缺省口径呈现——警示不触发）
+		HTTPPort: s.cfg.HTTPPort,
+	}
+	if HTTPPortZeroAsDefault(s.cfg.HTTPPort) == 80 {
+		data.HTTPPort = 80
 	}
 	if cfg == nil {
 		return data
@@ -123,6 +139,14 @@ func (s *Server) buildSetupData(c *gin.Context, idx int, errMsg string) template
 	}
 	data.CertFile = cfg.TLS.CertFile
 	data.KeyFile = cfg.TLS.KeyFile
+	// 步 2 已设置态回填（P6——Setup向导新手可用性批次）：按预填用户名点查（FindByName
+	// 既有接口——storage 零触碰边界内尽力语义：覆盖缺省 admin 部署；非预填名的既有
+	// 管理员未命中时由提交期"用户名已存在"错误指引闭合——零死锁路径保持）。
+	if s.users != nil && data.Username != "" {
+		if _, err := s.users.FindByName(c.Request.Context(), data.Username); err == nil {
+			data.HadAdmin = true
+		}
+	}
 	// 步 3 DKIM 区回填（向导占位符与布局修复批次）：强度选择框按算法映射回显
 	// （生成档位选择——非现状位数呈现；rsa 档统称 rsa-2048 缺省位）；KeyPath 非空
 	// 即提示已生成（沿用优先，勾选重新生成方覆盖——1.3-4 设置页既有键零破坏）。
@@ -138,6 +162,14 @@ func (s *Server) buildSetupData(c *gin.Context, idx int, errMsg string) template
 		data.DomainFinal = cfg.Server.Domain
 	}
 	return data
+}
+
+// HTTPPortZeroAsDefault 端口缺省口径归一（P3——零值=未注入按 80 呈现；供警示判定）。
+func HTTPPortZeroAsDefault(p int) int {
+	if p <= 0 {
+		return 80
+	}
+	return p
 }
 
 // buildDNSRecords DNS 建议值清单（只读呈现——全部记录值直接可复制发布；NFR-012 对照输入；
@@ -158,11 +190,24 @@ func buildDNSRecords(cfg *config.Config) []templates.DNSRecordView {
 	if aValue == "" {
 		aNote = "填你的服务器公网 IP（自动探测不可用——本机处于内网/NAT 环境）"
 	}
+	// TTL 建议值（P8——Setup向导新手可用性批次）：常规记录 3600（1 小时）；
+	// _mta-sts 短 TTL 600（10 分钟——rfc8461 §3.1 策略轮换敏捷语义）
+	const ttlStd = "3600"
+	const ttlSTS = "600"
 	records := []templates.DNSRecordView{
-		{Type: "A", Name: d, Value: aValue, Note: aNote},
-		{Type: "MX", Name: d, Value: "10 " + d, Note: "邮件交换（优先级 10）"},
-		{Type: "TXT", Name: d, Value: spf, Note: "SPF 发信授权（rfc7208）"},
-		{Type: "TXT", Name: "_dmarc." + d, Value: dmarc, Note: "DMARC 策略（rfc9989）"},
+		{Type: "A", Name: d, Value: aValue, TTL: ttlStd, Note: aNote},
+		{Type: "MX", Name: d, Value: "10 " + d, TTL: ttlStd, Note: "邮件交换（优先级 10）"},
+		{Type: "TXT", Name: d, Value: spf, TTL: ttlStd, Note: "SPF 发信授权（rfc7208）"},
+		{Type: "TXT", Name: "_dmarc." + d, Value: dmarc, TTL: ttlStd, Note: "DMARC 策略（rfc9989）"},
+	}
+	// P9 连接子域 A 记录（Setup向导新手可用性批次——新手照抄即完整）：smtp./imap./pop.
+	// 三连接主机名与主域同 IP（客户端按惯例填写子域地址可解析；证书 SAN 已同步覆盖——
+	// certificateDomains 清单扩展）。
+	for _, sub := range []string{"smtp", "imap", "pop"} {
+		records = append(records, templates.DNSRecordView{
+			Type: "A", Name: sub + "." + d, Value: aValue, TTL: ttlStd,
+			Note: sub + " 连接主机名（邮件客户端发信/收件地址——证书已覆盖）",
+		})
 	}
 	// DKIM 行：仅当私钥可用时呈现真实公钥记录（裁决六a——v=DKIM1; k=…; p=Base64(SPKI)）；
 	// 未配置/不可读不呈现该行（零占位——畸形主机名随 selector 正常条件一并消除）。
@@ -170,7 +215,7 @@ func buildDNSRecords(cfg *config.Config) []templates.DNSRecordView {
 		if txt, err := auth.DKIMPublicKeyDNSValue(cfg.Auth.DKIM.KeyPath); err == nil && txt != "" {
 			records = append(records, templates.DNSRecordView{
 				Type: "TXT", Name: selector + "._domainkey." + d,
-				Value: txt, Note: "DKIM 签名验证（rfc6376）",
+				Value: txt, TTL: ttlStd, Note: "DKIM 签名验证（rfc6376）",
 			})
 		}
 	}
@@ -179,20 +224,20 @@ func buildDNSRecords(cfg *config.Config) []templates.DNSRecordView {
 	if cfg.MTASts.Enabled {
 		records = append(records, templates.DNSRecordView{
 			Type: "TXT", Name: "_mta-sts." + d,
-			Value: "v=STSv1; id=" + stsSuggestionID() + ";",
-			Note:  "MTA-STS 策略发现（rfc8461——需同时发布 mta-sts 子域 A 记录）",
+			Value: "v=STSv1; id=" + stsSuggestionID() + ";", TTL: ttlSTS,
+			Note: "MTA-STS 策略发现（rfc8461——需同时发布 mta-sts 子域 A 记录）",
 		})
 		records = append(records, templates.DNSRecordView{
 			Type: "A", Name: "mta-sts." + d,
-			Value: aValue,
-			Note:  "MTA-STS 策略宿主（rfc8461 §3.2——与主域同机，策略端点 443 承载）",
+			Value: aValue, TTL: ttlStd,
+			Note: "MTA-STS 策略宿主（rfc8461 §3.2——与主域同机，策略端点 443 承载）",
 		})
 	}
 	if cfg.MTASts.ReportEnabled {
 		records = append(records, templates.DNSRecordView{
 			Type: "TXT", Name: "_smtp._tls." + d,
-			Value: tlsrptTXTSuggestion(cfg),
-			Note:  "TLS-RPT 聚合报告接收（rfc8460）",
+			Value: tlsrptTXTSuggestion(cfg), TTL: ttlStd,
+			Note: "TLS-RPT 聚合报告接收（rfc8460）",
 		})
 	}
 	return records
@@ -273,16 +318,31 @@ func (s *Server) setupPOST(c *gin.Context) {
 }
 
 // setupPostDatabase 步 1：数据库选择与连接探活（FR-014；重启生效口径注记随页呈现）。
+// P11 DSN 双模式（Setup向导新手可用性批次）：dsnMode=basic 时按分字段五参拼装
+// （mysql: user:pass@tcp(host:port)/db；postgres: postgres://user:pass@host:port/db）；
+// advanced/缺省时沿用 dsn 原文直填——两模式行为等价（探活链共用）。
 func (s *Server) setupPostDatabase(c *gin.Context) error {
 	driver := strings.ToLower(strings.TrimSpace(c.PostForm("driver")))
 	dsn := strings.TrimSpace(c.PostForm("dsn"))
+	if driver == "sqlite" {
+		// sqlite 路径独立名（sqlitePath——与 mysql/pg 的 dsn/分字段通道名互异，
+		// 消除隐藏域同名互扰：CSS 隐藏的 input 仍会提交，gin PostForm 取首值）
+		dsn = strings.TrimSpace(c.PostForm("sqlitePath"))
+	} else if c.PostForm("dsnMode") == "basic" {
+		dsn = buildDSNFromFields(driver,
+			strings.TrimSpace(c.PostForm("dbHost")),
+			strings.TrimSpace(c.PostForm("dbPort")),
+			strings.TrimSpace(c.PostForm("dbUser")),
+			c.PostForm("dbPassword"),
+			strings.TrimSpace(c.PostForm("dbName")))
+	}
 	switch driver {
 	case "sqlite", "mysql", "postgres":
 	default:
 		return &errSetupStep{msg: "数据库类型必须为 sqlite / mysql / postgres"}
 	}
 	if driver != "sqlite" && dsn == "" {
-		return &errSetupStep{msg: "MySQL/PostgreSQL 必须填写连接串（DSN）"}
+		return &errSetupStep{msg: "MySQL/PostgreSQL 必须填写数据库连接信息"}
 	}
 	// 连接探活（fail-fast——storage.Open 语义：sqlite 建文件+探活，mysql/pg 真连）
 	if driver != "sqlite" || dsn != "" {
@@ -304,6 +364,29 @@ func (s *Server) setupPostDatabase(c *gin.Context) error {
 	}
 	sessLogger(c).Info("Setup 步骤 1 完成：数据库选定", "driver", driver)
 	return nil
+}
+
+// buildDSNFromFields 分字段拼装 DSN（P11——Setup向导新手可用性批次）。
+// 参数：driver 库类型（mysql/postgres；sqlite 不经本函数）；host 主机名；port 端口
+// （空=库缺省 mysql 3306/postgres 5432）；user 用户名；password 密码；dbname 库名。
+// 返回：拼装后的 DSN 字符串（必填字段缺失返回空串——调用方按"连接信息缺失"拒绝）。
+func buildDSNFromFields(driver, host, port, user, password, dbname string) string {
+	if host == "" || user == "" || dbname == "" {
+		return ""
+	}
+	switch driver {
+	case "mysql":
+		if port == "" {
+			port = "3306"
+		}
+		return fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true", user, password, host, port, dbname)
+	case "postgres":
+		if port == "" {
+			port = "5432"
+		}
+		return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", user, password, host, port, dbname)
+	}
+	return ""
 }
 
 // setupPostAdmin 步 2：管理员创建（数据模型 3.1 初始化；argon2id 哈希零明文持久化）+

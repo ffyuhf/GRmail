@@ -449,6 +449,91 @@ label:has(> input[type="checkbox"]) {
 }
 .card h1 { animation: gr-fade-in var(--dur-normal) var(--ease-standard); }
 .card.wide { width: min(48rem, calc(100vw - 2rem)); }
+/* —— 向导自适应卡片（Setup向导缺陷修复批次·缺陷② 2026-10-05——干系人裁决「自适应」：
+ * 内容自适应 fit-content（DNS 四列表格随内容撑开）+窄步下限（表单步不塌缩——对齐
+ * .card 基准窄宽 27.75rem）+视口封顶（60rem 上限+2rem 边距，超宽表格折行回退）；
+ * .card 基类其余属性（灰底居中/阴影/动画）经双类继承零重复） —— */
+.card.setup-card {
+	width: fit-content;
+	min-width: min(27.75rem, calc(100vw - 2rem));
+	max-width: min(60rem, calc(100vw - 2rem));
+}
+/* —— Setup向导新手可用性批次 2026-10-05（P1 步骤条/P2 说明段/P4 表单双列/P11 DSN
+ * 切换/P13 完成页结构——全部向导作用域内，login/tokens/sieve 卡片页零波及） —— */
+/* P1 步骤条：横向六节点（完成勾=主色实底/当前=主色描边/未来=灰）；窄屏纵排 */
+.steps-bar {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--sp-2) var(--sp-3);
+	list-style: none;
+	padding: 0;
+	margin: 0 0 var(--sp-4);
+}
+.steps-bar li {
+	display: flex;
+	align-items: center;
+	gap: var(--sp-1);
+	color: var(--fg-secondary);
+	font-size: var(--text-caption);
+}
+.steps-bar .dot {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.5rem;
+	height: 1.5rem;
+	border-radius: 999px;
+	border: 1.5px solid var(--border);
+	font-size: var(--text-caption);
+	line-height: 1;
+}
+.steps-bar li.done .dot {
+	background: var(--primary);
+	border-color: var(--primary);
+	color: var(--primary-fg, #fff);
+}
+.steps-bar li.cur { color: var(--fg); font-weight: 600; }
+.steps-bar li.cur .dot { border-color: var(--primary); color: var(--primary); }
+/* P2 欢迎段与每步说明段 */
+.setup-welcome { margin: 0 0 var(--sp-3); }
+.setup-welcome h2 { margin: 0 0 var(--sp-1); }
+.setup-card .desc { margin: 0 0 var(--sp-3); }
+/* P10 内部引用小字（FR 编号等——次级呈现，细节保留） */
+.setup-card .ref {
+	font-size: var(--text-caption);
+	color: var(--fg-secondary);
+	font-weight: 400;
+}
+/* P4 表单双列对齐（向导作用域：标签列定宽右对齐+输入列弹性） */
+.setup-card form fieldset label {
+	display: grid;
+	grid-template-columns: minmax(11rem, max-content) 1fr;
+	align-items: center;
+	gap: var(--sp-2);
+	margin-bottom: var(--sp-2);
+	text-align: right;
+}
+/* P11 DSN 双模式互斥（:has() 纯 CSS——零 JS；批量条 :has 显隐先例） */
+.setup-card form fieldset:has(input[value="sqlite"]:checked) .dsn-area { display: none; }
+.setup-card form fieldset:not(:has(input[value="sqlite"]:checked)) .sqlite-only { display: none; }
+.dsn-area .dsn-mode { display: flex; gap: var(--sp-3); margin-bottom: var(--sp-2); }
+.dsn-area .dsn-mode label { display: inline-flex; grid-template-columns: none; text-align: left; }
+.dsn-area:has(input[value="advanced"]:checked) .dsn-basic { display: none; }
+.dsn-area:not(:has(input[value="advanced"]:checked)) .dsn-advanced { display: none; }
+/* P13 完成页：摘要/端口表/折叠区 */
+.setup-summary { margin: 0 0 var(--sp-3); padding-left: 1.2rem; }
+.setup-summary li { margin-bottom: var(--sp-2); }
+.port-list { list-style: none; padding: 0; margin: 0; }
+.port-list li {
+	display: flex;
+	align-items: center;
+	gap: var(--sp-2);
+	margin-bottom: var(--sp-1);
+	color: var(--fg-secondary);
+}
+.port-list code { min-width: 3rem; text-align: center; }
+.tech-details { margin: var(--sp-3) 0; color: var(--fg-secondary); }
+.tech-details summary { cursor: pointer; font-size: var(--text-caption); }
 .card > form { animation: gr-slide-in var(--dur-normal) var(--ease-standard); }
 .card h2 { font-size: var(--text-h2); margin: var(--sp-4) 0 var(--sp-2); }
 .card p { color: var(--fg-secondary); font-size: var(--text-body); }
@@ -594,7 +679,18 @@ section table, .card table { border-radius: var(--radius-sm); overflow: hidden; 
 }
 
 /* —— 反馈条（服务端 notice/error——Snackbar 质感升级+自动渐隐）—— */
-.error { color: var(--danger); }
+/* .error 升级（Setup向导缺陷修复批次·缺陷③ 2026-10-05——干系人裁决 A：danger 淡底+
+ * 左侧实色条+圆角+内边距+字重——沿 .notice 同构形态（info-soft 先例），明暗双态经
+ * --danger-soft/--danger-fg 令牌自动适配；原形态仅红色前景字，位于卡片外顶部易被
+ * 忽略——非法输入警告可感知性收口，全局 Layout errText 承载面同受益） —— */
+.error {
+	color: var(--danger-fg);
+	background: var(--danger-soft);
+	border-left: 3px solid var(--danger);
+	border-radius: var(--radius-sm);
+	padding: var(--sp-2) var(--sp-3);
+	font-weight: 500;
+}
 .hint { min-height: 1.2rem; color: var(--fg-secondary); font-size: var(--text-caption); }
 .notice {
 	background: var(--info-soft);

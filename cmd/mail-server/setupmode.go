@@ -39,6 +39,7 @@ func runSetupMode(ctx context.Context, logger *slog.Logger, watcher *config.Watc
 	setupServer := web.NewServer(web.ServerConfig{
 		Domain: watcher.Current().Server.Domain,
 		// 向导模式注入位（业务五依赖零注入——占位首页/向导不触业务路径）
+		HTTPPort:        httpPort, // P3 端口警示呈现值（Setup向导新手可用性批次——-p 覆盖值/缺省 80）
 		SetupDone:       func() bool { return watcher.Current().SetupCompleted },
 		CfgSnapshot:     func() *config.Config { return watcher.Current() },
 		SaveConfig:      saveConfig,
