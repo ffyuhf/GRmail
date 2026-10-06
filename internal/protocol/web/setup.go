@@ -424,6 +424,15 @@ func (s *Server) setupPostAdmin(c *gin.Context) error {
 	} else if !errors.Is(err, storage.ErrUserNotFound) {
 		return err
 	}
+	// 管理员主体增强批次 G1（D4——S3-W Q1-A）：管理员邮箱前缀（缺省 postmaster；
+	// 步 3 域名确定后组合 AdminMailbox 并创建主邮箱——本步仅落前缀中间态）
+	adminPrefix := strings.ToLower(strings.TrimSpace(c.PostForm("admin_prefix")))
+	if adminPrefix == "" {
+		adminPrefix = "postmaster"
+	}
+	if len(adminPrefix) > 64 || !isValidLocalPart(adminPrefix) {
+		return &errSetupStep{msg: "邮箱前缀格式非法（小写字母/数字/连字符，≤64 字符）"}
+	}
 	hash, err := account.HashPassword(password)
 	if err != nil {
 		return err
@@ -435,11 +444,28 @@ func (s *Server) setupPostAdmin(c *gin.Context) error {
 	}); err != nil {
 		return err
 	}
+	if err := s.saveStep(c, func(cfg *config.Config) {
+		cfg.Server.AdminMailboxPrefix = adminPrefix
+	}); err != nil {
+		return err
+	}
 	if s.attempts != nil {
 		_ = s.attempts.ClearSubject(ctx, "setup:admin")
 	}
-	sessLogger(c).Info("Setup 步骤 2 完成：管理员已创建", "username", username)
+	sessLogger(c).Info("Setup 步骤 2 完成：管理员已创建", "username", username, "adminPrefix", adminPrefix)
 	return nil
+}
+
+// isValidLocalPart 邮箱本地部分字符校验（G1：小写字母/数字/连字符——防注入与
+// 跨域形态；完整 RFC 5321 语义归服务端既有 CreateMailbox 链）。
+func isValidLocalPart(s string) bool {
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
+			continue
+		}
+		return false
+	}
+	return len(s) > 0
 }
 
 // setupPostDomain 步 3：主域名（发信身份/收信判定/证书 CN——后续步骤依赖）
@@ -476,13 +502,30 @@ func (s *Server) setupPostDomain(c *gin.Context) error {
 		}
 		newDKIM = config.DKIMConf{Selector: "grmail", KeyPath: keyPath, Algorithm: algorithm}
 	}
+	adminMailbox := ""
 	if err := s.saveStep(c, func(cfg *config.Config) {
 		cfg.Server.Domain = domain
 		if needKey {
 			cfg.Auth.DKIM = newDKIM
 		}
+		// 管理员主体增强批次 G1（D4）：前缀+域名组合管理员主邮箱（步 2 前缀落盘态；
+		// 未走过步 2 新字段的部署保持空——mailboxview 回退 postmaster 兼容锚）
+		if p := cfg.Server.AdminMailboxPrefix; p != "" {
+			adminMailbox = p + "@" + domain
+			cfg.Server.AdminMailbox = adminMailbox
+		}
 	}); err != nil {
 		return err
+	}
+	// 主邮箱创建（幂等——地址已存在视为完成）：影子态承载（零凭据——admin 视图按地址
+	// 解析即可用；直接登录主邮箱时经管理页激活设密——实现偏差登记：较计划书「密码同源」
+	// 倾向更安全的最小面，向导零密码暂存；accounts 未注入〔setupmode 形态〕跳过）
+	if adminMailbox != "" && s.accounts != nil {
+		if _, err := s.accounts.CreateMailbox(c.Request.Context(), adminMailbox, ""); err != nil &&
+			!errors.Is(err, storage.ErrMailboxExists) {
+			sessLogger(c).Warn("管理员主邮箱创建失败（后续来信自动建影子后可激活）",
+				"addr", adminMailbox, "error", err)
+		}
 	}
 	if needKey {
 		sessLogger(c).Info("Setup 步骤 3 完成：域名选定+DKIM 密钥已生成",

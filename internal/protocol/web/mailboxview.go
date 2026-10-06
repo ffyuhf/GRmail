@@ -12,6 +12,7 @@ package web
 
 import (
 	"errors"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -44,10 +45,17 @@ func (s *Server) currentMailboxView(c *gin.Context) (*mailboxView, error) {
 		if s.accounts == nil {
 			return nil, ErrNoMailboxView
 		}
-		mb, err := s.accounts.GetMailbox(ctx, "postmaster@"+s.cfg.Domain)
+		// 管理员主体增强批次 G1（D4——S3-W Q1-A）：admin 视图优先随管理员主邮箱
+		// （向导步 2 前缀@主域）；未配置回退 postmaster@主域（存量部署兼容锚——
+		// postmaster 地址与 U25 聚合目标语义不变，收信管道零涉及）。
+		addr := strings.TrimSpace(s.cfg.AdminMailbox)
+		if addr == "" {
+			addr = "postmaster@" + s.cfg.Domain
+		}
+		mb, err := s.accounts.GetMailbox(ctx, addr)
 		if err != nil {
-			sessLogger(c).Warn("admin 邮箱视图缺位（postmaster 未建立——收信管道建影子后可用）",
-				"domain", s.cfg.Domain)
+			sessLogger(c).Warn("admin 邮箱视图缺位（主邮箱/postmaster 未建立——收信管道建影子后可用）",
+				"domain", s.cfg.Domain, "addr", addr)
 			return nil, ErrNoMailboxView
 		}
 		return &mailboxView{MailboxID: mb.ID, Label: mb.Address, IsAdmin: true}, nil

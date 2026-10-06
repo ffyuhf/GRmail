@@ -29,6 +29,7 @@ templ PluginsView(d PluginsData) {
 	{{ lang := NormalizeLang(d.Lang) }}
 	@AppFrame(lang, Tr(lang, "plugins.title"), Tr(lang, "home.adminKind"), true, "", d.Nav) {
 		<div class="main content-page">
+			<nav class="settings-nav"><a href="/admin/settings">{ Tr(lang, "nav.backSettings") }</a></nav>
 			<div class="page-head"><h2>{ Tr(lang, "plugins.title") }</h2></div>
 			<p class="hint">{ Tr(lang, "plugins.hint") }</p>
 			if len(d.Plugins) == 0 {

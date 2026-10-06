@@ -105,12 +105,13 @@ func (r *PostgresSessionRepo) PurgeExpired(ctx context.Context, now time.Time) (
 
 // PostgresUserRepo UserRepo 的 PostgreSQL 实现。
 type PostgresUserRepo struct {
-	q *dbgen.Queries
+	q  *dbgen.Queries
+	db *sql.DB // 管理员主体增强批次：ConsumeRecoveryCode 事务承载
 }
 
 // NewPostgresUserRepo 构造管理员仓储（PostgreSQL）。
 func NewPostgresUserRepo(db *sql.DB) *PostgresUserRepo {
-	return &PostgresUserRepo{q: dbgen.New(db)}
+	return &PostgresUserRepo{q: dbgen.New(db), db: db}
 }
 
 // EnsureAdmin 确保管理员存在（ON CONFLICT DO NOTHING 幂等——1.5③ PG 形态）。

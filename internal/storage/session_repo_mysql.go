@@ -105,12 +105,13 @@ func (r *MySQLSessionRepo) PurgeExpired(ctx context.Context, now time.Time) (int
 
 // MySQLUserRepo UserRepo 的 MySQL 实现。
 type MySQLUserRepo struct {
-	q *dbgen.Queries
+	q  *dbgen.Queries
+	db *sql.DB // 管理员主体增强批次：ConsumeRecoveryCode 事务承载
 }
 
 // NewMySQLUserRepo 构造管理员仓储（MySQL）。
 func NewMySQLUserRepo(db *sql.DB) *MySQLUserRepo {
-	return &MySQLUserRepo{q: dbgen.New(db)}
+	return &MySQLUserRepo{q: dbgen.New(db), db: db}
 }
 
 // EnsureAdmin 确保管理员存在（INSERT IGNORE 幂等——1.5③ MySQL 形态）。

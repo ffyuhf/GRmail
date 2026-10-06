@@ -98,6 +98,7 @@ templ SetupView(data SetupData) {
 					<label>{ Tr(lang, "login.username") } <input type="text" name="username" value={ data.Username } required maxlength="64" { disabledAttrs(data.HadAdmin)... }/></label>
 					<label>{ Tr(lang, "login.password") } <input type="password" name="password" { disabledAttrs(data.HadAdmin)... }/></label>
 					<label>{ Tr(lang, "setup.confirm") } <input type="password" name="confirm" { disabledAttrs(data.HadAdmin)... }/></label>
+					<label>{ Tr(lang, "setup.adminPrefix") } <input type="text" name="admin_prefix" value="postmaster" required maxlength="64" { disabledAttrs(data.HadAdmin)... }/></label>
 				</fieldset>
 				<button class="primary" type="submit" { disabledAttrs(data.HadAdmin)... }>{ Tr(lang, "setup.createGo") }</button>
 			</form>

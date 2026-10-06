@@ -99,6 +99,24 @@ type UserRepo interface {
 	FindByName(ctx context.Context, name string) (*User, error)
 	// UpdatePassword 更新管理员密码哈希。
 	UpdatePassword(ctx context.Context, id int64, hash string) error
+
+	// ── 管理员主体增强批次增量（admin 2FA 通道——沿 MailboxRepo v1.20.0 先例；
+	// 迁移 00011 三库；admin 无强制标记语义不设 SetTwoFactorRequired） ──
+
+	// GetTwoFactor 读取管理员 2FA 绑定态（绑定完成判定 TwoFactorState.Bound）。
+	GetTwoFactor(ctx context.Context, userID int64) (*TwoFactorState, error)
+	// SetTwoFactorSecret 发起绑定：覆盖式写 pending TOTP 密钥（SQL 内联清 totp_last_step
+	// ——新密钥重放基线重置；绑定确认前 Bound() 保持 false，登录判定不受影响）。
+	SetTwoFactorSecret(ctx context.Context, userID int64, secret string) error
+	// ConfirmTwoFactor 绑定确认：TOTP 验证通过后写恢复码哈希集（自此 Bound()=true，
+	// /login 登录二步生效）。恢复码明文仅生成时一次性展示，本接口只落哈希态。
+	ConfirmTwoFactor(ctx context.Context, userID int64, codeHashes []string) error
+	// MarkTOTPStep 记录最近一次 TOTP 验证成功的时间步（rfc6238 §5.2 同窗重放拒绝 MUST）。
+	MarkTOTPStep(ctx context.Context, userID, step int64) error
+	// ConsumeRecoveryCode 消耗一枚恢复码（事务读→匹配→移除→写回；false=未命中拒绝）。
+	ConsumeRecoveryCode(ctx context.Context, userID int64, codeHash string) (bool, error)
+	// ClearTwoFactor 停用 2FA：清空密钥/恢复码/重放步（调用方须先完成第二因子验证）。
+	ClearTwoFactor(ctx context.Context, userID int64) error
 }
 
 // LoginAttemptRepo 登录尝试仓储（v1.4.0 增量，Q4-B：DB 持久化失败计数限流）
@@ -217,13 +235,14 @@ func (r *SQLiteSessionRepo) PurgeExpired(ctx context.Context, now time.Time) (in
 
 // SQLiteUserRepo UserRepo 的 SQLite 实现
 type SQLiteUserRepo struct {
-	q *dbgen.Queries
+	q  *dbgen.Queries
+	db *sql.DB // 管理员主体增强批次：ConsumeRecoveryCode 事务承载
 }
 
 // NewSQLiteUserRepo 构造管理员仓储。
 // 参数：db 已迁移就绪的数据库连接；返回：仓储实例。
 func NewSQLiteUserRepo(db *sql.DB) *SQLiteUserRepo {
-	return &SQLiteUserRepo{q: dbgen.New(db)}
+	return &SQLiteUserRepo{q: dbgen.New(db), db: db}
 }
 
 // EnsureAdmin 确保管理员存在（INSERT OR IGNORE 幂等；u.ID/CreatedAt/UpdatedAt 回填尽力语义）。

@@ -361,14 +361,14 @@ func ComposeView(d *ComposeData) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "<input type=\"text\" name=\"from\" value=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "<input type=\"text\" name=\"from\" id=\"f-from\" value=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var22 string
 				templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.ResolveAttributeValue(d.From)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 65, Col: 86}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 65, Col: 98}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var22)
 				if templ_7745c5c3_Err != nil {
@@ -381,629 +381,642 @@ func ComposeView(d *ComposeData) templ.Component {
 				var templ_7745c5c3_Var23 string
 				templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.fromPh"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 65, Col: 129}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 65, Col: 141}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var23)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "\"></label>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "\" data-domain=\"")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var24 string
+				templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.ResolveAttributeValue(d.Domain)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 65, Col: 166}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var24)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "\" autocomplete=\"off\"></label>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "</section><section class=\"compose-section\"><div class=\"section-label\">")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			var templ_7745c5c3_Var24 string
-			templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "compose.subject"))
-			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 69, Col: 61}
-			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var24))
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "</div><label><input type=\"text\" name=\"subject\" value=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "</section><section class=\"compose-section\"><div class=\"section-label\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var25 string
-			templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.ResolveAttributeValue(d.Subject)
+			templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "compose.subject"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 70, Col: 63}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 69, Col: 61}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var25)
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var25))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "\" placeholder=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "</div><label><input type=\"text\" name=\"subject\" value=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var26 string
-			templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.subjectPh"))
+			templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.ResolveAttributeValue(d.Subject)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 70, Col: 109}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 70, Col: 63}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var26)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "\"></label></section><section class=\"compose-section\"><div class=\"section-label\"><span>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "\" placeholder=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var27 string
-			templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "compose.body"))
+			templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.subjectPh"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 74, Col: 38}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 70, Col: 109}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var27))
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var27)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "</span> <span class=\"tool-spacer\"></span> <button class=\"secondary btn-sm\" type=\"button\" id=\"fullscreen-btn\" onclick=\"grmailComposeFullscreen()\" data-enter=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "\"></label></section><section class=\"compose-section\"><div class=\"section-label\"><span>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var28 string
-			templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.fullscreen"))
+			templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "compose.body"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 77, Col: 50}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 74, Col: 38}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var28)
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var28))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "\" data-exit=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "</span> <span class=\"tool-spacer\"></span> <button class=\"secondary btn-sm\" type=\"button\" id=\"fullscreen-btn\" onclick=\"grmailComposeFullscreen()\" data-enter=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var29 string
-			templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.exitFullscreen"))
+			templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.fullscreen"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 78, Col: 53}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 77, Col: 50}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var29)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "\" data-exit=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var30 string
-			templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "compose.fullscreen"))
+			templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.exitFullscreen"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 78, Col: 88}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 78, Col: 53}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var30))
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var30)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "</button></div><input type=\"hidden\" name=\"body\" id=\"f-body\" value=\"\"><div id=\"compose-toolbar\"><button type=\"button\" class=\"ql-bold\" title=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var31 string
-			templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.bold"))
+			templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "compose.fullscreen"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 82, Col: 80}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 78, Col: 88}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var31)
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var31))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "\"></button> <button type=\"button\" class=\"ql-italic\" title=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "</button></div><input type=\"hidden\" name=\"body\" id=\"f-body\" value=\"\"><div id=\"compose-toolbar\"><button type=\"button\" class=\"ql-bold\" title=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var32 string
-			templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.italic"))
+			templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.bold"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 83, Col: 84}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 82, Col: 80}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var32)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "\"></button> <button type=\"button\" class=\"ql-underline\" title=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "\"></button> <button type=\"button\" class=\"ql-italic\" title=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var33 string
-			templ_7745c5c3_Var33, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.underline"))
+			templ_7745c5c3_Var33, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.italic"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 84, Col: 90}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 83, Col: 84}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var33)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "\"></button> <button type=\"button\" class=\"ql-strike\" title=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "\"></button> <button type=\"button\" class=\"ql-underline\" title=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var34 string
-			templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.strike"))
+			templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.underline"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 85, Col: 84}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 84, Col: 90}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var34)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, "\"></button> <select class=\"ql-color\" title=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, "\"></button> <button type=\"button\" class=\"ql-strike\" title=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var35 string
-			templ_7745c5c3_Var35, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.color"))
+			templ_7745c5c3_Var35, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.strike"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 86, Col: 68}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 85, Col: 84}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var35)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, "\"><option value=\"\"></option> <option value=\"#000000\"></option> <option value=\"#374151\"></option> <option value=\"#9ca3af\"></option> <option value=\"#ffffff\"></option> <option value=\"#dc2626\"></option> <option value=\"#ea580c\"></option> <option value=\"#d97706\"></option> <option value=\"#16a34a\"></option> <option value=\"#0d9488\"></option> <option value=\"#2563eb\"></option> <option value=\"#7c3aed\"></option> <option value=\"#db2777\"></option></select> <select class=\"ql-background\" title=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, "\"></button> <select class=\"ql-color\" title=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var36 string
-			templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.background"))
+			templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.color"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 101, Col: 78}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 86, Col: 68}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var36)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 40, "\"><option value=\"\"></option> <option value=\"#000000\"></option> <option value=\"#374151\"></option> <option value=\"#9ca3af\"></option> <option value=\"#ffffff\"></option> <option value=\"#dc2626\"></option> <option value=\"#ea580c\"></option> <option value=\"#d97706\"></option> <option value=\"#16a34a\"></option> <option value=\"#0d9488\"></option> <option value=\"#2563eb\"></option> <option value=\"#7c3aed\"></option> <option value=\"#db2777\"></option></select> <select class=\"ql-size\" title=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 40, "\"><option value=\"\"></option> <option value=\"#000000\"></option> <option value=\"#374151\"></option> <option value=\"#9ca3af\"></option> <option value=\"#ffffff\"></option> <option value=\"#dc2626\"></option> <option value=\"#ea580c\"></option> <option value=\"#d97706\"></option> <option value=\"#16a34a\"></option> <option value=\"#0d9488\"></option> <option value=\"#2563eb\"></option> <option value=\"#7c3aed\"></option> <option value=\"#db2777\"></option></select> <select class=\"ql-background\" title=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var37 string
-			templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.size"))
+			templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.background"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 116, Col: 66}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 101, Col: 78}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var37)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 41, "\"><option value=\"small\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 41, "\"><option value=\"\"></option> <option value=\"#000000\"></option> <option value=\"#374151\"></option> <option value=\"#9ca3af\"></option> <option value=\"#ffffff\"></option> <option value=\"#dc2626\"></option> <option value=\"#ea580c\"></option> <option value=\"#d97706\"></option> <option value=\"#16a34a\"></option> <option value=\"#0d9488\"></option> <option value=\"#2563eb\"></option> <option value=\"#7c3aed\"></option> <option value=\"#db2777\"></option></select> <select class=\"ql-size\" title=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var38 string
-			templ_7745c5c3_Var38, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "compose.tb.sizeSmall"))
+			templ_7745c5c3_Var38, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.size"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 117, Col: 64}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 116, Col: 66}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var38))
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var38)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 42, "</option> <option value=\"\" selected=\"selected\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 42, "\"><option value=\"small\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var39 string
-			templ_7745c5c3_Var39, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "compose.tb.sizeNormal"))
+			templ_7745c5c3_Var39, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "compose.tb.sizeSmall"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 118, Col: 80}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 117, Col: 64}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var39))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 43, "</option> <option value=\"large\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 43, "</option> <option value=\"\" selected=\"selected\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var40 string
-			templ_7745c5c3_Var40, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "compose.tb.sizeLarge"))
+			templ_7745c5c3_Var40, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "compose.tb.sizeNormal"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 119, Col: 64}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 118, Col: 80}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var40))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 44, "</option> <option value=\"huge\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 44, "</option> <option value=\"large\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var41 string
-			templ_7745c5c3_Var41, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "compose.tb.sizeHuge"))
+			templ_7745c5c3_Var41, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "compose.tb.sizeLarge"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 120, Col: 62}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 119, Col: 64}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var41))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 45, "</option></select> <select class=\"ql-font\" title=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 45, "</option> <option value=\"huge\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var42 string
-			templ_7745c5c3_Var42, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.font"))
+			templ_7745c5c3_Var42, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "compose.tb.sizeHuge"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 122, Col: 66}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 120, Col: 62}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var42)
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var42))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 46, "\"><option value=\"\" selected=\"selected\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 46, "</option></select> <select class=\"ql-font\" title=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var43 string
-			templ_7745c5c3_Var43, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "compose.tb.fontDefault"))
+			templ_7745c5c3_Var43, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.font"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 123, Col: 81}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 122, Col: 66}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var43))
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var43)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 47, "</option> <option value=\"serif\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 47, "\"><option value=\"\" selected=\"selected\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var44 string
-			templ_7745c5c3_Var44, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "compose.tb.fontSerif"))
+			templ_7745c5c3_Var44, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "compose.tb.fontDefault"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 124, Col: 64}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 123, Col: 81}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var44))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 48, "</option> <option value=\"monospace\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 48, "</option> <option value=\"serif\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var45 string
-			templ_7745c5c3_Var45, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "compose.tb.fontMono"))
+			templ_7745c5c3_Var45, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "compose.tb.fontSerif"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 125, Col: 67}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 124, Col: 64}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var45))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 49, "</option></select> <select class=\"ql-header\" title=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 49, "</option> <option value=\"monospace\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var46 string
-			templ_7745c5c3_Var46, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.h1"))
+			templ_7745c5c3_Var46, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "compose.tb.fontMono"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 127, Col: 66}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 125, Col: 67}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var46)
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var46))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 50, "\"><option value=\"1\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 50, "</option></select> <select class=\"ql-header\" title=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var47 string
-			templ_7745c5c3_Var47, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "compose.tb.h1"))
+			templ_7745c5c3_Var47, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.h1"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 128, Col: 53}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 127, Col: 66}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var47))
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var47)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 51, "</option> <option value=\"2\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 51, "\"><option value=\"1\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var48 string
-			templ_7745c5c3_Var48, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "compose.tb.h2"))
+			templ_7745c5c3_Var48, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "compose.tb.h1"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 129, Col: 53}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 128, Col: 53}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var48))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 52, "</option> <option value=\"\" selected=\"selected\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 52, "</option> <option value=\"2\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var49 string
-			templ_7745c5c3_Var49, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "compose.tb.headerNormal"))
+			templ_7745c5c3_Var49, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "compose.tb.h2"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 130, Col: 82}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 129, Col: 53}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var49))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 53, "</option></select> <button type=\"button\" class=\"ql-blockquote\" title=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 53, "</option> <option value=\"\" selected=\"selected\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var50 string
-			templ_7745c5c3_Var50, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.blockquote"))
+			templ_7745c5c3_Var50, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "compose.tb.headerNormal"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 132, Col: 92}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 130, Col: 82}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var50)
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var50))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 54, "\"></button> <button type=\"button\" class=\"ql-code-block\" title=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 54, "</option></select> <button type=\"button\" class=\"ql-blockquote\" title=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var51 string
-			templ_7745c5c3_Var51, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.codeBlock"))
+			templ_7745c5c3_Var51, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.blockquote"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 133, Col: 91}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 132, Col: 92}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var51)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 55, "\"></button> <button type=\"button\" class=\"ql-table\" title=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 55, "\"></button> <button type=\"button\" class=\"ql-code-block\" title=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var52 string
-			templ_7745c5c3_Var52, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.table"))
+			templ_7745c5c3_Var52, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.codeBlock"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 134, Col: 82}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 133, Col: 91}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var52)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 56, "\"></button> <button type=\"button\" class=\"ql-list\" value=\"ordered\" title=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 56, "\"></button> <button type=\"button\" class=\"ql-table\" title=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var53 string
-			templ_7745c5c3_Var53, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.listOrdered"))
+			templ_7745c5c3_Var53, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.table"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 135, Col: 103}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 134, Col: 82}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var53)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 57, "\"></button> <button type=\"button\" class=\"ql-list\" value=\"bullet\" title=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 57, "\"></button> <button type=\"button\" class=\"ql-list\" value=\"ordered\" title=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var54 string
-			templ_7745c5c3_Var54, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.listBullet"))
+			templ_7745c5c3_Var54, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.listOrdered"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 136, Col: 101}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 135, Col: 103}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var54)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 58, "\"></button> <button type=\"button\" class=\"ql-align\" value=\"\" title=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 58, "\"></button> <button type=\"button\" class=\"ql-list\" value=\"bullet\" title=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var55 string
-			templ_7745c5c3_Var55, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.alignLeft"))
+			templ_7745c5c3_Var55, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.listBullet"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 137, Col: 95}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 136, Col: 101}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var55)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 59, "\"></button> <button type=\"button\" class=\"ql-align\" value=\"center\" title=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 59, "\"></button> <button type=\"button\" class=\"ql-align\" value=\"\" title=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var56 string
-			templ_7745c5c3_Var56, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.alignCenter"))
+			templ_7745c5c3_Var56, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.alignLeft"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 138, Col: 103}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 137, Col: 95}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var56)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 60, "\"></button> <button type=\"button\" class=\"ql-align\" value=\"right\" title=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 60, "\"></button> <button type=\"button\" class=\"ql-align\" value=\"center\" title=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var57 string
-			templ_7745c5c3_Var57, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.alignRight"))
+			templ_7745c5c3_Var57, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.alignCenter"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 139, Col: 101}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 138, Col: 103}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var57)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 61, "\"></button> <button type=\"button\" class=\"ql-align\" value=\"justify\" title=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 61, "\"></button> <button type=\"button\" class=\"ql-align\" value=\"right\" title=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var58 string
-			templ_7745c5c3_Var58, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.alignJustify"))
+			templ_7745c5c3_Var58, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.alignRight"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 140, Col: 105}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 139, Col: 101}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var58)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 62, "\"></button> <button type=\"button\" class=\"ql-indent\" value=\"-1\" title=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 62, "\"></button> <button type=\"button\" class=\"ql-align\" value=\"justify\" title=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var59 string
-			templ_7745c5c3_Var59, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.indentLess"))
+			templ_7745c5c3_Var59, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.alignJustify"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 141, Col: 99}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 140, Col: 105}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var59)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 63, "\"></button> <button type=\"button\" class=\"ql-indent\" value=\"+1\" title=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 63, "\"></button> <button type=\"button\" class=\"ql-indent\" value=\"-1\" title=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var60 string
-			templ_7745c5c3_Var60, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.indentMore"))
+			templ_7745c5c3_Var60, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.indentLess"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 142, Col: 99}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 141, Col: 99}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var60)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 64, "\"></button> <button type=\"button\" class=\"ql-undo\" title=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 64, "\"></button> <button type=\"button\" class=\"ql-indent\" value=\"+1\" title=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var61 string
-			templ_7745c5c3_Var61, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.undo"))
+			templ_7745c5c3_Var61, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.indentMore"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 143, Col: 80}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 142, Col: 99}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var61)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 65, "\"></button> <button type=\"button\" class=\"ql-redo\" title=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 65, "\"></button> <button type=\"button\" class=\"ql-undo\" title=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var62 string
-			templ_7745c5c3_Var62, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.redo"))
+			templ_7745c5c3_Var62, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.undo"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 144, Col: 80}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 143, Col: 80}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var62)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 66, "\"></button> <button type=\"button\" class=\"ql-link\" title=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 66, "\"></button> <button type=\"button\" class=\"ql-redo\" title=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var63 string
-			templ_7745c5c3_Var63, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.link"))
+			templ_7745c5c3_Var63, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.redo"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 145, Col: 80}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 144, Col: 80}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var63)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 67, "\"></button> <button type=\"button\" class=\"ql-image\" title=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 67, "\"></button> <button type=\"button\" class=\"ql-link\" title=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var64 string
-			templ_7745c5c3_Var64, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.image"))
+			templ_7745c5c3_Var64, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.link"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 146, Col: 82}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 145, Col: 80}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var64)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 68, "\"></button> <button type=\"button\" class=\"ql-clean\" title=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 68, "\"></button> <button type=\"button\" class=\"ql-image\" title=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var65 string
-			templ_7745c5c3_Var65, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.clean"))
+			templ_7745c5c3_Var65, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.image"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 147, Col: 82}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 146, Col: 82}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var65)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 69, "\"></button></div><div class=\"compose-editor\" id=\"editor-container\"></div><textarea id=\"editor-initial\" hidden>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 69, "\"></button> <button type=\"button\" class=\"ql-clean\" title=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var66 string
-			templ_7745c5c3_Var66, templ_7745c5c3_Err = templ.JoinStringErrs(d.Body)
+			templ_7745c5c3_Var66, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.tb.clean"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 150, Col: 50}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 147, Col: 82}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var66))
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var66)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 70, "</textarea></section><section class=\"compose-section\"><div class=\"section-label\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 70, "\"></button></div><div class=\"compose-editor\" id=\"editor-container\"></div><textarea id=\"editor-initial\" hidden>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var67 string
-			templ_7745c5c3_Var67, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "compose.attach"))
+			templ_7745c5c3_Var67, templ_7745c5c3_Err = templ.JoinStringErrs(d.Body)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 153, Col: 60}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 150, Col: 50}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var67))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 71, "</div><label><input type=\"file\" name=\"attachments\" multiple=\"multiple\"></label></section><div class=\"compose-actions\"><button class=\"primary\" type=\"submit\" name=\"action\" value=\"send\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 71, "</textarea></section><section class=\"compose-section\"><div class=\"section-label\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var68 string
-			templ_7745c5c3_Var68, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "compose.send"))
+			templ_7745c5c3_Var68, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "compose.attach"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 157, Col: 96}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 153, Col: 60}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var68))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 72, "</button> <button class=\"secondary\" type=\"submit\" name=\"action\" value=\"save_draft\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 72, "</div><label><input type=\"file\" name=\"attachments\" multiple=\"multiple\"></label></section><div class=\"compose-actions\"><button class=\"primary\" type=\"submit\" name=\"action\" value=\"send\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var69 string
-			templ_7745c5c3_Var69, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "compose.saveDraft"))
+			templ_7745c5c3_Var69, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "compose.send"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 158, Col: 109}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 157, Col: 96}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var69))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 73, "</button> <span class=\"spacer\"></span> <a class=\"btn-text\" href=\"/\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 73, "</button> <button class=\"secondary\" type=\"submit\" name=\"action\" value=\"save_draft\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var70 string
-			templ_7745c5c3_Var70, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "common.cancel"))
+			templ_7745c5c3_Var70, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "compose.saveDraft"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 160, Col: 61}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 158, Col: 109}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var70))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 74, "</a></div></form><link rel=\"stylesheet\" href=\"/static/quill.snow.css\"><script src=\"/static/quill.js\"></script><script>\n\t\t\t\t// ── U17 富文本编辑器（G3/G4/G9——零框架内联 JS，沿 CSV 先例）──\n\t\t\t\t// 初始化：snow 主题+自定义 toolbar 容器（模板渲染双语 title）；\n\t\t\t\t// 初始内容经隐藏 textarea 携带（HTML 源文本）——dangerouslyPasteHTML\n\t\t\t\t// 注入（自产内容：草稿回填/回信预填，接收侧 iframe sandbox 既有防线）。\n\t\t\t\tlet grmailEditor = null;\n\t\t\t\t// U22 图片压缩工程常量（计划书 1.5③——实现级常量非 config 承载：\n\t\t\t\t// 最长边重采样上限/JPEG 质量档——D8#11：config 注入（compose-page\n\t\t\t\t// data-* 承载——改 config.json 热加载后下次渲染生效；缺省兜底 1920/0.85）\n\t\t\t\tconst GRMAIL_IMG_MAX_EDGE = parseInt(document.getElementById('compose-page').dataset.imgMaxEdge) || 1920;\n\t\t\t\tconst GRMAIL_JPEG_QUALITY = parseFloat(document.getElementById('compose-page').dataset.jpegQuality) || 0.85;\n\t\t\t\tfunction grmailEditorInit() {\n\t\t\t\t\tif (typeof Quill === 'undefined') { return; }\n\t\t\t\t\tgrmailEditor = new Quill('#editor-container', {\n\t\t\t\t\t\ttheme: 'snow',\n\t\t\t\t\t\tmodules: {\n\t\t\t\t\t\t\ttoolbar: {\n\t\t\t\t\t\t\t\t\tcontainer: '#compose-toolbar',\n\t\t\t\t\t\t\t\t\thandlers: {\n\t\t\t\t\t\t\t\t\t\t// U22：undo/redo 无 toolbar 内置按钮（源码核对\n\t\t\t\t\t\t\t\t\t\t// 零 ql-undo/ql-redo 注册）——经 history 模块\n\t\t\t\t\t\t\t\t\t\t// （内置）两行桥接\n\t\t\t\t\t\t\t\t\t\tundo: function() { this.quill.history.undo(); },\n\t\t\t\t\t\t\t\t\t\tredo: function() { this.quill.history.redo(); },\n\t\t\t\t\t\t\t\t\t\t// E-B（D8#13）：表格插入——Quill 2.0.3 内置 table\n\t\t\t\t\t\t\t\t\t\t// 模块（insertTable/行操作 API——vendor 源码实证）\n\t\t\t\t\t\t\t\t\t\t// 工具栏化激活：固定 2×2 起步（计划书 2.3-2 候选 A\n\t\t\t\t\t\t\t\t\t\t// 最小面自决；单元格编辑经 contenteditable 既有承载）\n\t\t\t\t\t\t\t\t\t\ttable: function() { this.quill.getModule('table').insertTable(2, 2); }\n\t\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t\t},\n\t\t\t\t\t\t\t\t// E-B：table 模块显式启用（snow 主题下幂等——注册形态\n\t\t\t\t\t\t\t\t// 与 vendor 内置一致，显式声明消除主题默认差异）\n\t\t\t\t\t\t\t\ttable: true,\n\t\t\t\t\t\t\t// U22 图片统一压缩接线（源码核对：工具栏选择/粘贴 files/\n\t\t\t\t\t\t\t// 拖放三路径全部汇聚 uploader.upload→options.handler——\n\t\t\t\t\t\t\t// 一处覆盖全入口；mimetypes 扩展 png/jpeg/gif/webp 与\n\t\t\t\t\t\t\t// image/* 等价，svg 排除——data: 内联脚本面收敛）\n\t\t\t\t\t\t\tuploader: {\n\t\t\t\t\t\t\t\tmimetypes: ['image/png', 'image/jpeg', 'image/gif', 'image/webp'],\n\t\t\t\t\t\t\t\thandler: grmailUploaderHandler\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}\n\t\t\t\t\t});\n\t\t\t\t\tconst initial = document.getElementById('editor-initial').value;\n\t\t\t\t\tif (initial && initial.trim() !== '') {\n\t\t\t\t\t\tgrmailEditor.clipboard.dangerouslyPasteHTML(initial);\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\t// Blob/File → data: URL（FileReader 原语——压缩输出与原样兜底共用）。\n\t\t\t\tfunction grmailReadAsDataURL(blob) {\n\t\t\t\t\treturn new Promise(resolve => {\n\t\t\t\t\t\tconst reader = new FileReader();\n\t\t\t\t\t\treader.onload = () => resolve(reader.result);\n\t\t\t\t\t\treader.onerror = () => resolve('');\n\t\t\t\t\t\treader.readAsDataURL(blob);\n\t\t\t\t\t});\n\t\t\t\t}\n\t\t\t\t// U22 图片压缩纯函数（Canvas 最长边重采样——缓解 base64 膨胀收口 U19\n\t\t\t\t// 登记项③）：①非 image/* 或解码失败：原样返回（尽力语义）；②最长边\n\t\t\t\t// ≤1920：原样零重采样（G9 小图保真）；③最长边 >1920：等比缩放至 1920\n\t\t\t\t// ——PNG 输入保 PNG（透明通道无损口径），其余输出 JPEG quality 0.85。\n\t\t\t\tasync function grmailCompressImage(file) {\n\t\t\t\t\tif (!file.type || !file.type.startsWith('image/')) { return grmailReadAsDataURL(file); }\n\t\t\t\t\t// D8#14：gif 跳过压缩——Canvas 重采样会静默丢失动画（单帧化），\n\t\t\t\t\t// 原样内联保真（U22 登记项收口：动图保动画）\n\t\t\t\t\tif (file.type === 'image/gif') { return grmailReadAsDataURL(file); }\n\t\t\t\t\tlet bmp = null;\n\t\t\t\t\ttry { bmp = await createImageBitmap(file); } catch (e) { bmp = null; }\n\t\t\t\t\tif (bmp && Math.max(bmp.width, bmp.height) > GRMAIL_IMG_MAX_EDGE) {\n\t\t\t\t\t\tconst scale = GRMAIL_IMG_MAX_EDGE / Math.max(bmp.width, bmp.height);\n\t\t\t\t\t\tconst w = Math.max(1, Math.round(bmp.width * scale));\n\t\t\t\t\t\tconst h = Math.max(1, Math.round(bmp.height * scale));\n\t\t\t\t\t\tconst canvas = document.createElement('canvas');\n\t\t\t\t\t\tcanvas.width = w;\n\t\t\t\t\t\tcanvas.height = h;\n\t\t\t\t\t\tcanvas.getContext('2d').drawImage(bmp, 0, 0, w, h);\n\t\t\t\t\t\tconst type = file.type === 'image/png' ? 'image/png' : 'image/jpeg';\n\t\t\t\t\t\tconst out = await new Promise(r => canvas.toBlob(r, type, GRMAIL_JPEG_QUALITY));\n\t\t\t\t\t\tif (bmp.close) { bmp.close(); }\n\t\t\t\t\t\tif (out) { return grmailReadAsDataURL(out); }\n\t\t\t\t\t}\n\t\t\t\t\tif (bmp && bmp.close) { bmp.close(); }\n\t\t\t\t\treturn grmailReadAsDataURL(file);\n\t\t\t\t}\n\t\t\t\t// U22 uploader 模块自定义 handler——默认 readAsDataURL 直插语义的压缩版\n\t\t\t\t// 复刻（逐图压缩→顺序 insertEmbed→光标后移；G9 data: 内联形态不变）。\n\t\t\t\tfunction grmailUploaderHandler(range, files) {\n\t\t\t\t\tconst uploads = Array.from(files).map(f => grmailCompressImage(f));\n\t\t\t\t\tPromise.all(uploads).then(urls => {\n\t\t\t\t\t\turls.forEach(u => {\n\t\t\t\t\t\t\tif (u) { grmailEditor.insertEmbed(range.index, 'image', u); }\n\t\t\t\t\t\t});\n\t\t\t\t\t\tgrmailEditor.setSelection(range.index + urls.length);\n\t\t\t\t\t});\n\t\t\t\t}\n\t\t\t\t// 提交桥接：编辑器容器非表单原生控件——submit 前将 root.innerHTML\n\t\t\t\t// 写入隐藏 input body（随表单 POST——端点形态零变更）。\n\t\t\t\tfunction grmailComposeSync() {\n\t\t\t\t\tif (grmailEditor) {\n\t\t\t\t\t\tdocument.getElementById('f-body').value = grmailEditor.root.innerHTML;\n\t\t\t\t\t}\n\t\t\t\t\treturn true;\n\t\t\t\t}\n\t\t\t\t// G4 写信页全屏覆写：整页容器（含收件人/主题/附件区）requestFullscreen\n\t\t\t\t// /exitFullscreen 切换（Fullscreen API 原生——纯 JS 零库；ESC 系统默认退出）。\n\t\t\t\tfunction grmailComposeFullscreen() {\n\t\t\t\t\tconst page = document.getElementById('compose-page');\n\t\t\t\t\tconst btn = document.getElementById('fullscreen-btn');\n\t\t\t\t\tif (!document.fullscreenElement) {\n\t\t\t\t\t\tpage.requestFullscreen().then(() => {\n\t\t\t\t\t\t\tbtn.textContent = btn.getAttribute('data-exit');\n\t\t\t\t\t\t}).catch(() => {});\n\t\t\t\t\t} else {\n\t\t\t\t\t\tdocument.exitFullscreen().then(() => {\n\t\t\t\t\t\t\tbtn.textContent = btn.getAttribute('data-enter');\n\t\t\t\t\t\t}).catch(() => {});\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\t// E-A（D8#10）：macOS 平台快捷键提示 ⌘ 记法自适应——U19「统一 Ctrl 记法\n\t\t\t\t// 不分支」口径的平台面收口（Quill shortKey 内部已平台自适应——本函数仅\n\t\t\t\t// 提示文案层；服务端渲染 title 保持 Ctrl 记法初值〔u17/u22 断言锚零触碰〕，\n\t\t\t\t// Mac 客户端加载后改写为 ⌘ 记法；navigator.platform 与 Quill 源码同源口径）。\n\t\t\t\tfunction grmailAdaptShortcutTitles() {\n\t\t\t\t\tif (!/Mac|iPhone|iPad/.test(navigator.platform || '')) { return; }\n\t\t\t\t\tdocument.querySelectorAll('#compose-toolbar button[title*=\"(Ctrl+\"]').forEach(function (btn) {\n\t\t\t\t\t\tbtn.title = btn.title.replace(/\\(Ctrl\\+([A-Z])\\)/g, '(⌘$1)');\n\t\t\t\t\t});\n\t\t\t\t}\n\t\t\t\tgrmailEditorInit();\n\t\t\t\tgrmailAdaptShortcutTitles();\n\t\t\t\t// ── CSV 候选合入（U16 Q5-A 既有——勾选行地址合并进所选 to/cc/bcc 输入框）──\n\t\t\t\tfunction grmailCsvImport() {\n\t\t\t\t\tconst f = document.getElementById('csv-file').files[0];\n\t\t\t\t\tif (!f) { return; }\n\t\t\t\t\tconst fd = new FormData();\n\t\t\t\t\tfd.append('csrf_token', document.querySelector('input[name=csrf_token]').value);\n\t\t\t\t\tfd.append('file', f);\n\t\t\t\t\tfetch('/compose/csv-import', { method: 'POST', body: fd })\n\t\t\t\t\t\t.then(r => r.ok ? r.text() : Promise.reject(r.status))\n\t\t\t\t\t\t.then(html => {\n\t\t\t\t\t\t\tdocument.getElementById('csv-result').innerHTML = html;\n\t\t\t\t\t\t})\n\t\t\t\t\t\t.catch(() => {\n\t\t\t\t\t\t\tvar pageEl = document.getElementById('compose-page');\n\t\t\t\t\t\t\tvar csvErr = pageEl && pageEl.dataset ? pageEl.dataset.csvErr : '';\n\t\t\t\t\t\t\tdocument.getElementById('csv-result').innerHTML = '<p class=\"error\">' + (csvErr || 'CSV parse failed') + '</p>';\n\t\t\t\t\t\t});\n\t\t\t\t}\n\t\t\t\tfunction grmailCsvMerge() {\n\t\t\t\t\tconst target = document.getElementById('csv-target').value;\n\t\t\t\t\tconst boxes = document.querySelectorAll('#csv-result input.csv-addr:checked');\n\t\t\t\t\tconst addrs = Array.from(boxes).map(b => b.value);\n\t\t\t\t\tif (addrs.length === 0) { return; }\n\t\t\t\t\tconst el = document.getElementById(target);\n\t\t\t\t\tconst cur = el.value.trim();\n\t\t\t\t\tconst merged = cur ? cur + ', ' + addrs.join(', ') : addrs.join(', ');\n\t\t\t\t\tel.value = merged;\n\t\t\t\t}\n\t\t\t</script></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 74, "</button> <span class=\"spacer\"></span> <a class=\"btn-text\" href=\"/\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var71 string
+			templ_7745c5c3_Var71, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "common.cancel"))
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 160, Col: 61}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var71))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 75, "</a></div></form><link rel=\"stylesheet\" href=\"/static/quill.snow.css\"><script src=\"/static/quill.js\"></script><script>\n\t\t\t\t// ── U17 富文本编辑器（G3/G4/G9——零框架内联 JS，沿 CSV 先例）──\n\t\t\t\t// 初始化：snow 主题+自定义 toolbar 容器（模板渲染双语 title）；\n\t\t\t\t// 初始内容经隐藏 textarea 携带（HTML 源文本）——dangerouslyPasteHTML\n\t\t\t\t// 注入（自产内容：草稿回填/回信预填，接收侧 iframe sandbox 既有防线）。\n\t\t\t\tlet grmailEditor = null;\n\t\t\t\t// U22 图片压缩工程常量（计划书 1.5③——实现级常量非 config 承载：\n\t\t\t\t// 最长边重采样上限/JPEG 质量档——D8#11：config 注入（compose-page\n\t\t\t\t// data-* 承载——改 config.json 热加载后下次渲染生效；缺省兜底 1920/0.85）\n\t\t\t\tconst GRMAIL_IMG_MAX_EDGE = parseInt(document.getElementById('compose-page').dataset.imgMaxEdge) || 1920;\n\t\t\t\tconst GRMAIL_JPEG_QUALITY = parseFloat(document.getElementById('compose-page').dataset.jpegQuality) || 0.85;\n\t\t\t\tfunction grmailEditorInit() {\n\t\t\t\t\tif (typeof Quill === 'undefined') { return; }\n\t\t\t\t\tgrmailEditor = new Quill('#editor-container', {\n\t\t\t\t\t\ttheme: 'snow',\n\t\t\t\t\t\tmodules: {\n\t\t\t\t\t\t\ttoolbar: {\n\t\t\t\t\t\t\t\t\tcontainer: '#compose-toolbar',\n\t\t\t\t\t\t\t\t\thandlers: {\n\t\t\t\t\t\t\t\t\t\t// U22：undo/redo 无 toolbar 内置按钮（源码核对\n\t\t\t\t\t\t\t\t\t\t// 零 ql-undo/ql-redo 注册）——经 history 模块\n\t\t\t\t\t\t\t\t\t\t// （内置）两行桥接\n\t\t\t\t\t\t\t\t\t\tundo: function() { this.quill.history.undo(); },\n\t\t\t\t\t\t\t\t\t\tredo: function() { this.quill.history.redo(); },\n\t\t\t\t\t\t\t\t\t\t// E-B（D8#13）：表格插入——Quill 2.0.3 内置 table\n\t\t\t\t\t\t\t\t\t\t// 模块（insertTable/行操作 API——vendor 源码实证）\n\t\t\t\t\t\t\t\t\t\t// 工具栏化激活：固定 2×2 起步（计划书 2.3-2 候选 A\n\t\t\t\t\t\t\t\t\t\t// 最小面自决；单元格编辑经 contenteditable 既有承载）\n\t\t\t\t\t\t\t\t\t\ttable: function() { this.quill.getModule('table').insertTable(2, 2); }\n\t\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t\t},\n\t\t\t\t\t\t\t\t// E-B：table 模块显式启用（snow 主题下幂等——注册形态\n\t\t\t\t\t\t\t\t// 与 vendor 内置一致，显式声明消除主题默认差异）\n\t\t\t\t\t\t\t\ttable: true,\n\t\t\t\t\t\t\t// U22 图片统一压缩接线（源码核对：工具栏选择/粘贴 files/\n\t\t\t\t\t\t\t// 拖放三路径全部汇聚 uploader.upload→options.handler——\n\t\t\t\t\t\t\t// 一处覆盖全入口；mimetypes 扩展 png/jpeg/gif/webp 与\n\t\t\t\t\t\t\t// image/* 等价，svg 排除——data: 内联脚本面收敛）\n\t\t\t\t\t\t\tuploader: {\n\t\t\t\t\t\t\t\tmimetypes: ['image/png', 'image/jpeg', 'image/gif', 'image/webp'],\n\t\t\t\t\t\t\t\thandler: grmailUploaderHandler\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}\n\t\t\t\t\t});\n\t\t\t\t\tconst initial = document.getElementById('editor-initial').value;\n\t\t\t\t\tif (initial && initial.trim() !== '') {\n\t\t\t\t\t\tgrmailEditor.clipboard.dangerouslyPasteHTML(initial);\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\t// Blob/File → data: URL（FileReader 原语——压缩输出与原样兜底共用）。\n\t\t\t\tfunction grmailReadAsDataURL(blob) {\n\t\t\t\t\treturn new Promise(resolve => {\n\t\t\t\t\t\tconst reader = new FileReader();\n\t\t\t\t\t\treader.onload = () => resolve(reader.result);\n\t\t\t\t\t\treader.onerror = () => resolve('');\n\t\t\t\t\t\treader.readAsDataURL(blob);\n\t\t\t\t\t});\n\t\t\t\t}\n\t\t\t\t// U22 图片压缩纯函数（Canvas 最长边重采样——缓解 base64 膨胀收口 U19\n\t\t\t\t// 登记项③）：①非 image/* 或解码失败：原样返回（尽力语义）；②最长边\n\t\t\t\t// ≤1920：原样零重采样（G9 小图保真）；③最长边 >1920：等比缩放至 1920\n\t\t\t\t// ——PNG 输入保 PNG（透明通道无损口径），其余输出 JPEG quality 0.85。\n\t\t\t\tasync function grmailCompressImage(file) {\n\t\t\t\t\tif (!file.type || !file.type.startsWith('image/')) { return grmailReadAsDataURL(file); }\n\t\t\t\t\t// D8#14：gif 跳过压缩——Canvas 重采样会静默丢失动画（单帧化），\n\t\t\t\t\t// 原样内联保真（U22 登记项收口：动图保动画）\n\t\t\t\t\tif (file.type === 'image/gif') { return grmailReadAsDataURL(file); }\n\t\t\t\t\tlet bmp = null;\n\t\t\t\t\ttry { bmp = await createImageBitmap(file); } catch (e) { bmp = null; }\n\t\t\t\t\tif (bmp && Math.max(bmp.width, bmp.height) > GRMAIL_IMG_MAX_EDGE) {\n\t\t\t\t\t\tconst scale = GRMAIL_IMG_MAX_EDGE / Math.max(bmp.width, bmp.height);\n\t\t\t\t\t\tconst w = Math.max(1, Math.round(bmp.width * scale));\n\t\t\t\t\t\tconst h = Math.max(1, Math.round(bmp.height * scale));\n\t\t\t\t\t\tconst canvas = document.createElement('canvas');\n\t\t\t\t\t\tcanvas.width = w;\n\t\t\t\t\t\tcanvas.height = h;\n\t\t\t\t\t\tcanvas.getContext('2d').drawImage(bmp, 0, 0, w, h);\n\t\t\t\t\t\tconst type = file.type === 'image/png' ? 'image/png' : 'image/jpeg';\n\t\t\t\t\t\tconst out = await new Promise(r => canvas.toBlob(r, type, GRMAIL_JPEG_QUALITY));\n\t\t\t\t\t\tif (bmp.close) { bmp.close(); }\n\t\t\t\t\t\tif (out) { return grmailReadAsDataURL(out); }\n\t\t\t\t\t}\n\t\t\t\t\tif (bmp && bmp.close) { bmp.close(); }\n\t\t\t\t\treturn grmailReadAsDataURL(file);\n\t\t\t\t}\n\t\t\t\t// U22 uploader 模块自定义 handler——默认 readAsDataURL 直插语义的压缩版\n\t\t\t\t// 复刻（逐图压缩→顺序 insertEmbed→光标后移；G9 data: 内联形态不变）。\n\t\t\t\tfunction grmailUploaderHandler(range, files) {\n\t\t\t\t\tconst uploads = Array.from(files).map(f => grmailCompressImage(f));\n\t\t\t\t\tPromise.all(uploads).then(urls => {\n\t\t\t\t\t\turls.forEach(u => {\n\t\t\t\t\t\t\tif (u) { grmailEditor.insertEmbed(range.index, 'image', u); }\n\t\t\t\t\t\t});\n\t\t\t\t\t\tgrmailEditor.setSelection(range.index + urls.length);\n\t\t\t\t\t});\n\t\t\t\t}\n\t\t\t\t// 提交桥接：编辑器容器非表单原生控件——submit 前将 root.innerHTML\n\t\t\t\t// 写入隐藏 input body（随表单 POST——端点形态零变更）。\n\t\t\t\tfunction grmailComposeSync() {\n\t\t\t\t\tif (grmailEditor) {\n\t\t\t\t\t\tdocument.getElementById('f-body').value = grmailEditor.root.innerHTML;\n\t\t\t\t\t}\n\t\t\t\t\treturn true;\n\t\t\t\t}\n\t\t\t\t// G4 写信页全屏覆写：整页容器（含收件人/主题/附件区）requestFullscreen\n\t\t\t\t// /exitFullscreen 切换（Fullscreen API 原生——纯 JS 零库；ESC 系统默认退出）。\n\t\t\t\tfunction grmailComposeFullscreen() {\n\t\t\t\t\tconst page = document.getElementById('compose-page');\n\t\t\t\t\tconst btn = document.getElementById('fullscreen-btn');\n\t\t\t\t\tif (!document.fullscreenElement) {\n\t\t\t\t\t\tpage.requestFullscreen().then(() => {\n\t\t\t\t\t\t\tbtn.textContent = btn.getAttribute('data-exit');\n\t\t\t\t\t\t}).catch(() => {});\n\t\t\t\t\t} else {\n\t\t\t\t\t\tdocument.exitFullscreen().then(() => {\n\t\t\t\t\t\t\tbtn.textContent = btn.getAttribute('data-enter');\n\t\t\t\t\t\t}).catch(() => {});\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\t// E-A（D8#10）：macOS 平台快捷键提示 ⌘ 记法自适应——U19「统一 Ctrl 记法\n\t\t\t\t// 不分支」口径的平台面收口（Quill shortKey 内部已平台自适应——本函数仅\n\t\t\t\t// 提示文案层；服务端渲染 title 保持 Ctrl 记法初值〔u17/u22 断言锚零触碰〕，\n\t\t\t\t// Mac 客户端加载后改写为 ⌘ 记法；navigator.platform 与 Quill 源码同源口径）。\n\t\t\t\tfunction grmailAdaptShortcutTitles() {\n\t\t\t\t\tif (!/Mac|iPhone|iPad/.test(navigator.platform || '')) { return; }\n\t\t\t\t\tdocument.querySelectorAll('#compose-toolbar button[title*=\"(Ctrl+\"]').forEach(function (btn) {\n\t\t\t\t\t\tbtn.title = btn.title.replace(/\\(Ctrl\\+([A-Z])\\)/g, '(⌘$1)');\n\t\t\t\t\t});\n\t\t\t\t}\n\t\t\t\tgrmailEditorInit();\n\t\t\t\tgrmailAdaptShortcutTitles();\n\t\t\t\t// ── CSV 候选合入（U16 Q5-A 既有——勾选行地址合并进所选 to/cc/bcc 输入框）──\n\t\t\t\tfunction grmailCsvImport() {\n\t\t\t\t\tconst f = document.getElementById('csv-file').files[0];\n\t\t\t\t\tif (!f) { return; }\n\t\t\t\t\tconst fd = new FormData();\n\t\t\t\t\tfd.append('csrf_token', document.querySelector('input[name=csrf_token]').value);\n\t\t\t\t\tfd.append('file', f);\n\t\t\t\t\tfetch('/compose/csv-import', { method: 'POST', body: fd })\n\t\t\t\t\t\t.then(r => r.ok ? r.text() : Promise.reject(r.status))\n\t\t\t\t\t\t.then(html => {\n\t\t\t\t\t\t\tdocument.getElementById('csv-result').innerHTML = html;\n\t\t\t\t\t\t})\n\t\t\t\t\t\t.catch(() => {\n\t\t\t\t\t\t\tvar pageEl = document.getElementById('compose-page');\n\t\t\t\t\t\t\tvar csvErr = pageEl && pageEl.dataset ? pageEl.dataset.csvErr : '';\n\t\t\t\t\t\t\tdocument.getElementById('csv-result').innerHTML = '<p class=\"error\">' + (csvErr || 'CSV parse failed') + '</p>';\n\t\t\t\t\t\t});\n\t\t\t\t}\n\t\t\t\tfunction grmailCsvMerge() {\n\t\t\t\t\tconst target = document.getElementById('csv-target').value;\n\t\t\t\t\tconst boxes = document.querySelectorAll('#csv-result input.csv-addr:checked');\n\t\t\t\t\tconst addrs = Array.from(boxes).map(b => b.value);\n\t\t\t\t\tif (addrs.length === 0) { return; }\n\t\t\t\t\tconst el = document.getElementById(target);\n\t\t\t\t\tconst cur = el.value.trim();\n\t\t\t\t\tconst merged = cur ? cur + ', ' + addrs.join(', ') : addrs.join(', ');\n\t\t\t\t\tel.value = merged;\n\t\t\t\t}\n\t\t\t</script></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

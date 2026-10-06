@@ -23,6 +23,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -226,6 +227,9 @@ func (s *Server) sessionMiddleware() gin.HandlerFunc {
 
 // requireAuth 认证门卫：无有效会话时 401+HX-Redirect（HTMX 请求）或 302（整页请求）——
 // 契约 v1.4.0 3.4：默认重定向入口 /login（主体未知场景）。
+// 管理员主体增强批次 G6（D15）：整页 302 前记录来源路径到临时 cookie（登录成功后
+// 回跳——消除「被登出重登后回不到原页」；仅 GET 安全方法记录，站内校验归消费端
+// safeRedirectPath；HTMX 片段请求无整页回跳语义不记录）。
 func requireAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if _, ok := currentSession(c); !ok {
@@ -234,12 +238,38 @@ func requireAuth() gin.HandlerFunc {
 				c.AbortWithStatus(http.StatusUnauthorized)
 				return
 			}
+			if c.Request.Method == http.MethodGet {
+				c.SetCookie(loginRedirectCookie, c.Request.URL.Path, 300, "/", "",
+					true, true) // 5min 窗口 HttpOnly+SameSite=Strict（站内回跳临时态）
+			}
 			c.Redirect(http.StatusFound, "/login")
 			c.Abort()
 			return
 		}
 		c.Next()
 	}
+}
+
+// loginRedirectCookie 登录回跳临时 cookie 名（G6——D15：会话超时 302 登录后回原页）。
+const loginRedirectCookie = "grmail_login_redirect"
+
+// safeRedirectPath 站内回跳路径校验（沿 /lang next 先例：绝对路径且非协议相对形态；
+// 非法值回 /——防开放重定向）。
+func safeRedirectPath(p string) string {
+	if p == "" || !strings.HasPrefix(p, "/") || strings.HasPrefix(p, "//") {
+		return "/"
+	}
+	return p
+}
+
+// redirectAfterLogin 登录成功回跳：读临时 cookie→站内校验→303 目标+清除；
+// 无 cookie/非法值回既有 / 口径（集中一处——admin/mailbox 两通道共用）。
+func redirectAfterLogin(c *gin.Context) string {
+	if p, err := c.Cookie(loginRedirectCookie); err == nil && p != "" {
+		c.SetCookie(loginRedirectCookie, "", -1, "/", "", true, true) // 清除（一次性）
+		return safeRedirectPath(p)
+	}
+	return "/"
 }
 
 // csrfProtect CSRF 校验中间件（契约 3.4：SameSite=Strict 之外的纵深防御；Q5-B 会话绑定）。

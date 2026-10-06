@@ -57,6 +57,7 @@ templ TokensView(lang Lang, list []*storage.ApiToken, newToken string, errText s
 					<code>{ newToken }</code>
 				</div>
 			}
+			<nav class="settings-nav"><a href="/admin/settings">{ Tr(lang, "nav.backSettings") }</a></nav>
 			<div class="page-head"><h2>{ Tr(lang, "tokens.h2Gen") }</h2></div>
 			<form method="post" action="/admin/tokens" class="actions">
 				<input type="hidden" name="csrf_token" value={ csrf }/>
@@ -72,6 +73,7 @@ templ TokensView(lang Lang, list []*storage.ApiToken, newToken string, errText s
 				</label>
 				<button class="primary" type="submit">{ Tr(lang, "common.create") }</button>
 			</form>
+			<nav class="settings-nav"><a href="/admin/settings">{ Tr(lang, "nav.backSettings") }</a></nav>
 			<div class="page-head"><h2>{ Tr(lang, "tokens.h2List") }</h2></div>
 			<div class="table-wrap">
 				<table class="mails">

@@ -10,6 +10,22 @@ import (
 	"database/sql"
 )
 
+const clearAdmin2FA = `-- name: ClearAdmin2FA :exec
+UPDATE users
+SET totp_secret = NULL, recovery_codes = NULL, totp_last_step = NULL, updated_at = ?
+WHERE id = ?
+`
+
+type ClearAdmin2FAParams struct {
+	UpdatedAt string
+	ID        int64
+}
+
+func (q *Queries) ClearAdmin2FA(ctx context.Context, arg ClearAdmin2FAParams) error {
+	_, err := q.db.ExecContext(ctx, clearAdmin2FA, arg.UpdatedAt, arg.ID)
+	return err
+}
+
 const ensureAdmin = `-- name: EnsureAdmin :execresult
 INSERT OR IGNORE INTO users (username, password_hash, is_admin, created_at, updated_at)
 VALUES (?, ?, 1, ?, ?)
@@ -31,15 +47,43 @@ func (q *Queries) EnsureAdmin(ctx context.Context, arg EnsureAdminParams) (sql.R
 	)
 }
 
+const getAdmin2FAByID = `-- name: GetAdmin2FAByID :one
+SELECT totp_secret, recovery_codes, totp_last_step
+FROM users
+WHERE id = ?
+`
+
+type GetAdmin2FAByIDRow struct {
+	TotpSecret    interface{}
+	RecoveryCodes interface{}
+	TotpLastStep  interface{}
+}
+
+func (q *Queries) GetAdmin2FAByID(ctx context.Context, id int64) (GetAdmin2FAByIDRow, error) {
+	row := q.db.QueryRowContext(ctx, getAdmin2FAByID, id)
+	var i GetAdmin2FAByIDRow
+	err := row.Scan(&i.TotpSecret, &i.RecoveryCodes, &i.TotpLastStep)
+	return i, err
+}
+
 const getUserByName = `-- name: GetUserByName :one
 SELECT id, username, password_hash, is_admin, created_at, updated_at
 FROM users
 WHERE username = ?
 `
 
-func (q *Queries) GetUserByName(ctx context.Context, username string) (User, error) {
+type GetUserByNameRow struct {
+	ID           int64
+	Username     string
+	PasswordHash string
+	IsAdmin      bool
+	CreatedAt    string
+	UpdatedAt    string
+}
+
+func (q *Queries) GetUserByName(ctx context.Context, username string) (GetUserByNameRow, error) {
 	row := q.db.QueryRowContext(ctx, getUserByName, username)
-	var i User
+	var i GetUserByNameRow
 	err := row.Scan(
 		&i.ID,
 		&i.Username,
@@ -49,6 +93,57 @@ func (q *Queries) GetUserByName(ctx context.Context, username string) (User, err
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const markAdminTOTPStep = `-- name: MarkAdminTOTPStep :exec
+UPDATE users
+SET totp_last_step = ?, updated_at = ?
+WHERE id = ?
+`
+
+type MarkAdminTOTPStepParams struct {
+	TotpLastStep interface{}
+	UpdatedAt    string
+	ID           int64
+}
+
+func (q *Queries) MarkAdminTOTPStep(ctx context.Context, arg MarkAdminTOTPStepParams) error {
+	_, err := q.db.ExecContext(ctx, markAdminTOTPStep, arg.TotpLastStep, arg.UpdatedAt, arg.ID)
+	return err
+}
+
+const setAdmin2FASecret = `-- name: SetAdmin2FASecret :exec
+UPDATE users
+SET totp_secret = ?, totp_last_step = NULL, updated_at = ?
+WHERE id = ?
+`
+
+type SetAdmin2FASecretParams struct {
+	TotpSecret interface{}
+	UpdatedAt  string
+	ID         int64
+}
+
+func (q *Queries) SetAdmin2FASecret(ctx context.Context, arg SetAdmin2FASecretParams) error {
+	_, err := q.db.ExecContext(ctx, setAdmin2FASecret, arg.TotpSecret, arg.UpdatedAt, arg.ID)
+	return err
+}
+
+const updateAdminRecoveryCodes = `-- name: UpdateAdminRecoveryCodes :exec
+UPDATE users
+SET recovery_codes = ?, updated_at = ?
+WHERE id = ?
+`
+
+type UpdateAdminRecoveryCodesParams struct {
+	RecoveryCodes interface{}
+	UpdatedAt     string
+	ID            int64
+}
+
+func (q *Queries) UpdateAdminRecoveryCodes(ctx context.Context, arg UpdateAdminRecoveryCodesParams) error {
+	_, err := q.db.ExecContext(ctx, updateAdminRecoveryCodes, arg.RecoveryCodes, arg.UpdatedAt, arg.ID)
+	return err
 }
 
 const updateUserPassword = `-- name: UpdateUserPassword :exec

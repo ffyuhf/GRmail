@@ -126,10 +126,13 @@ type SieveScript struct {
 }
 
 type User struct {
-	ID           int64
-	Username     string
-	PasswordHash string
-	IsAdmin      bool
-	CreatedAt    string
-	UpdatedAt    string
+	ID            int64
+	Username      string
+	PasswordHash  string
+	IsAdmin       bool
+	CreatedAt     string
+	UpdatedAt     string
+	TotpSecret    interface{}
+	RecoveryCodes interface{}
+	TotpLastStep  interface{}
 }

@@ -127,10 +127,13 @@ type SieveScript struct {
 }
 
 type User struct {
-	ID           int64
-	Username     string
-	PasswordHash string
-	IsAdmin      bool
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	ID            int64
+	Username      string
+	PasswordHash  string
+	IsAdmin       bool
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	TotpSecret    sql.NullString
+	RecoveryCodes sql.NullString
+	TotpLastStep  sql.NullInt64
 }

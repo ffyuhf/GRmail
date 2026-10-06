@@ -614,7 +614,8 @@ func main() {
 		go acmeMgr.Run(acmeCtx) // 续期循环（ctx 取消即退——退出序联动）
 	}
 	webServer := web.NewServer(web.ServerConfig{
-		Domain: domain,
+		Domain:       domain,
+		AdminMailbox: cfg.Server.AdminMailbox, // G1——D4：admin 视图随管理员主邮箱（空回退 postmaster）
 		TLSConfig: func() *tls.Config {
 			return tlsMgr.ServerTLSConfig(domain)
 		},
@@ -637,6 +638,9 @@ func main() {
 		// ── U24 增量注入（契约 v1.20.0 2.4——/settings/2fa 端点族+登录二步+强制
 		// 引导门卫激活；mailboxRepo 同源——FR-018 Webmail 双因素认证）──
 		TwoFactor: account.NewTwoFactorService(mailboxRepo),
+		// ── 管理员主体增强批次增量注入（G2——D13：/login 登录二步+/admin/2fa
+		// 绑定管理激活；userRepo 同源——FR-018 admin 通道扩展）──
+		AdminTwoFactor: account.NewAdminTwoFactorService(userRepo),
 		// ── Webmail管理职能批次增量注入（G6——/admin/plugins 只读状态页激活；
 		// pluginHost 406 行已构造——D7 缺陷收口）──
 		Plugins: pluginStatusAdapter{pluginHost},

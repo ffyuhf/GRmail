@@ -145,7 +145,7 @@ func (s *Server) login2FAPost(c *gin.Context) {
 }
 
 // redirectPostLogin 登录成功重定向（U24：强制标记且未绑定→引导绑定页 TC-028 判定③；
-// 否则既有 303 /——兼容口径集中一处）。
+// 否则 303 回跳——G6〔D15〕登录后回原页，无来源 cookie 时既有 / 口径）。
 func (s *Server) redirectPostLogin(c *gin.Context, mailboxID int64) {
 	if s.twoFactor != nil {
 		if st, err := s.twoFactor.State(c.Request.Context(), mailboxID); err == nil && st.Required && !st.Bound() {
@@ -153,7 +153,7 @@ func (s *Server) redirectPostLogin(c *gin.Context, mailboxID int64) {
 			return
 		}
 	}
-	c.Redirect(http.StatusSeeOther, "/")
+	c.Redirect(http.StatusSeeOther, redirectAfterLogin(c))
 }
 
 // ───────────────────────── /settings/2fa 端点族（FR-018 判定①/停用） ─────────────────────────

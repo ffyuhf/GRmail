@@ -51,6 +51,7 @@ templ SieveListView(d *SieveListData) {
 	@AppFrame(d.Lang, Tr(d.Lang, "sieve.title"), Tr(d.Lang, "sieve.nav"), false, d.CSRF, d.Nav) {
 		<div class="main content-page">
 		<section class="sieve-page">
+			<nav class="settings-nav"><a href="/settings">{ Tr(d.Lang, "nav.backSettings") }</a></nav>
 			<div class="page-head">
 				<h2>{ Tr(d.Lang, "sieve.h2") }</h2>
 				<a class="primary" href="/sieve/new">{ Tr(d.Lang, "sieve.newLink") }</a>
@@ -106,6 +107,7 @@ templ SieveEditView(d *SieveEditData) {
 	@AppFrame(d.Lang, Tr(d.Lang, "sieve.editTitle"), Tr(d.Lang, "sieve.nav"), false, d.CSRF, d.Nav) {
 		<div class="main content-page">
 		<section class="sieve-edit">
+			<nav class="settings-nav"><a href="/settings">{ Tr(d.Lang, "nav.backSettings") }</a></nav>
 			<div class="page-head">
 				// #30：new 态独立标题（原「编辑脚本：new」缺陷顺带收口）
 				if d.NameEditable {

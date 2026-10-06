@@ -65,7 +65,8 @@ templ Sidebar(d *MailListData) {
 	<nav class="sidebar">
 		<div class="side-caption">{ Tr(lang, "mail.folders") }</div>
 		for _, f := range d.Folders {
-			<div class={ "folder-item", templ.KV("active", f.Active) } tabindex="0" role="link"
+			<a class={ "folder-item", templ.KV("active", f.Active) } tabindex="0"
+				href={ fmt.Sprintf("/?folder=%d&page=1&pagesize=%d", f.ID, d.Pagesize) }
 				hx-get={ fmt.Sprintf("/mails?folder=%d&page=1&pagesize=%d", f.ID, d.Pagesize) }
 				hx-target="#mail-list" hx-indicator="#mail-loading">
 				if f.Kind == "custom" {
@@ -77,11 +78,11 @@ templ Sidebar(d *MailListData) {
 				if f.Unread > 0 {
 					<span class="unread">{ fmt.Sprintf("%d", f.Unread) }</span>
 				}
-			</div>
+			</a>
 		}
 		<details>
 			<summary>{ Tr(lang, "mail.manageFolders") }</summary>
-			<form hx-post="/folders" hx-target="#mail-list">
+			<form method="post" action="/folders">
 				<input type="hidden" name="csrf_token" value={ d.CSRF }/>
 				<input type="text" name="name" placeholder={ Tr(lang, "mail.folderName") }/>
 				<button class="btn-sm" type="submit">{ Tr(lang, "common.create") }</button>
@@ -91,12 +92,12 @@ templ Sidebar(d *MailListData) {
 					<details>
 						<summary>{ f.Name }</summary>
 						<div class="folder-manage-row">
-							<form hx-post={ fmt.Sprintf("/folders/%d/rename", f.ID) } hx-target="#mail-list">
+							<form method="post" action={ fmt.Sprintf("/folders/%d/rename", f.ID) }>
 								<input type="hidden" name="csrf_token" value={ d.CSRF }/>
 								<input type="text" name="name" placeholder={ Tr(lang, "mail.newName") }/>
 								<button class="btn-sm" type="submit">{ Tr(lang, "common.rename") }</button>
 							</form>
-							<form hx-post={ fmt.Sprintf("/folders/%d/delete", f.ID) } hx-target="#mail-list">
+							<form method="post" action={ fmt.Sprintf("/folders/%d/delete", f.ID) }>
 								<input type="hidden" name="csrf_token" value={ d.CSRF }/>
 								<button class="btn-sm danger" type="submit">{ Tr(lang, "common.delete") }</button>
 							</form>
@@ -114,6 +115,13 @@ templ Sidebar(d *MailListData) {
 templ MailListFragment(d *MailListData) {
 	{{ lang := NormalizeLang(d.Lang) }}
 	<div class="list-area">
+		if d.Noticed == "created" {
+			<p class="notice" role="status">{ Tr(lang, "mail.noticedCreated") }</p>
+		} else if d.Noticed == "renamed" {
+			<p class="notice" role="status">{ Tr(lang, "mail.noticedRenamed") }</p>
+		} else if d.Noticed == "deleted" {
+			<p class="notice" role="status">{ Tr(lang, "mail.noticedDeleted") }</p>
+		}
 		<div class="tool-bar">
 			<form hx-get="/search" hx-target="#mail-list" hx-indicator="#mail-loading">
 				<span class="search-box">

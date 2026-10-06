@@ -1,0 +1,82 @@
+// GRmail 管理员 2FA 页面组（管理员主体增强与Webmail职能补全批次 G2——D13 收口）。
+// AdminTwoFactorView：admin 主体 /admin/2fa 绑定管理页（AppFrame 骨架 isAdmin=true——
+// 平移 mailbox 版 TwoFactorView 三态形态，action 指向 /admin/2fa 端点族）；
+// AdminLogin2FAView：admin 登录二步验证页（Layout 骨架——会话建立前；action /login/2fa）。
+// 数据流：web/admin_2fa_web.go 构造 TwoFactorData → 本组件渲染（复用 mailbox 版视图
+// 模型与 twofactor.*/login2fa.* 既有双语键族——零新键）。
+// 依据：SRS v1.1.0 FR-018 admin 通道扩展（S3-W Q2-A 裁决 2026-10-05 23:20:14——
+// 「仅 Webmail HTTPS 登录入口」语义内，协议入口零触及）；IR-009；
+// 计划书 v1.1.0 1.3 G2（G2 批准 2026-10-05 23:31:37）。
+// 修改历史：
+//   2026-10-05 23:42:00 | 新建 | 管理员主体增强与Webmail职能补全批次（G2 批准 2026-10-05 23:31:37）
+package templates
+
+// AdminTwoFactorView 管理员 2FA 绑定管理页（GET /admin/2fa 与三 POST 操作响应统一渲染；
+// 三态互斥：Bound=停用态/Pending=绑定确认态（二维码+密钥）/未发起=启用入口态；
+// RecoveryCodes 仅确认成功响应一次性非空）。
+// 参数：d 2FA 页数据（Label=admin 用户名呈现——admin 主体无邮箱反查语义）。
+templ AdminTwoFactorView(d TwoFactorData) {
+	@AppFrame(d.Lang, Tr(d.Lang, "twofactor.title"), Tr(d.Lang, "home.adminKind"), true, d.CSRF, d.Nav) {
+		<div class="main content-page">
+		<div class="page-head"><h2>{ Tr(d.Lang, "twofactor.title") }</h2></div>
+		<p>{ Tr(d.Lang, "twofactor.intro") }</p>
+		if d.ErrText != "" {
+			<p class="error" role="alert">{ d.ErrText }</p>
+		}
+		if d.Bound {
+			<p>{ Tr(d.Lang, "twofactor.bound") }</p>
+			<form method="post" action="/admin/2fa/disable">
+				<input type="hidden" name="csrf_token" value={ d.CSRF }/>
+				<label>{ Tr(d.Lang, "twofactor.disableCode") } <input type="text" name="code" required maxlength="64" autocomplete="off"/></label>
+				<button class="danger" type="submit">{ Tr(d.Lang, "twofactor.disable") }</button>
+			</form>
+		} else {
+			if d.Pending {
+				<p>{ Tr(d.Lang, "twofactor.qr") }</p>
+				if d.QRDataURI != "" {
+					<span class="qr-box"><img src={ d.QRDataURI } alt="TOTP QR" width="256" height="256"/></span>
+				}
+				<p>{ Tr(d.Lang, "twofactor.secret") }{ colonFor(d.Lang) } <code>{ d.Secret }</code></p>
+				<form method="post" action="/admin/2fa/confirm">
+					<input type="hidden" name="csrf_token" value={ d.CSRF }/>
+					<label>{ Tr(d.Lang, "twofactor.confirmCode") } <input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" required maxlength="64" autofocus/></label>
+					<button class="primary" type="submit">{ Tr(d.Lang, "twofactor.confirm") }</button>
+				</form>
+			} else {
+				<form method="post" action="/admin/2fa/setup">
+					<input type="hidden" name="csrf_token" value={ d.CSRF }/>
+					<button class="primary" type="submit">{ Tr(d.Lang, "twofactor.setup") }</button>
+				</form>
+			}
+		}
+		if len(d.RecoveryCodes) > 0 {
+			<h2>{ Tr(d.Lang, "twofactor.recovery") }</h2>
+			<p>{ Tr(d.Lang, "twofactor.recoveryTip") }</p>
+			<ul class="recovery-codes">
+				for _, code := range d.RecoveryCodes {
+					<li><code>{ code }</code></li>
+				}
+			</ul>
+		}
+		</div>
+	}
+}
+
+// AdminLogin2FAView 管理员登录二步验证页（GET/POST /login/2fa——密码步通过后渲染；
+// t 为短时一次性 pending 凭据〔CSPRNG 32B·5min·取出即删〕——隐藏域承载；
+// code 字段统一接受 TOTP 验证码或恢复码；CSRF 主防线 SameSite=Strict 沿 mailbox 版）。
+// 参数：lang 界面语言；t pending 凭据；errText 验证失败提示（统一模糊口径）。
+templ AdminLogin2FAView(lang Lang, t string, errText string) {
+	@Layout(lang, Tr(lang, "login2fa.title"), errText) {
+		<div class="card">
+			<div class="card-head"><h1>GRmail</h1><span class="chip">{ Tr(lang, "login2fa.stepChip") }</span></div>
+			<form method="post" action="/login/2fa">
+				<input type="hidden" name="t" value={ t }/>
+				<label>{ Tr(lang, "login2fa.code") } <input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" required maxlength="64" autofocus/></label>
+				<button class="primary" type="submit">{ Tr(lang, "login2fa.submit") }</button>
+			</form>
+			<p class="hint">{ Tr(lang, "login2fa.recovery") }</p>
+			<p class="hint lang-switch"><a href={ langSwitchHref(lang, "/login/2fa") }>{ Tr(lang, "top.lang") }</a></p>
+		</div>
+	}
+}

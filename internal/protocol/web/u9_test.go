@@ -420,7 +420,9 @@ func TestU9FolderEndpoints(t *testing.T) {
 	cookie := env.u9Session(t, storage.SubjectTypeMailbox, env.mailbox.ID, "csrf-5")
 
 	res := env.postForm(t, "/folders", cookie, "csrf-5", map[string][]string{"name": {"项目"}})
-	if res.StatusCode != http.StatusOK {
+	// 管理员主体增强批次 G3（D9）：文件夹操作改 303 整页重定向+noted 反馈
+	// （原 200 片段响应——侧栏不在交换目标内不刷新致重复提交误操作）
+	if res.StatusCode != http.StatusSeeOther {
 		t.Fatalf("创建状态: %d", res.StatusCode)
 	}
 	if bodyOf(t, res); true {

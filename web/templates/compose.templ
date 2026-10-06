@@ -62,7 +62,7 @@ templ ComposeView(d *ComposeData) {
 						<div id="csv-result"></div>
 					</details>
 					if d.IsAdmin {
-						<label>{ Tr(lang, "compose.from") }<input type="text" name="from" value={ d.From } placeholder={ Tr(lang, "compose.fromPh") }/></label>
+						<label>{ Tr(lang, "compose.from") }<input type="text" name="from" id="f-from" value={ d.From } placeholder={ Tr(lang, "compose.fromPh") } data-domain={ d.Domain } autocomplete="off"/></label>
 					}
 				</section>
 				<section class="compose-section">

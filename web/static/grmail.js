@@ -107,6 +107,25 @@
 		}
 	});
 
+	/* ── ④d G5（管理员主体增强批次 D12）：发信地址前缀自动补全——blur/Enter 时机
+	 *     检测 #f-from 值非空且不含 @ 时追加「@主域」（data-domain 承载；已含 @ /
+	 *     空值零动作——完整地址与空语义不扰）── */
+	function grmailFromComplete(input) {
+		var v = input.value.trim();
+		var domain = input.getAttribute("data-domain");
+		if (v && domain && v.indexOf("@") < 0) {
+			input.value = v + "@" + domain;
+		}
+	}
+	document.addEventListener("blur", function (e) {
+		if (e.target && e.target.id === "f-from") { grmailFromComplete(e.target); }
+	}, true);
+	document.addEventListener("keydown", function (e) {
+		if (e.key === "Enter" && e.target && e.target.id === "f-from") {
+			grmailFromComplete(e.target);
+		}
+	});
+
 	/* ── ④c F15：危险操作二次确认（捕获阶段先于 submit——
 	 *     .danger/.menu-danger/data-confirm 按钮+批量 delete 表单拦截）── */
 	function grmailConfirmText(fallbackZh) {

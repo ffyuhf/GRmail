@@ -56,6 +56,7 @@ func parseListParams(c *gin.Context) listParams {
 }
 
 // renderMailListPage 首页整页（U9 homeGET 业务形态）：主体视图→侧边栏+首屏列表。
+// G3（D9）：?noted= 操作反馈呈现（文件夹三操作 303 回带）。
 func (s *Server) renderMailListPage(c *gin.Context) {
 	view, err := s.currentMailboxView(c)
 	if err != nil {
@@ -67,6 +68,7 @@ func (s *Server) renderMailListPage(c *gin.Context) {
 	if data == nil {
 		return
 	}
+	data.Noticed = c.Query("noted")
 	renderPage(c, http.StatusOK, templates.MailPageView(data))
 }
 

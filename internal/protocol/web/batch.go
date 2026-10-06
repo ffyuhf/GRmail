@@ -176,7 +176,9 @@ func (s *Server) folderCreatePOST(c *gin.Context) {
 		return
 	}
 	sessLogger(c).Info("文件夹创建", "name", name)
-	s.mailsFragmentGET(c) // 侧边栏随片段刷新（MailPageView 侧边栏区域同源数据）
+	// 管理员主体增强批次 G3（D9）：整页 303 重定向——侧栏+列表+管理区全刷新+
+	// noticed 反馈（原 hx 片段响应侧栏不在 #mail-list 内不刷新致重复提交误操作）
+	c.Redirect(http.StatusSeeOther, "/?noted=created")
 }
 
 // folderRenamePOST 重命名自定义文件夹（POST /folders/{id}/rename）。
@@ -205,7 +207,7 @@ func (s *Server) folderRenamePOST(c *gin.Context) {
 		return
 	}
 	sessLogger(c).Info("文件夹重命名", "id", id, "name", name)
-	s.mailsFragmentGET(c)
+	c.Redirect(http.StatusSeeOther, "/?noted=renamed") // G3——D9 整页刷新+反馈
 }
 
 // folderDeletePOST 删除自定义文件夹（POST /folders/{id}/delete；系统文件夹保护在
@@ -230,7 +232,7 @@ func (s *Server) folderDeletePOST(c *gin.Context) {
 		return
 	}
 	sessLogger(c).Info("文件夹删除", "id", id)
-	s.mailsFragmentGET(c)
+	c.Redirect(http.StatusSeeOther, "/?noted=deleted") // G3——D9 整页刷新+反馈
 }
 
 // folderErrResponse 文件夹操作错误 → 用户可读提示（FK 约束/重名/系统文件夹保护）。

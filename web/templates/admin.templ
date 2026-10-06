@@ -64,8 +64,17 @@ func twoFALabel(lang Lang, r *AdminMailboxRow) string {
 templ AdminMailboxesView(lang Lang, rows []*AdminMailboxRow, errText string, csrf string, nav *MailListData) {
 	@AppFrame(lang, Tr(lang, "admin.title"), Tr(lang, "home.adminKind"), true, csrf, nav) {
 		<div class="main content-page">
+			<nav class="settings-nav" aria-label={ Tr(lang, "settings.navTitle") }>
+				<a href="/admin/settings">{ Tr(lang, "nav.backSettings") }</a>
+			</nav>
 			<div class="page-head">
-				<h2>{ Tr(lang, "admin.h2") }</h2>
+				<h2>{ Tr(lang, "admin.h2") }（{ fmt.Sprintf("%d", len(rows)) }）</h2>
+				<select id="admin-status-filter" class="filter-input" onchange="grAdminStatusFilter(this.value)">
+					<option value="">{ Tr(lang, "mail.colStatus") }：{ Tr(lang, "admin.filterAll") }</option>
+					<option value="active">{ Tr(lang, "admin.statusActive") }</option>
+					<option value="shadow">{ Tr(lang, "admin.statusShadow") }</option>
+					<option value="disabled">{ Tr(lang, "admin.statusDisabled") }</option>
+				</select>
 				<input type="search" id="admin-filter" class="filter-input"
 					placeholder={ Tr(lang, "admin.searchPh") } autocomplete="off"
 					oninput="grAdminFilter(this.value)"/>
@@ -84,7 +93,7 @@ templ AdminMailboxesView(lang Lang, rows []*AdminMailboxRow, errText string, csr
 					</tr></thead>
 					<tbody id="admin-rows">
 						for _, m := range rows {
-							<tr data-addr={ strings.ToLower(m.Address) }>
+							<tr data-addr={ strings.ToLower(m.Address) } data-status={ m.Status }>
 								<td>
 									<details class="row-details">
 										<summary>{ m.Address }</summary>
@@ -127,10 +136,22 @@ templ AdminMailboxesView(lang Lang, rows []*AdminMailboxRow, errText string, csr
 			</div>
 			<script>
 				// grAdminFilter 地址即时过滤（G4——纯前端子串匹配；单管理员规模零后端增量）。
+				// 管理员主体增强批次 G7（D3）：复合状态过滤（地址+状态双条件与）。
+				function grAdminStatusFilter(status) {
+					var q = (document.getElementById('admin-filter') || {}).value || '';
+					grAdminApplyFilter(q.toLowerCase(), status);
+				}
 				function grAdminFilter(q) {
 					q = q.toLowerCase();
+					var sel = document.getElementById('admin-status-filter');
+					var status = sel ? sel.value : '';
+					grAdminApplyFilter(q, status);
+				}
+				function grAdminApplyFilter(q, status) {
 					document.querySelectorAll('#admin-rows tr[data-addr]').forEach(function (r) {
-						r.style.display = r.getAttribute('data-addr').indexOf(q) >= 0 ? '' : 'none';
+						var addrOk = r.getAttribute('data-addr').indexOf(q) >= 0;
+						var statusOk = !status || r.getAttribute('data-status') === status;
+						r.style.display = (addrOk && statusOk) ? '' : 'none';
 					});
 				}
 			</script>
@@ -166,6 +187,9 @@ func twoFAExtra(lang Lang, r *AdminMailboxRow) string {
 templ AdminUnregisteredView(lang Lang, list []*AdminMailboxRow, csrf string, nav *MailListData) {
 	@AppFrame(lang, Tr(lang, "admin.aggTitle"), Tr(lang, "home.adminKind"), true, csrf, nav) {
 		<div class="main content-page">
+			<nav class="settings-nav" aria-label={ Tr(lang, "settings.navTitle") }>
+				<a href="/admin/settings">{ Tr(lang, "nav.backSettings") }</a>
+			</nav>
 			<div class="page-head"><h2>{ Tr(lang, "admin.aggH2") }</h2></div>
 			if len(list) == 0 {
 				<div class="empty-state">

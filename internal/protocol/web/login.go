@@ -73,12 +73,28 @@ func (s *Server) adminLoginPOST(c *gin.Context) {
 	if err := s.attempts.ClearSubject(ctx, subjectKey); err != nil { // 成功清零（尽力语义）
 		sessLogger(c).Warn("登录成功清零失败", "error", err)
 	}
+	// 管理员主体增强批次（G2——D13：FR-018 admin 通道扩展；S3-W Q2-A）：绑定完成账号
+	// 密码通过后须第二因子方可建立 admin 会话——签发 pending 凭据转二步页；未绑定/
+	// 服务未注入走直通路径（兼容锚——TC-027 判定②语义同款；协议入口零触及保持）。
+	if s.adminTwoFactor != nil {
+		st, stErr := s.adminTwoFactor.State(ctx, subjectID)
+		if stErr != nil {
+			sessLogger(c).Error("admin 2FA 状态查询故障", "error", stErr)
+			c.Status(http.StatusInternalServerError)
+			return
+		}
+		if st.Bound() {
+			tok := s.pending2fa.issue(subjectID, username)
+			renderPage(c, http.StatusOK, templates.AdminLogin2FAView(langOf(c), tok, ""))
+			return
+		}
+	}
 	if _, err := s.sess.issueSession(c, storage.SubjectTypeAdmin, subjectID); err != nil {
 		sessLogger(c).Error("会话签发失败", "error", err)
 		renderPage(c, http.StatusInternalServerError, templates.AdminLoginView(langOf(c), templates.Tr(langOf(c), "login.errInvalid")))
 		return
 	}
-	c.Redirect(http.StatusSeeOther, "/") // 303（契约 3.1 重定向形态）
+	c.Redirect(http.StatusSeeOther, redirectAfterLogin(c)) // 303（G6——D15 登录后回跳原页）
 }
 
 // verifyAdmin 管理员凭据校验（三态：无效/有效/存储故障）。

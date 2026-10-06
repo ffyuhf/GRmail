@@ -62,6 +62,7 @@ type MailListData struct {
 	Keyword      string // 搜索场景
 	IsSearch     bool
 	CSRF         string
+	Noticed      string // G3——D9：文件夹操作结果反馈（?noted=created|renamed|deleted 查询参）
 }
 
 // FolderEntry 侧边栏平铺行（FR-012：单层无嵌套渲染——REQ-021）。
@@ -99,6 +100,7 @@ type ComposeData struct {
 	ImageMaxEdge int           // D8#11：压缩最长边（config 注入——compose-page data-* 承载；0=缺省 1920）
 	JpegQuality  float64       // D8#11：JPEG 质量档（0=缺省 0.85）
 	Nav          *MailListData // 全站侧栏数据（D3 B 形态——AppFrame 承载；nil=无邮箱异常态降级）
+	Domain       string        // 主域（G5——D12：from 输入 data-domain 前缀自动补 @主域）
 }
 
 // ImgMaxEdgeAttr 最长边渲染值（D8#11——零值兜底缺省 1920：模板层兜底使测试直调

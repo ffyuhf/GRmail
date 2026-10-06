@@ -105,10 +105,13 @@ func u18RoundTrip(t *testing.T, driver, dsn string) {
 		t.Fatalf("[%s] 预置 users 行: %v", driver, err)
 	}
 
-	// 2. Down 两步（00010→00009→00008）：mailboxes 2FA 四列消失+mailbox_keywords/
-	// internal_date/ret_full 保持+users 行无损（迁移演进后末版本=00010〔U25 聚合
-	// 文件夹〕——两步回退至 v8 对齐断言面；数据行无损语义不变；沿 00006~00009
+	// 2. Down 三步（00011→00010→00009→00008）：mailboxes 2FA 四列消失+mailbox_keywords/
+	// internal_date/ret_full 保持+users 行无损（迁移演进后末版本=00011〔管理员主体增强
+	// 批次 users 2FA 三列〕——三步回退至 v8 对齐断言面；数据行无损语义不变；沿 00006~00010
 	// 加入时的同一适配先例：U24 断言面 mailboxes 2FA 列组保持，本批仅增一步回退）
+	if err = u18MigrateDownOne(ctx, db, driver); err != nil {
+		t.Fatalf("[%s] 迁移 Down 00011: %v", driver, err)
+	}
 	if err = u18MigrateDownOne(ctx, db, driver); err != nil {
 		t.Fatalf("[%s] 迁移 Down 00010: %v", driver, err)
 	}

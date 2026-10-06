@@ -70,13 +70,14 @@ var ErrTLSNotReady = errors.New("web: TLS 证书未就绪")
 // ServerConfig Web 服务配置（依赖注入闭包形态，U6/U7 ServerConfig 同款；U9 增四依赖字段；
 // U10 增六注入位——nil 语义均回退旧形态，既有测试零适配）。
 type ServerConfig struct {
-	Domain    string                  // 主域名（证书 ServerName 语境与日志关联；admin 视图 postmaster@域名、写信 From 域）
-	TLSConfig func() *tls.Config      // 服务端 TLS 配置供给（nil=未就绪；transport.TLSManager.ServerTLSConfig 注入）
-	Messages  storage.MessageRepo     // 邮件仓储（U9：列表/详情/批量/搜索/草稿落库）
-	Folders   storage.FolderRepo      // 文件夹仓储（U9：侧边栏+管理三端点）——account.Service 同源注入
-	Mailboxes storage.MailboxRepo     // 邮箱仓储（U9：admin 三态列表+mailbox 主体发件地址反查）
-	Blobs     storage.BlobStore       // CAS 字节存储（U9：详情/附件读取、草稿双写）
-	Submit    mail.SubmissionPipeline // 提交管道（U9：写信发送入队——流程设计 3.1 同链路复用）
+	Domain       string                  // 主域名（证书 ServerName 语境与日志关联；admin 视图 postmaster@域名、写信 From 域）
+	AdminMailbox string                  // 管理员主邮箱（G1——D4：admin 视图随主邮箱；空=postmaster@主域 兼容锚）
+	TLSConfig    func() *tls.Config      // 服务端 TLS 配置供给（nil=未就绪；transport.TLSManager.ServerTLSConfig 注入）
+	Messages     storage.MessageRepo     // 邮件仓储（U9：列表/详情/批量/搜索/草稿落库）
+	Folders      storage.FolderRepo      // 文件夹仓储（U9：侧边栏+管理三端点）——account.Service 同源注入
+	Mailboxes    storage.MailboxRepo     // 邮箱仓储（U9：admin 三态列表+mailbox 主体发件地址反查）
+	Blobs        storage.BlobStore       // CAS 字节存储（U9：详情/附件读取、草稿双写）
+	Submit       mail.SubmissionPipeline // 提交管道（U9：写信发送入队——流程设计 3.1 同链路复用）
 
 	// ── U10 增量注入位（Q2-A/Q3-A/Q7-C；nil=缺省行为）──
 	SetupDone       func() bool                             // setupCompleted 快照（nil=恒 true——既有部署/测试形态，分流不生效）
@@ -102,32 +103,36 @@ type ServerConfig struct {
 	// ── U24 增量注入位（v1.20.0；nil=/settings/2fa 端点族 503+登录二步判定跳过——渐进部署形态）──
 	TwoFactor *account.TwoFactorService // 2FA 域服务（FR-018；account 包承载——web→account 单向合法）
 
+	// ── 管理员主体增强批次增量注入位（nil=/admin/2fa 端点族 503+/login 二步判定跳过——渐进部署形态）──
+	AdminTwoFactor *account.AdminTwoFactorService // admin 2FA 域服务（G2——D13：/login 登录二步+/admin/2fa 绑定管理）
+
 	// ── Webmail管理职能批次增量注入位（nil=/admin/plugins 端点 503——渐进部署形态）──
 	Plugins PluginStatusSource // 插件状态只读供给（G6——main 装配桥接 supervisor.StatusSnapshot）
 }
 
 // Server Web 服务端（Gin 引擎宿主）。
 type Server struct {
-	cfg          ServerConfig
-	sess         *sessionService
-	sessions     storage.SessionRepo
-	users        storage.UserRepo
-	attempts     storage.LoginAttemptRepo
-	accounts     *account.Service
-	messages     storage.MessageRepo       // U9 业务依赖（cfg.Messages 装配）
-	folders      storage.FolderRepo        // U9
-	mailboxes    storage.MailboxRepo       // U9
-	blobs        storage.BlobStore         // U9
-	submit       mail.SubmissionPipeline   // U9
-	sieveScripts storage.SieveScriptRepo   // U12（v1.8.0——/sieve 端点族；nil=503 渐进态）
-	stsPolicy    STSPolicyProvider         // U13（v1.9.0——mta-sts 端点；nil=404 停发态）
-	tokens       storage.TokenRepo         // U14（v1.10.0——Bearer 通道+/admin/tokens；nil=渐进态）
-	twoFactor    *account.TwoFactorService // U24（v1.20.0——/settings/2fa+登录二步；nil=渐进态）
-	plugins      PluginStatusSource        // Webmail管理职能批次（G6——/admin/plugins；nil=渐进态）
-	pending2fa   *pendingLoginStore        // U24：短时一次性登录凭据仓（S4-W Q1-A 内存态）
-	engine       *gin.Engine
-	httpSrv      *http.Server
-	listeners    []net.Listener
+	cfg            ServerConfig
+	sess           *sessionService
+	sessions       storage.SessionRepo
+	users          storage.UserRepo
+	attempts       storage.LoginAttemptRepo
+	accounts       *account.Service
+	messages       storage.MessageRepo            // U9 业务依赖（cfg.Messages 装配）
+	folders        storage.FolderRepo             // U9
+	mailboxes      storage.MailboxRepo            // U9
+	blobs          storage.BlobStore              // U9
+	submit         mail.SubmissionPipeline        // U9
+	sieveScripts   storage.SieveScriptRepo        // U12（v1.8.0——/sieve 端点族；nil=503 渐进态）
+	stsPolicy      STSPolicyProvider              // U13（v1.9.0——mta-sts 端点；nil=404 停发态）
+	tokens         storage.TokenRepo              // U14（v1.10.0——Bearer 通道+/admin/tokens；nil=渐进态）
+	twoFactor      *account.TwoFactorService      // U24（v1.20.0——/settings/2fa+登录二步；nil=渐进态）
+	adminTwoFactor *account.AdminTwoFactorService // 管理员主体增强批次（G2——/login 二步+/admin/2fa；nil=渐进态）
+	plugins        PluginStatusSource             // Webmail管理职能批次（G6——/admin/plugins；nil=渐进态）
+	pending2fa     *pendingLoginStore             // U24：短时一次性登录凭据仓（S4-W Q1-A 内存态）
+	engine         *gin.Engine
+	httpSrv        *http.Server
+	listeners      []net.Listener
 }
 
 // NewServer 构造 Web 服务端：引擎装配+中间件链+路由挂载。
@@ -138,23 +143,24 @@ func NewServer(cfg ServerConfig, sessions storage.SessionRepo, users storage.Use
 	attempts storage.LoginAttemptRepo, accounts *account.Service) *Server {
 	gin.SetMode(gin.ReleaseMode) // 服务形态固定（测试经 Serve 注入驱动，无需 TestMode 副作用）
 	s := &Server{
-		cfg:          cfg,
-		sess:         newSessionService(sessions, cfg.SessionSnapshot),
-		sessions:     sessions,
-		users:        users,
-		attempts:     attempts,
-		accounts:     accounts,
-		messages:     cfg.Messages,
-		folders:      cfg.Folders,
-		mailboxes:    cfg.Mailboxes,
-		blobs:        cfg.Blobs,
-		submit:       cfg.Submit,
-		sieveScripts: cfg.SieveScripts,
-		stsPolicy:    cfg.STSPolicy,
-		tokens:       cfg.Tokens,
-		twoFactor:    cfg.TwoFactor,
-		plugins:      cfg.Plugins,
-		pending2fa:   newPendingLoginStore(),
+		cfg:            cfg,
+		sess:           newSessionService(sessions, cfg.SessionSnapshot),
+		sessions:       sessions,
+		users:          users,
+		attempts:       attempts,
+		accounts:       accounts,
+		messages:       cfg.Messages,
+		folders:        cfg.Folders,
+		mailboxes:      cfg.Mailboxes,
+		blobs:          cfg.Blobs,
+		submit:         cfg.Submit,
+		sieveScripts:   cfg.SieveScripts,
+		stsPolicy:      cfg.STSPolicy,
+		tokens:         cfg.Tokens,
+		twoFactor:      cfg.TwoFactor,
+		adminTwoFactor: cfg.AdminTwoFactor,
+		plugins:        cfg.Plugins,
+		pending2fa:     newPendingLoginStore(),
 	}
 	s.engine = gin.New()
 	// U23：HTTP 请求摘要 debug 中间件（entryMiddleware 后——logid ctx 已建可取；Q2-A 摘要口径）
@@ -178,6 +184,9 @@ func (s *Server) mountRoutes() {
 	// U24：登录二步（会话前——pending 凭据承载，无 requireAuth；FR-018 判定②）
 	s.engine.GET("/webmail/login/2fa", s.login2FAGET)
 	s.engine.POST("/webmail/login/2fa", s.login2FAPost)
+	// 管理员主体增强批次（G2——D13：admin 登录二步端点；公开路由——会话建立前）
+	s.engine.GET("/login/2fa", s.adminLogin2FAGET)
+	s.engine.POST("/login/2fa", s.adminLogin2FAPost)
 	s.engine.POST("/logout", s.logoutPOST)
 	s.engine.GET("/lang", s.langSetGET) // U16 Q2-A：语言切换（公开——偏好先于认证承载）
 
@@ -229,6 +238,12 @@ func (s *Server) mountRoutes() {
 	auth.POST("/settings/2fa/setup", s.twoFactorSetupPOST)
 	auth.POST("/settings/2fa/confirm", s.twoFactorConfirmPOST)
 	auth.POST("/settings/2fa/disable", s.twoFactorDisablePOST)
+	// /admin/2fa 端点族（管理员主体增强批次 G2——D13：admin 绑定管理；
+	// admin2faGuard 内 admin 主体限定+AdminTwoFactor nil=503 渐进态）
+	auth.GET("/admin/2fa", s.admin2faGET)
+	auth.POST("/admin/2fa/setup", s.admin2faSetupPOST)
+	auth.POST("/admin/2fa/confirm", s.admin2faConfirmPOST)
+	auth.POST("/admin/2fa/disable", s.admin2faDisablePOST)
 
 	// Webmail管理职能批次（G1/G2——D1/D6）：个人设置枢纽+改密双通道
 	// （mailbox 改密 /settings/password；admin 改密 /admin/password——分域承载防主体混淆）

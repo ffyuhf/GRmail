@@ -84,14 +84,16 @@ type BlobConf struct {
 
 // ServerConf 服务端点与域名配置
 type ServerConf struct {
-	Domain            string `json:"domain"`            // 主域名（发信身份与收信判定；RCPT 本域判定口径）
-	HTTPPort          int    `json:"httpPort"`          // Webmail HTTPS 端口
-	SMTPPort          int    `json:"smtpPort"`          // SMTP 25 收信监听端口（Q2-A 裁决 2026-09-17 03:06:39；缺省 25，监听器启动期绑定——重启生效，U4 计划书 1.5⑪）
-	SubmissionPort    int    `json:"submissionPort"`    // SMTP 587 提交端口（STARTTLS；U5 Q2-A 2026-09-17 11:28:56；缺省 587，重启生效）
-	SubmissionTLSPort int    `json:"submissionTLSPort"` // SMTP 465 提交端口（隐式 TLS，rfc8314 3.3；缺省 465，重启生效）
-	IMAPPort          int    `json:"imapPort"`          // IMAP4rev2 993 端口（仅隐式 TLS——U6 Q1-A 2026-09-18 00:00:04，rfc8314 §1/§3.2 推荐形态；缺省 993，重启生效）
-	POP3Port          int    `json:"pop3Port"`          // POP3 995 端口（仅隐式 TLS——U7 计划书 v1.0.0 步骤 1，rfc8314 §3.2；缺省 995，重启生效）
-	ManageSievePort   int    `json:"manageSievePort"`   // ManageSieve 4190 端口（明文承载+STARTTLS 可选升级——U12b 计划书 1.5①，rfc5804 §1.8；缺省 4190，重启生效）
+	Domain             string `json:"domain"`             // 主域名（发信身份与收信判定；RCPT 本域判定口径）
+	AdminMailbox       string `json:"adminMailbox"`       // 管理员主邮箱地址（管理员主体增强批次 G1——D4：向导步 2 前缀@主域落盘；空=admin Webmail 视图回退 postmaster@主域〔存量兼容锚〕）
+	AdminMailboxPrefix string `json:"adminMailboxPrefix"` // 管理员邮箱前缀（G1：向导步 2 输入的中间态——步 3 域名确定后组合 AdminMailbox；postmaster 地址本身保留 RFC 5321 §4.5.1）
+	HTTPPort           int    `json:"httpPort"`           // Webmail HTTPS 端口
+	SMTPPort           int    `json:"smtpPort"`           // SMTP 25 收信监听端口（Q2-A 裁决 2026-09-17 03:06:39；缺省 25，监听器启动期绑定——重启生效，U4 计划书 1.5⑪）
+	SubmissionPort     int    `json:"submissionPort"`     // SMTP 587 提交端口（STARTTLS；U5 Q2-A 2026-09-17 11:28:56；缺省 587，重启生效）
+	SubmissionTLSPort  int    `json:"submissionTLSPort"`  // SMTP 465 提交端口（隐式 TLS，rfc8314 3.3；缺省 465，重启生效）
+	IMAPPort           int    `json:"imapPort"`           // IMAP4rev2 993 端口（仅隐式 TLS——U6 Q1-A 2026-09-18 00:00:04，rfc8314 §1/§3.2 推荐形态；缺省 993，重启生效）
+	POP3Port           int    `json:"pop3Port"`           // POP3 995 端口（仅隐式 TLS——U7 计划书 v1.0.0 步骤 1，rfc8314 §3.2；缺省 995，重启生效）
+	ManageSievePort    int    `json:"manageSievePort"`    // ManageSieve 4190 端口（明文承载+STARTTLS 可选升级——U12b 计划书 1.5①，rfc5804 §1.8；缺省 4190，重启生效）
 }
 
 // TLSConf 服务端 TLS 证书配置（U5 Q2-A：transport 域最小集的输入；ACME 自动签发归 U10，

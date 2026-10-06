@@ -71,6 +71,14 @@ func (s *Server) composeGET(c *gin.Context) {
 	s.applyEditorConf(data) // D8#11：压缩参数快照注入（CfgSnapshot 热加载态——每渲染取最新）
 	ctx := c.Request.Context()
 
+	// 管理员主体增强批次 G5（D12）：发件地址默认预填当前视图主邮箱（admin=主邮箱/
+	// postmaster 地址——空置消除）；Domain 供前端前缀自动补 @主域（mailbox 主体
+	// from 输入框不呈现——发信自身地址语义保持）。
+	if view.IsAdmin {
+		data.From = view.Label
+	}
+	data.Domain = s.cfg.Domain
+
 	if rid := c.Query("reply"); rid != "" {
 		if id, e := strconv.ParseInt(rid, 10, 64); e == nil && id > 0 {
 			if msg, e := s.messages.GetDetail(ctx, view.MailboxID, id); e == nil {
