@@ -292,15 +292,18 @@ func main() {
 	// U21：SQL 观测配置热加载订阅（config.Log 三键 → 装饰器快照——每查询读热生效；
 	// L-C 第四键 sqlCommentId 同链）
 	configWatcher.Subscribe(sqlLogReloadSubscriber{})
-	// 传输安全与日志增强批次 L-D：日志装配热重建订阅（五键变更无重启生效）
-	configWatcher.Subscribe(logReloadSubscriber{})
+	// 传输安全与日志增强批次 L-D：日志装配热重建订阅（五键变更无重启生效；
+	// 配置并发批 F2：差异比对形态——指针注入 mu 状态跨调用持续）
+	configWatcher.Subscribe(&logReloadSubscriber{})
 
 	// 6.5 U10 配置原子读改写闭包（向导每步+/admin/settings/ACME 回写共用——Q2-A/Q7-C）：
 	// Current 快照→modify→Save 原子写→同步 Reload 广播（fsnotify 事件幂等再触发）。
-	// 并发注记：单管理员低频写场景，读-改-写竞态窗口可容忍（登记 U10 修改文档第三章）。
+	// 配置并发批 F1（A-10/D3）：Current 自本批起返回深拷贝副本——modify 作用于
+	// 副本（内部配置实例零就地触碰，热加载窗口并发读者观察面根治；原「读-改-写
+	// 竞态窗口可容忍」U10 登记口径就此收口）。
 	saveConfig := func(modify func(*config.Config)) error {
-		fresh := configWatcher.Current()
-		modify(fresh)
+		fresh := configWatcher.Current() // 快照副本（与内部实例零共享）
+		modify(fresh)                    // 修改副本（fresh 已为深拷贝指针）
 		if err := config.Save(configPath, fresh); err != nil {
 			return err
 		}
@@ -332,8 +335,16 @@ func main() {
 
 	// 7.3 SMTP 服务端（Q3-B：明文 25 收信；SIZE/CatchAll 经快照热生效——U4 计划书 1.5⑪；
 	// U10 Q8-A：TLSConfig 快照注入——证书就绪时 EHLO 通告 STARTTLS、可选升级不强制本地投递，
-	// rfc3207 §4 L129-136 MUST NOT 锚；tlsMgr 前向声明+闭包延迟解析（7.4.1 赋值））
+	// rfc3207 §4 L129-136 MUST NOT 锚。
+	// 配置并发批 F7①（B-C6 启动竞态收口）：TLS 管理器构造自 7.4.1 前移至此——
+	// 原声明与赋值分离窗口内 SMTP goroutine 的 TLSConfig 闭包可在赋值前被并发
+	// 调用（跨 goroutine 无同步读）；NewTLSManager 构造零依赖 SMTP，纯顺序调整根治。）
 	var tlsMgr *transport.TLSManager
+	tlsMgr, err = transport.NewTLSManager(cfg.TLS)
+	if err != nil {
+		logger.Error("TLS 证书初始加载失败", "error", err)
+		os.Exit(1)
+	}
 	smtpServer := smtp.NewServer(smtp.ServerConfig{
 		Domain: cfg.Server.Domain,
 		MaxMessageSize: func() int64 {
@@ -364,12 +375,8 @@ func main() {
 	logger.Info("SMTP 收信监听已启动（U4 明文；STARTTLS 归 U10）")
 
 	// 7.4 U5 提交与投递编排（Q2-A/Q3-A/Q4-A/Q5-C/Q6-A 修订/Q7-A 裁决；架构第四章单向链）
-	// 7.4.1 transport TLS 证书中心（订阅 config 路径变更热重载+证书文件替换热重载）
-	tlsMgr, err = transport.NewTLSManager(cfg.TLS) // var 前向声明于 7.3（U10 25 端点注入）
-	if err != nil {
-		logger.Error("TLS 证书初始加载失败", "error", err)
-		os.Exit(1)
-	}
+	// 7.4.1 transport TLS 证书中心（订阅 config 路径变更热重载+证书文件替换热重载；
+	// 构造已前移至 7.3——配置并发批 F7①，此处仅订阅与证书监听挂载）
 	configWatcher.Subscribe(tlsMgr)
 	rootCtxTLS, cancelTLS := context.WithCancel(rootCtx)
 	defer cancelTLS()
@@ -426,16 +433,34 @@ func main() {
 	// 7.4.2g U16 存量正文缓存回填任务（Q3-A——迁移 00005 前存量行 body_cache 补齐：
 	// 批查 WHERE body_cache IS NULL →Blob 读→BodyCacheOf 截断提取→FillBodyCache；
 	// 尽力语义（单行失败跳过计数 Warn——缓存可重建，下轮启动重跑自然收敛）；
-	// ctx 派生 rootCtx——信号退出联动（沿 cancelPurge 先例）
-	go runBodyCacheBackfill(rootCtx, messageRepo, blobStore, logger)
-	logger.Info("正文缓存回填任务已启动（U16：存量行渐进补齐——body_cache 搜索维度全覆盖）")
+	// ctx 派生 rootCtx——信号退出联动（沿 cancelPurge 先例）。
+	// 配置并发批 F11（M5 错峰限速）：启动延迟 60s——避开全协议启动密集窗口
+	// （升级首启十万级存量高 IO/内存与协议就绪争资源——NFR-002 风险面削减）。
+	go func() {
+		select {
+		case <-time.After(60 * time.Second):
+		case <-rootCtx.Done():
+			return
+		}
+		runBodyCacheBackfill(rootCtx, messageRepo, blobStore, logger)
+	}()
+	logger.Info("正文缓存回填任务已启动（U16：存量行渐进补齐——60s 错峰后执行）")
 
 	// 7.4.2j U25 存量影子归档回填任务（S3-W Q4 裁决 2026-10-02 19:31:14——shadow
 	// 邮箱历史归档信补聚合副本：ListShadowBackfill 批查→CopyToAggregateFolder 逐条；
 	// NOT EXISTS 幂等——重跑自然跳过；尽力语义+失败熔断+ctx 退出联动沿
-	// runBodyCacheBackfill 先例）
-	go runAggregateBackfill(rootCtx, accounts, messageRepo, domain, logger)
-	logger.Info("影子归档聚合回填任务已启动（U25：存量 shadow 来信补聚合副本）")
+	// runBodyCacheBackfill 先例）。
+	// 配置并发批 F11（M5 错峰限速）：启动延迟 120s——与 body_cache 回填（60s）
+	// 双任务错峰展开，避免批处理任务同窗并发争资源。
+	go func() {
+		select {
+		case <-time.After(120 * time.Second):
+		case <-rootCtx.Done():
+			return
+		}
+		runAggregateBackfill(rootCtx, accounts, messageRepo, domain, logger)
+	}()
+	logger.Info("影子归档聚合回填任务已启动（U25：存量 shadow 来信补聚合副本——120s 错峰后执行）")
 
 	// 7.4.2h U18 sessions 过期清理后台任务（U14b 修改文档登记项①收口——契约 v1.4.0
 	// 2.1 PurgeExpired 既有接口运行态接线，零签名变更）：24h tick 首轮即跑（清理
@@ -739,15 +764,19 @@ func main() {
 	if err := sieveManageServer.Shutdown(); err != nil { // U12b：协议端点链（POP3 后、worker 前——1.5④）
 		logger.Error("ManageSieve 关闭异常", "error", err)
 	}
+	// 配置并发批 F8（B-C8 退出序收口）：SMTP 25 收信入口先于 worker drain 关闭
+	// ——原序 cancelWorker+等 stopped 先于 SMTP Shutdown，25 端口短窗继续收信
+	// 入队但本轮不投递（对端 250 后滞留至下次启动）；先关收信入口再排空队列，
+	// 「入队-投递」窗口闭合（drain 期在途投递照常完成）。
+	if err := smtpServer.Shutdown(); err != nil {
+		logger.Error("SMTP 关闭异常", "error", err)
+	}
 	pluginHost.Shutdown() // U15：插件子进程停止（协议端点链后——计划书 1.5⑥）
 	cancelWorker()
 	select {
 	case <-stopped:
 	case <-time.After(10 * time.Second):
 		logger.Warn("worker drain 超时，强制继续退出")
-	}
-	if err := smtpServer.Shutdown(); err != nil {
-		logger.Error("SMTP 关闭异常", "error", err)
 	}
 	_ = tlsMgr.Close()
 	if err := configWatcher.Close(); err != nil && !errors.Is(err, os.ErrClosed) {
@@ -828,6 +857,13 @@ func runBodyCacheBackfill(ctx context.Context, messages storage.MessageRepo, blo
 				continue
 			}
 			done++
+		}
+		// 配置并发批 F11（M5 批间限速）：批处理间隔 100ms 让出 IO/CPU——
+		// 升级首启大存量回填与前台服务错峰（ctx 取消即时返回）
+		select {
+		case <-time.After(100 * time.Millisecond):
+		case <-ctx.Done():
+			return
 		}
 	}
 }

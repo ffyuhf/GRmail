@@ -70,46 +70,61 @@ func ParseDisplay(raw []byte) (Display, error) {
 		switch h := p.Header.(type) {
 		case *gomail.InlineHeader:
 			ct, _, _ := h.ContentType()
-			body, readErr := io.ReadAll(p.Body)
-			if readErr != nil {
-				continue // 单 part 失败跳过（尽力语义）
-			}
+			// 配置并发批 F9（M2 附件字节不驻留）：读取延迟分流——仅正文 part
+			// （text/html、text/plain——展示需要）ReadAll 驻留；其余 inline part 流过
+			// 计大小（原无条件 ReadAll 致非正文 inline 附件字节全量驻留）。
 			switch ct {
 			case "text/html":
+				body, readErr := io.ReadAll(p.Body)
+				if readErr != nil {
+					continue // 单 part 失败跳过（尽力语义）
+				}
 				if out.BodyHTML == "" {
 					out.BodyHTML = string(body)
 				}
 				out.HasBody = true
 			case "text/plain":
+				body, readErr := io.ReadAll(p.Body)
+				if readErr != nil {
+					continue // 单 part 失败跳过（尽力语义）
+				}
 				if out.BodyText == "" {
 					out.BodyText = string(body)
 				}
 				out.HasBody = true
 			default:
-				// text/* 之外的 inline part（如内联图 image/png）按附件呈现
-				ct, _, _ := h.ContentType()
-				out.appendAttachment(partIdx, "", ct, body)
+				// text/* 之外的 inline part（如内联图 image/png）按附件呈现——
+				// 流过计大小（单 part 下载路径 LoadAttachmentPart 保持按需读入语义），
+				// Size 语义不变。
+				n, _ := io.Copy(io.Discard, p.Body)
+				out.appendAttachmentOf(partIdx, "", ct, n)
 			}
 			if cid := h.Get("Content-Id"); cid != "" {
 				out.CIDs[cid] = true
 			}
 		case *gomail.AttachmentHeader:
-			body, readErr := io.ReadAll(p.Body)
-			if readErr != nil {
-				continue
-			}
+			// 配置并发批 F9（M2）：附件 part 流过计大小（字节不驻留——原 io.ReadAll
+			// 全量驻留仅取 Size；详情/附件卡片/草稿回填三路径内存峰值随附件总量降低）
+			n, _ := io.Copy(io.Discard, p.Body)
 			fn, _ := h.Filename()
 			ct, _, _ := h.ContentType()
-			out.appendAttachment(partIdx, fn, ct, body)
+			out.appendAttachmentOf(partIdx, fn, ct, n)
 		}
 	}
 	return out, nil
 }
 
-// appendAttachment 附件清单追加（文件名解码失败兜底空串）。
+// appendAttachment 附件清单追加（字节驻留形态——仅正文 part 解析路径使用；
+// 配置并发批 F9 后附件路径改流过计大小，见 appendAttachmentOf）。
 func (d *Display) appendAttachment(part int, filename, contentType string, body []byte) {
+	d.appendAttachmentOf(part, filename, contentType, int64(len(body)))
+}
+
+// appendAttachmentOf 附件清单追加（大小直传形态——配置并发批 F9：流过计数的
+// 附件 part 与驻留 body 共用出口；文件名解码失败兜底空串）。
+func (d *Display) appendAttachmentOf(part int, filename, contentType string, size int64) {
 	d.Attachments = append(d.Attachments, AttachmentView{
-		Part: part, Filename: filename, ContentType: contentType, Size: int64(len(body)),
+		Part: part, Filename: filename, ContentType: contentType, Size: size,
 	})
 }
 

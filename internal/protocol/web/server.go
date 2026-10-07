@@ -132,6 +132,7 @@ type Server struct {
 	pending2fa     *pendingLoginStore             // U24：短时一次性登录凭据仓（S4-W Q1-A 内存态）
 	engine         *gin.Engine
 	httpSrv        *http.Server
+	http80Srv      *http.Server // 配置并发批 F7②（B-C6）：80 明文监听独立 server（原局部变量游离于 Shutdown 之外——优雅退出不停 80）
 	listeners      []net.Listener
 }
 
@@ -371,6 +372,7 @@ func (s *Server) ListenAndServeHTTP(addr string) error {
 	mux.HandleFunc("/.well-known/acme-challenge/", s.challengeHTTP)
 	mux.HandleFunc("/", s.http80Root)
 	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+	s.http80Srv = srv // F7②：独立 server 存字段——Shutdown 双停承载（原局部变量游离）
 	return srv.Serve(ln)
 }
 
@@ -407,7 +409,13 @@ func (s *Server) Addr() string {
 
 // Shutdown 优雅停止（排空在途请求；上下文超时由调用方掌控）。
 // 参数：ctx 截止上下文。返回：停机故障（已断开监听视为完成）。
+// F7②（B-C6）：80 明文监听器同步纳入优雅停止（原局部 http.Server 游离于本
+// 方法之外——退出后 80 端口仍监听至进程退出）。
 func (s *Server) Shutdown(ctx context.Context) error {
+	if s.http80Srv != nil {
+		// 80 侧尽力（失败不阻断主服务停止——主错误优先返回；ErrServerClosed 容忍）
+		_ = s.http80Srv.Shutdown(ctx)
+	}
 	err := s.httpSrv.Shutdown(ctx)
 	if errors.Is(err, http.ErrServerClosed) {
 		return nil

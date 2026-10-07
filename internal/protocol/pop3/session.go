@@ -268,7 +268,10 @@ func parsePlain(raw []byte) (authcid, passwd string, err error) {
 // 指派 message-number 1..n 并记录大小）。
 // 数据面（契约 v1.3.1 2.1 既有方法零扩展）：FolderRepo.List 定位 kind=inbox →
 // IMAPSearch 空 filter（FlagDeleted=false 排除 IMAP \Deleted 残留——与 IMAP 侧
-// 删除语义一致）→ 逐条 GetDetail 取 uid/size/blobKey。
+// 删除语义一致）。
+// 配置并发批 F10（M3 N+1 消除）：IMAPSearch 列集尾部自本批起含 raw_size/blob_key
+// ——maildrop 快照单查询直取（原逐条 GetDetail 取 uid/size/blobKey 为 N+1 查询，
+// 十万封级登录 P95 风险；GetDetail 调用计数归零，RETR/TOP 消费快照内 blobKey）。
 func (ss *session) loadMaildrop() error {
 	folders, err := ss.server.folders.List(ss.ctx(), ss.mbox.ID)
 	if err != nil {
@@ -295,11 +298,9 @@ func (ss *session) loadMaildrop() error {
 	}
 	ss.msgs = ss.msgs[:0]
 	for _, it := range items {
-		d, err := ss.server.messages.GetDetail(ss.ctx(), ss.mbox.ID, it.ID)
-		if err != nil {
-			continue // 单条缺失跳过（maildrop 尽力语义）
-		}
-		ss.msgs = append(ss.msgs, pop3Msg{id: d.ID, uid: d.UID, size: d.RawSize, blobKey: d.BlobKey})
+		// F10：单查询直取（GetDetail N+1 消除——id/uid/size/blobKey 均来自本批
+		// 扩展的 IMAPSearch 列集）
+		ss.msgs = append(ss.msgs, pop3Msg{id: it.ID, uid: it.UID, size: it.Size, blobKey: it.BlobKey})
 	}
 	return nil
 }

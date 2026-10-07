@@ -178,37 +178,21 @@ func (r *MySQLMessageRepo) SetKeywords(ctx context.Context, id int64, keywords [
 	return tx.Commit()
 }
 
-// SetFlags 三值补丁更新（读改写两步——语义同 SQLite 实现）。
+// SetFlags 三值补丁更新（配置并发批 F4/B-C1：单 SQL 原子化——守卫参数 NULL 时
+// CASE 回退现值；原读-改-写两条独立语句并发丢失更新窗口收口——语义同 SQLite 实现）。
 func (r *MySQLMessageRepo) SetFlags(ctx context.Context, id int64, flags FlagPatch) error {
-	cur, err := r.q.GetMailboxMessageFlags(ctx, id)
-	if errors.Is(err, sql.ErrNoRows) {
-		return ErrMessageNotFound
-	}
-	if err != nil {
-		return fmt.Errorf("读取标志现值: %w", err)
-	}
-	isRead, isFlagged, isAnswered, isDraft, status := cur.IsRead, cur.IsFlagged, cur.IsAnswered, cur.IsDraft, cur.Status
-	if flags.IsRead != nil {
-		isRead = *flags.IsRead
-	}
-	if flags.IsFlagged != nil {
-		isFlagged = *flags.IsFlagged
-	}
-	if flags.IsAnswered != nil {
-		isAnswered = *flags.IsAnswered
-	}
-	if flags.IsDraft != nil {
-		isDraft = *flags.IsDraft
-	}
-	if flags.Deleted != nil {
-		if *flags.Deleted {
-			status = "deleted"
-		} else {
-			status = "normal"
-		}
-	}
 	n, err := r.q.UpdateMailboxMessageFlags(ctx, dbgen.UpdateMailboxMessageFlagsParams{
-		IsRead: isRead, IsFlagged: isFlagged, IsAnswered: isAnswered, IsDraft: isDraft, Status: status, ID: id,
+		ReadSet:     guardNullBool(flags.IsRead),
+		ReadVal:     valOf(flags.IsRead),
+		FlaggedSet:  guardNullBool(flags.IsFlagged),
+		FlaggedVal:  valOf(flags.IsFlagged),
+		AnsweredSet: guardNullBool(flags.IsAnswered),
+		AnsweredVal: valOf(flags.IsAnswered),
+		DraftSet:    guardNullBool(flags.IsDraft),
+		DraftVal:    valOf(flags.IsDraft),
+		DeletedSet:  guardNullString(flags.Deleted),
+		DeletedFlag: flagStrOf(flags.Deleted),
+		ID:          id,
 	})
 	if err != nil {
 		return fmt.Errorf("更新标志位: %w", err)
@@ -217,6 +201,22 @@ func (r *MySQLMessageRepo) SetFlags(ctx context.Context, id int64, flags FlagPat
 		return ErrMessageNotFound
 	}
 	return nil
+}
+
+// guardNullBool 三值补丁守卫参数（F4 mysql sql.NullBool 形态：Invalid=不修改）。
+func guardNullBool(b *bool) sql.NullBool {
+	if b == nil {
+		return sql.NullBool{}
+	}
+	return sql.NullBool{Bool: true, Valid: true} // 守卫仅判定 NULL 与否——真值承载
+}
+
+// guardNullString 三值补丁守卫参数（F4 mysql deleted_set sql.NullString 形态）。
+func guardNullString(b *bool) sql.NullString {
+	if b == nil {
+		return sql.NullString{}
+	}
+	return sql.NullString{String: "1", Valid: true}
 }
 
 // Move 跨文件夹移动（UID 保留——mailbox 域全局序列语义）。
@@ -604,8 +604,13 @@ func archiveToInboxMySQL(ctx context.Context, qtx *dbgen.Queries, targets []Reci
 	return nil
 }
 
-// nextUIDInTxMySQL 事务内下一 UID（1.5⑦：UNIQUE 兜底，冲突由事务失败回 451 收敛）。
+// nextUIDInTxMySQL 事务内下一 UID（1.5⑦：UNIQUE 兜底；配置并发批 F5/B-C2：
+// 前置邮箱行锁 LockMailboxForUID——并发同邮箱 UID 分配〔MAX+1 非锁定读〕经
+// 行锁串行化，撞 UNIQUE 收口；同事务同邮箱重入锁自身不阻塞。冲突兜底保持）。
 func nextUIDInTxMySQL(ctx context.Context, qtx *dbgen.Queries, mailboxID int64) (int64, error) {
+	if _, err := qtx.LockMailboxForUID(ctx, mailboxID); err != nil {
+		return 0, fmt.Errorf("锁定邮箱行（F5 UID 串行化）: %w", err)
+	}
 	v, err := qtx.GetMaxMailboxUID(ctx, mailboxID)
 	if err != nil {
 		return 0, fmt.Errorf("查询邮箱最大 UID: %w", err)

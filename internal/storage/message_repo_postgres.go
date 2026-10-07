@@ -173,37 +173,21 @@ func (r *PostgresMessageRepo) SetKeywords(ctx context.Context, id int64, keyword
 	return tx.Commit()
 }
 
-// SetFlags 三值补丁更新。
+// SetFlags 三值补丁更新（配置并发批 F4/B-C1：单 SQL 原子化——守卫参数 NULL 时
+// CASE 回退现值；原读-改-写两条独立语句并发丢失更新窗口收口——语义同 SQLite 实现）。
 func (r *PostgresMessageRepo) SetFlags(ctx context.Context, id int64, flags FlagPatch) error {
-	cur, err := r.q.GetMailboxMessageFlags(ctx, id)
-	if errors.Is(err, sql.ErrNoRows) {
-		return ErrMessageNotFound
-	}
-	if err != nil {
-		return fmt.Errorf("读取标志现值: %w", err)
-	}
-	isRead, isFlagged, isAnswered, isDraft, status := cur.IsRead, cur.IsFlagged, cur.IsAnswered, cur.IsDraft, cur.Status
-	if flags.IsRead != nil {
-		isRead = *flags.IsRead
-	}
-	if flags.IsFlagged != nil {
-		isFlagged = *flags.IsFlagged
-	}
-	if flags.IsAnswered != nil {
-		isAnswered = *flags.IsAnswered
-	}
-	if flags.IsDraft != nil {
-		isDraft = *flags.IsDraft
-	}
-	if flags.Deleted != nil {
-		if *flags.Deleted {
-			status = "deleted"
-		} else {
-			status = "normal"
-		}
-	}
 	n, err := r.q.UpdateMailboxMessageFlags(ctx, dbgen.UpdateMailboxMessageFlagsParams{
-		IsRead: isRead, IsFlagged: isFlagged, IsAnswered: isAnswered, IsDraft: isDraft, Status: status, ID: id,
+		ReadSet:     guardNullString(flags.IsRead),
+		ReadVal:     valOf(flags.IsRead),
+		FlaggedSet:  guardNullString(flags.IsFlagged),
+		FlaggedVal:  valOf(flags.IsFlagged),
+		AnsweredSet: guardNullString(flags.IsAnswered),
+		AnsweredVal: valOf(flags.IsAnswered),
+		DraftSet:    guardNullString(flags.IsDraft),
+		DraftVal:    valOf(flags.IsDraft),
+		DeletedSet:  guardNullString(flags.Deleted),
+		DeletedFlag: valOf(flags.Deleted),
+		ID:          id,
 	})
 	if err != nil {
 		return fmt.Errorf("更新标志位: %w", err)
@@ -595,8 +579,13 @@ func archiveToInboxPG(ctx context.Context, qtx *dbgen.Queries, targets []Recipie
 	return nil
 }
 
-// nextUIDInTxPG 事务内下一 UID（1.5⑦ UNIQUE 兜底）。
+// nextUIDInTxPG 事务内下一 UID（1.5⑦ UNIQUE 兜底；配置并发批 F5/B-C2：前置
+// 邮箱行锁 LockMailboxForUID——并发同邮箱 UID 分配经行锁串行化，撞 UNIQUE
+// 收口；同事务同邮箱重入锁自身不阻塞）。
 func nextUIDInTxPG(ctx context.Context, qtx *dbgen.Queries, mailboxID int64) (int64, error) {
+	if _, err := qtx.LockMailboxForUID(ctx, mailboxID); err != nil {
+		return 0, fmt.Errorf("锁定邮箱行（F5 UID 串行化）: %w", err)
+	}
 	v, err := qtx.GetMaxMailboxUID(ctx, mailboxID)
 	if err != nil {
 		return 0, fmt.Errorf("查询邮箱最大 UID: %w", err)

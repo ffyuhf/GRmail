@@ -21,6 +21,7 @@ package observability
 
 import (
 	"compress/gzip"
+	"errors"
 	"io"
 	"log/slog"
 	"os"
@@ -29,6 +30,10 @@ import (
 	"sync"
 	"time"
 )
+
+// ErrWriterClosed 关闭后写入哨兵（配置并发批 F3①/B-C4——Close 置位 closed 后
+// 滞后写（热重建期旧 logger 引用）显式失败，杜绝重开同日文件双实例交叉写）。
+var ErrWriterClosed = errors.New("observability: writer closed")
 
 // rotateDayKey 日期切分键格式（本地时区——运维侧按本地日界读日志友好）。
 const rotateDayKey = "20060102"
@@ -42,11 +47,13 @@ type DailyRotateWriter struct {
 	retainDays int              // .gz 保留天数（0=不限）
 	now        func() time.Time // 时钟注入（测试跨日驱动）
 
-	mu   sync.Mutex
-	day  string   // 当前日期键
-	file *os.File // 当日当前文件（append 态；nil=未打开）
-	seq  int      // 当日轮转序号（0=主文件；>0=app.<day>.<N>）
-	size int64    // 当日当前文件已写字节（大小轮转判定）
+	mu     sync.Mutex
+	day    string         // 当前日期键
+	file   *os.File       // 当日当前文件（append 态；nil=未打开）
+	seq    int            // 当日轮转序号（0=主文件；>0=app.<day>.<N>）
+	size   int64          // 当日当前文件已写字节（大小轮转判定）
+	closed bool           // 配置并发批 F3①：关闭标记（Close 后 Write 拒绝）
+	wg     sync.WaitGroup // 配置并发批 F3④：archive/purge 后台回收登记（Close 有界等待）
 }
 
 // NewDailyRotateWriter 构造按日轮转 Writer。
@@ -92,9 +99,14 @@ func itoa(n int) string {
 
 // Write 实现 io.Writer（经 phuslu log.IOWriter 桥接入 Logger.Writer——Entry.buf
 // 跨包不可达，IOWriter 在 phuslu 包内取出字节后回调本方法；写前跨日检测+大小轮转检测）。
+// 配置并发批 F3①：closed 检查前置——关闭后滞后写返回 ErrWriterClosed（原形态
+// file=nil 时重开同日文件形成双实例交叉写——热重建窗口缺陷收口）。
 func (w *DailyRotateWriter) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if w.closed {
+		return 0, ErrWriterClosed
+	}
 	now := w.now()
 	day := now.Format(rotateDayKey)
 	if w.file == nil || day != w.day {
@@ -119,10 +131,35 @@ func (w *DailyRotateWriter) Write(p []byte) (int, error) {
 }
 
 // Close 关闭当日文件（优雅退出/热重建时释放句柄；当日全序列 gzip 归档）。
+// 配置并发批 F3①④：幂等 closed 置位（后续 Write 拒绝）+后台 archive/purge
+// 有界回收（5s 超时等待——大文件压缩不死等退出）。
 func (w *DailyRotateWriter) Close() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	return w.closeLocked()
+	if w.closed {
+		return nil // 幂等
+	}
+	w.closed = true
+	err := w.closeLocked()
+	w.mu.Unlock()
+	w.waitBackgroundLockedFree()
+	w.mu.Lock()
+	return err
+}
+
+// waitBackgroundLockedFree 等待后台 archive/purge 收官（有界 5s——调用方不持锁；
+// 超时 Warn 放行，残留 goroutine 随进程退出自然终止）。
+func (w *DailyRotateWriter) waitBackgroundLockedFree() {
+	done := make(chan struct{})
+	go func() {
+		w.wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		slog.Default().Warn("日志归档后台回收等待超时（5s）——退出继续", "base", w.base)
+	}
 }
 
 // closeLocked 关闭并归档（持锁路径）。
@@ -148,11 +185,11 @@ func (w *DailyRotateWriter) rotateDayLocked(newDay string) error {
 		}
 		w.file = nil
 		if oldDay != "" {
-			go w.archiveDay(oldDay, oldSeq) // 旧日全序列异步压缩（不阻塞写路径）
+			w.spawnBackground(func() { w.archiveDay(oldDay, oldSeq) }) // 旧日全序列异步压缩（不阻塞写路径）
 		}
 	}
 	if w.retainDays > 0 {
-		go w.purgeExpired() // 异步清理（尽力）
+		w.spawnBackground(w.purgeExpired) // 异步清理（尽力）
 	}
 	f, size, err := openAppend(w.dayFile(newDay, 0))
 	if err != nil {
@@ -163,6 +200,8 @@ func (w *DailyRotateWriter) rotateDayLocked(newDay string) error {
 }
 
 // rotateSizeLocked 当日大小轮转（持锁调用方：w.mu；失败时上层继续写旧句柄）。
+// 配置并发批 F3③：backups 落实——序号文件超保留份数时清理最旧（原死参数收口：
+// 传入从未消费，当日序号文件无限增长）。
 func (w *DailyRotateWriter) rotateSizeLocked(day string) error {
 	if err := w.file.Close(); err != nil {
 		return err
@@ -173,7 +212,21 @@ func (w *DailyRotateWriter) rotateSizeLocked(day string) error {
 		return err
 	}
 	w.file, w.seq, w.size = f, next, 0
+	if w.backups > 0 && next > w.backups {
+		if rmErr := os.Remove(w.dayFile(day, next-w.backups)); rmErr == nil {
+			slog.Default().Info("当日轮转序号超保留份数清理", "file", w.dayFile(day, next-w.backups), "backups", w.backups)
+		}
+	}
 	return nil
+}
+
+// spawnBackground 后台任务登记（配置并发批 F3④——wg 包装；Close 有界等待收官）。
+func (w *DailyRotateWriter) spawnBackground(fn func()) {
+	w.wg.Add(1)
+	go func() {
+		defer w.wg.Done()
+		fn()
+	}()
 }
 
 // openAppend 打开（或创建）文件为追加态；返回句柄与当前大小。

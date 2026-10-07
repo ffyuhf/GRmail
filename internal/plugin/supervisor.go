@@ -146,6 +146,18 @@ func mailDecisionOf(d *pb.HookDecision) *mail.HookDecision {
 // watchPeriod 崩溃检测轮询周期（工程常量——go-plugin Client.Exited() 轻量查询）。
 const watchPeriod = 3 * time.Second
 
+// pluginHandshakeTimeout 插件握手单次预算（配置并发批 F6①/B-C5——GetInfo/
+// RegisterProtocol 启动期调用 10s 超时：单个插件挂起不再阻塞主程序启动，
+// NFR-003 启动可用性防线）。
+const pluginHandshakeTimeout = 10 * time.Second
+
+// 插件能力标识（配置并发批 F6④——钩子链按能力过滤；值域契约 2.5 既有：
+// inbound_hook | submit_hook | protocol）。
+const (
+	capInboundHook = "inbound_hook"
+	capSubmitHook  = "submit_hook"
+)
+
 // managedPlugin 单插件托管态。
 type managedPlugin struct {
 	name    string // GetInfo 产物（拉起期获取；获取失败以文件名兜底）
@@ -159,6 +171,7 @@ type managedPlugin struct {
 type Supervisor struct {
 	dir    string
 	logger *slog.Logger
+	ctx    context.Context // F6③：生命周期 ctx（协议注册流 Recv 联动——取消即 stream 错误返回）
 
 	mu      sync.Mutex
 	plugins []*managedPlugin
@@ -171,7 +184,7 @@ type Supervisor struct {
 // （SRS 第 6 章部署形态 plugins/）；logger 结构化日志器。
 // 返回：宿主实例（始终非 nil——零插件态亦正常承载，钩子链为空）。
 func NewSupervisor(ctx context.Context, dir string, logger *slog.Logger) *Supervisor {
-	s := &Supervisor{dir: dir, logger: logger}
+	s := &Supervisor{dir: dir, logger: logger, ctx: ctx}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		logger.Warn("插件目录不可读，零插件态运行（放置插件二进制后重启生效）", "dir", dir, "error", err)
@@ -222,7 +235,10 @@ func (s *Supervisor) launch(bin string) *managedPlugin {
 		client.Kill()
 		return nil
 	}
-	info, err := stub.GetInfo(context.Background(), &pb.GetInfoRequest{})
+	// F6①：握手单次预算（超时跳过该插件——单个插件挂起不阻塞主程序启动）
+	hctx, hcancel := context.WithTimeout(context.Background(), pluginHandshakeTimeout)
+	defer hcancel()
+	info, err := stub.GetInfo(hctx, &pb.GetInfoRequest{})
 	if err != nil || info.GetName() == "" {
 		s.logger.Warn("插件 GetInfo 失败（跳过）", "bin", bin, "error", err)
 		client.Kill()
@@ -251,8 +267,10 @@ func (s *Supervisor) launch(bin string) *managedPlugin {
 // drainProtocolRegistrations 开启协议注册双向流并收声明（插件侧 Send 声明→
 // 宿主登记日志→回 ack；流结束即返回——goroutine 形态不阻塞拉起）。
 // 参数：mp 插件托管态。
+// F6③：流绑定生命周期 ctx（原 context.Background() 无联动——插件退出依赖流
+// 关闭，泄漏窗口；gRPC stream 绑定 ctx 后取消即 Recv 错误返回自然退出）。
 func (s *Supervisor) drainProtocolRegistrations(mp *managedPlugin) {
-	stream, err := mp.hook.raw.RegisterProtocol(context.Background())
+	stream, err := mp.hook.raw.RegisterProtocol(s.ctx)
 	if err != nil {
 		s.logger.Warn("插件协议注册流开启失败", "plugin", mp.name, "error", err)
 		return
@@ -283,47 +301,65 @@ func (s *Supervisor) watch(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			// F6②：锁内仅标记摘除（快照即时对钩子链生效）——Kill（阻塞至子进程
+			// 退出）移至锁外，全局锁不再被清理动作占用（StatusSnapshot 并发不死锁）。
+			var victims []*managedPlugin
 			s.mu.Lock()
 			for _, p := range s.plugins {
 				if p.alive && p.client.Exited() {
 					p.alive = false
-					p.client.Kill() // 清理子进程资源（僵尸态收尾）
+					victims = append(victims, p)
 					s.logger.Warn("插件进程崩溃，已从钩子链摘除（不自动重拉——重启主程序恢复）",
 						"plugin", p.name)
 				}
 			}
 			s.mu.Unlock()
+			for _, p := range victims {
+				p.client.Kill() // 清理子进程资源（僵尸态收尾——锁外执行）
+			}
 		}
 	}
 }
 
 // InboundHooks 收信钩子链快照（main 装配注入 pipeline；仅含存活插件——
 // 崩溃摘除后调用自检兜底）。
+// F6④（B-C5 能力过滤）：仅 caps 含 inbound_hook 的插件入链——protocol-only
+// 插件不再被挂收发信钩子（能力声明契约 2.5 值域承载）。
 // 返回：钩子链（可能为空切片——零插件态）。
 func (s *Supervisor) InboundHooks() []mail.InboundHook {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	hooks := make([]mail.InboundHook, 0, len(s.plugins))
 	for _, p := range s.plugins {
-		if p.alive {
+		if p.alive && hasCapability(p.hook.caps, capInboundHook) {
 			hooks = append(hooks, p.hook)
 		}
 	}
 	return hooks
 }
 
-// SubmitHooks 发信钩子链快照（main 装配注入 submissionPipeline）。
+// SubmitHooks 发信钩子链快照（main 装配注入 submissionPipeline；F6④ 能力过滤同 InboundHooks）。
 // 返回：钩子链（可能为空切片）。
 func (s *Supervisor) SubmitHooks() []mail.SubmitHook {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	hooks := make([]mail.SubmitHook, 0, len(s.plugins))
 	for _, p := range s.plugins {
-		if p.alive {
+		if p.alive && hasCapability(p.hook.caps, capSubmitHook) {
 			hooks = append(hooks, p.hook)
 		}
 	}
 	return hooks
+}
+
+// hasCapability 能力声明包含判定（精确匹配契约 2.5 值域原子）。
+func hasCapability(caps []string, want string) bool {
+	for _, c := range caps {
+		if c == want {
+			return true
+		}
+	}
+	return false
 }
 
 // StatusRow 插件运行状态快照行（Webmail管理职能批次 G6——/admin/plugins 只读呈现；
@@ -348,14 +384,19 @@ func (s *Supervisor) StatusSnapshot() []StatusRow {
 }
 
 // Shutdown 停止全部插件子进程（优雅退出序——协议端点链之后调用）。
+// F6②：锁内标记摘除+锁外 Kill（Kill 阻塞不占全局锁——与 watch 同款两段式）。
 func (s *Supervisor) Shutdown() {
+	var victims []*managedPlugin
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	for _, p := range s.plugins {
 		if p.alive {
-			p.client.Kill()
 			p.alive = false
-			s.logger.Info("插件已停止", "plugin", p.name)
+			victims = append(victims, p)
 		}
+	}
+	s.mu.Unlock()
+	for _, p := range victims {
+		p.client.Kill()
+		s.logger.Info("插件已停止", "plugin", p.name)
 	}
 }

@@ -133,7 +133,9 @@ func filterConds(f SearchFilter) []bob.Expression {
 }
 
 // buildIMAPSearchSQL 构造 IMAP SEARCH 查询（SELECT 列对齐 IMAPSearch 扫描顺序：
-// id/uid/sent_at/subject/from_addr/is_read/is_flagged）。
+// id/uid/sent_at/subject/from_addr/is_read/is_flagged/raw_size/blob_key——尾部两列
+// 为配置并发批 F10〔M3〕新增：POP3 loadMaildrop 单查询直取 size/blobKey，登录期
+// 逐条 GetDetail N+1 消除）。
 // 参数：ctx 构建上下文；q 查询输入。返回：SQL 文本、参数列表。
 func buildIMAPSearchSQL(ctx context.Context, q IMAPSearchQuery) (string, []any, error) {
 	conds := []bob.Expression{
@@ -146,6 +148,7 @@ func buildIMAPSearchSQL(ctx context.Context, q IMAPSearchQuery) (string, []any, 
 			expr.Quote("mm", "id"), expr.Quote("mm", "uid"), expr.Quote("m", "sent_at"),
 			expr.Quote("m", "subject"), expr.Quote("m", "from_addr"),
 			expr.Quote("mm", "is_read"), expr.Quote("mm", "is_flagged"),
+			expr.Quote("m", "raw_size"), expr.Quote("m", "blob_key"),
 		),
 		sm.From("mailbox_messages AS mm"),
 		sm.InnerJoin("messages AS m ON m.id = mm.message_id"),

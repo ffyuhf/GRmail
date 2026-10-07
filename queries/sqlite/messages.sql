@@ -72,9 +72,23 @@ FROM mailbox_messages
 WHERE id = ?;
 
 -- name: UpdateMailboxMessageFlags :execrows
+-- F4 (B-C1, config-concurrency batch): the three-valued flag patch is
+-- atomized into a single statement. Guard params (*_set) appear only inside
+-- "IS NULL" so they map to nullable values (nil = leave column unchanged);
+-- value params (*_val) live in the ELSE arm and map to the column type.
+-- This closes the non-transactional read-modify-write race (lost updates on
+-- concurrent flag writes) across all three dialects.
 UPDATE mailbox_messages
-SET is_read = ?, is_flagged = ?, is_answered = ?, is_draft = ?, status = ?
-WHERE id = ?;
+SET is_read = CASE WHEN sqlc.narg('read_set') IS NULL THEN is_read ELSE sqlc.arg('read_val') END,
+    is_flagged = CASE WHEN sqlc.narg('flagged_set') IS NULL THEN is_flagged ELSE sqlc.arg('flagged_val') END,
+    is_answered = CASE WHEN sqlc.narg('answered_set') IS NULL THEN is_answered ELSE sqlc.arg('answered_val') END,
+    is_draft = CASE WHEN sqlc.narg('draft_set') IS NULL THEN is_draft ELSE sqlc.arg('draft_val') END,
+    status = CASE
+        WHEN sqlc.narg('deleted_set') IS NULL THEN status
+        WHEN sqlc.arg('deleted_flag') THEN 'deleted'
+        ELSE 'normal'
+    END
+WHERE id = sqlc.arg('id');
 
 -- name: MoveMailboxMessage :execrows
 UPDATE mailbox_messages

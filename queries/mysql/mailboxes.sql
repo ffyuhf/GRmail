@@ -58,6 +58,12 @@ UPDATE mailboxes
 SET two_factor_required = ?, updated_at = ?
 WHERE id = ?;
 
+-- 配置并发批 F5（B-C2 UID 分配可串行化）：StoreAppend/CopyAtomic 事务内邮箱行锁
+-- ——并发同邮箱 UID 分配（MAX+1 非锁定读撞 UNIQUE）经行锁串行化；SQLite 整库
+-- 单写者保持原查询（不引入本变体）。
+-- name: LockMailboxForUID :one
+SELECT id FROM mailboxes WHERE id = ? FOR UPDATE;
+
 -- name: FindMailboxByID :one
 SELECT id, local_part, domain, address, password_hash, status, created_at, updated_at
 FROM mailboxes

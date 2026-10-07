@@ -46,8 +46,12 @@ var (
 // 按大小轮转阈值 MB（0=不按大小轮转）；backups 大小轮转备份保留份数（0=不限制）；
 // retainDays 压缩归档保留天数（0=不清理）。
 // 返回：根 logger。
+// 配置并发批 F3②：装配段（含 SetDefault）纳入 logCloserMu——与 ReconfigureLogger
+// 的关旧+重建全程互斥（消除锁外窗口内并发装配的句柄错配）。
 func SetupLogger(level, logFile string, maxMB, backups, retainDays int) *slog.Logger {
-	root := buildLogger(level, logFile, maxMB, backups, retainDays)
+	logCloserMu.Lock()
+	defer logCloserMu.Unlock()
+	root := buildLoggerLocked(level, logFile, maxMB, backups, retainDays)
 	slog.SetDefault(root)
 	return root
 }
@@ -56,18 +60,23 @@ func SetupLogger(level, logFile string, maxMB, backups, retainDays int) *slog.Lo
 // 键变更经 config 订阅调用；关闭旧文件句柄→重建→SetDefault；返回新根 logger）。
 // 已绑定 ctx 的 logger 引用请求生命周期内继续写旧装配（尽力热切换语义——
 // 接入层每会话/每请求经 LoggerFromContext 回退 slog.Default() 即时取新）。
+// 配置并发批 F3②（B-C4）：关旧+重建全程持锁——原「锁内关旧/锁外重建」两步
+// 在锁外窗口内并发写经旧 writer 触达已关句柄（句柄错配）——现原子化收口。
 func ReconfigureLogger(level, logFile string, maxMB, backups, retainDays int) *slog.Logger {
 	logCloserMu.Lock()
+	defer logCloserMu.Unlock()
 	if logCloser != nil {
 		_ = logCloser.Close() // 关旧文件（压缩归档由 DailyRotateWriter.Close 承载）
 		logCloser = nil
 	}
-	logCloserMu.Unlock()
-	return SetupLogger(level, logFile, maxMB, backups, retainDays)
+	root := buildLoggerLocked(level, logFile, maxMB, backups, retainDays)
+	slog.SetDefault(root)
+	return root
 }
 
-// buildLogger 构造 logger（文件侧 writer 登记包级可关闭句柄）。
-func buildLogger(level, logFile string, maxMB, backups, retainDays int) *slog.Logger {
+// buildLoggerLocked 构造 logger（文件侧 writer 登记包级可关闭句柄；调用方须已持
+// logCloserMu——配置并发批 F3② 锁序统一）。
+func buildLoggerLocked(level, logFile string, maxMB, backups, retainDays int) *slog.Logger {
 	var writer log.Writer = &log.ConsoleWriter{ColorOutput: true} // 输出目的地默认包装 os.Stderr
 	if logFile != "" {
 		// Q1-B 双写：MultiEntryWriter 遍历分发全部 Writer（multi.go L102 实证）——
@@ -75,9 +84,7 @@ func buildLogger(level, logFile string, maxMB, backups, retainDays int) *slog.Lo
 		// L-E 文件侧=DailyRotateWriter（io.Writer 契约——Entry.buf 跨包不可达，经
 		// phuslu IOWriter 桥取出字节后回调；按日切分+gzip+保留窗+当日大小轮转自管）。
 		fileWriter := NewDailyRotateWriter(logFile, maxMB, backups, retainDays)
-		logCloserMu.Lock()
 		logCloser = fileWriter
-		logCloserMu.Unlock()
 		writer = &log.MultiEntryWriter{
 			&log.ConsoleWriter{ColorOutput: true},
 			log.IOWriter{Writer: fileWriter},

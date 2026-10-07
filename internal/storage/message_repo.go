@@ -127,7 +127,9 @@ type SearchQuery struct {
 	Offset    int32
 }
 
-// ListItem 列表行（subject/from/时间等渲染免解析缓存列；状态可视化字段 U9 扩展）。
+// ListItem 列表行（subject/from/时间等渲染免解析缓存列；状态可视化字段 U9 扩展；
+// 配置并发批 F10〔M3〕增 Size/BlobKey——IMAPSearch 单查询直取，POP3 登录期逐条
+// GetDetail N+1 消除；沿契约 v1.3.0 注记「字段集由消费单元按需扩展」先例）。
 type ListItem struct {
 	ID        int64
 	UID       int64
@@ -136,7 +138,9 @@ type ListItem struct {
 	SentAt    time.Time
 	IsRead    bool
 	IsFlagged bool
-	Deleted   bool // status=deleted（IMAP \Deleted 中间态；Webmail 路径不产出该态）
+	Deleted   bool   // status=deleted（IMAP \Deleted 中间态；Webmail 路径不产出该态）
+	Size      int64  // F10：messages.raw_size（IMAPSearch 列集尾部直取；零值=未选择该列的旧调用面）
+	BlobKey   string // F10：messages.blob_key（同上——POP3 maildrop 快照单查询承载）
 }
 
 // Detail 邮件详情（U6 IMAP FETCH / U9 Webmail 详情消费）。
@@ -677,38 +681,22 @@ func internalDateArgNullTime(t *time.Time) sql.NullTime {
 	return sql.NullTime{Time: *t, Valid: true}
 }
 
-// SetFlags 三值补丁更新（nil 字段保持现值——读改写两步，非事务竞态窗口由
-// SQLite 写锁串行化兜底；单用户规模判定 NFR-011 Thunderbird 流程足够）。
+// SetFlags 三值补丁更新（配置并发批 F4/B-C1：单 SQL 原子化——守卫参数 NULL 时
+// CASE 回退现值，三值语义 SQL 内承载；原读-改-写两条独立自动提交语句在并发
+// 标志更新下互相覆盖丢失更新〔三库皆然——评审 B-C1 复核修正口径〕——竞态窗口收口）。
 func (r *SQLiteMessageRepo) SetFlags(ctx context.Context, id int64, flags FlagPatch) error {
-	cur, err := r.q.GetMailboxMessageFlags(ctx, id)
-	if errors.Is(err, sql.ErrNoRows) {
-		return ErrMessageNotFound
-	}
-	if err != nil {
-		return fmt.Errorf("读取标志现值: %w", err)
-	}
-	isRead, isFlagged, isAnswered, isDraft, status := cur.IsRead, cur.IsFlagged, cur.IsAnswered, cur.IsDraft, cur.Status
-	if flags.IsRead != nil {
-		isRead = *flags.IsRead
-	}
-	if flags.IsFlagged != nil {
-		isFlagged = *flags.IsFlagged
-	}
-	if flags.IsAnswered != nil {
-		isAnswered = *flags.IsAnswered
-	}
-	if flags.IsDraft != nil {
-		isDraft = *flags.IsDraft
-	}
-	if flags.Deleted != nil {
-		if *flags.Deleted {
-			status = "deleted"
-		} else {
-			status = "normal"
-		}
-	}
 	n, err := r.q.UpdateMailboxMessageFlags(ctx, dbgen.UpdateMailboxMessageFlagsParams{
-		IsRead: isRead, IsFlagged: isFlagged, IsAnswered: isAnswered, IsDraft: isDraft, Status: status, ID: id,
+		ReadSet:     guardSetSQLite(flags.IsRead),
+		ReadVal:     valOf(flags.IsRead),
+		FlaggedSet:  guardSetSQLite(flags.IsFlagged),
+		FlaggedVal:  valOf(flags.IsFlagged),
+		AnsweredSet: guardSetSQLite(flags.IsAnswered),
+		AnsweredVal: valOf(flags.IsAnswered),
+		DraftSet:    guardSetSQLite(flags.IsDraft),
+		DraftVal:    valOf(flags.IsDraft),
+		DeletedSet:  guardSetSQLite(flags.Deleted),
+		DeletedFlag: flagStrOf(flags.Deleted),
+		ID:          id,
 	})
 	if err != nil {
 		return fmt.Errorf("更新标志位: %w", err)
@@ -717,6 +705,32 @@ func (r *SQLiteMessageRepo) SetFlags(ctx context.Context, id int64, flags FlagPa
 		return ErrMessageNotFound
 	}
 	return nil
+}
+
+// guardSetSQLite 三值补丁守卫参数（F4 sqlite interface{} 形态：nil=该列不修改；
+// 非 nil 任意真值=按对应 *Val 修改——SQL 侧仅判定 IS NULL）。
+func guardSetSQLite(b *bool) any {
+	if b == nil {
+		return nil
+	}
+	return true
+}
+
+// valOf 三值补丁值参数（nil 时取 false 占位——守卫 NULL 短路不消费该值）。
+func valOf(b *bool) bool {
+	return b != nil && *b
+}
+
+// flagStrOf deleted_flag 文本形态（F4 sqlite/mysql 生成物为 string——"1"=deleted/
+// "0"=normal；守卫 NULL 时取空占位不消费）。
+func flagStrOf(b *bool) string {
+	if b == nil {
+		return ""
+	}
+	if *b {
+		return "1"
+	}
+	return "0"
 }
 
 // Move 跨文件夹移动（folder_id 更新；UID 保留——mailbox 域全局序列，
@@ -1055,7 +1069,8 @@ func (r *SQLiteMessageRepo) Search(ctx context.Context, q SearchQuery) ([]*ListI
 	return items, total, nil
 }
 
-// IMAPSearch IMAP SEARCH 动态查询（SQL 经 Bob 构建见 imap_search.go；架构选型 #8）。
+// IMAPSearch IMAP SEARCH 动态查询（SQL 经 Bob 构建见 imap_search.go；架构选型 #8；
+// 配置并发批 F10：扫描尾部增 raw_size/blob_key 两列〔9 列〕——POP3 maildrop 单查询承载）。
 // 参数：q 中性条件（MailboxID/FolderID/Filter）。返回：命中行（UID 升序）。
 func (r *SQLiteMessageRepo) IMAPSearch(ctx context.Context, q IMAPSearchQuery) ([]*ListItem, error) {
 	query, args, err := buildIMAPSearchSQL(ctx, q)
@@ -1071,7 +1086,7 @@ func (r *SQLiteMessageRepo) IMAPSearch(ctx context.Context, q IMAPSearchQuery) (
 	for rows.Next() {
 		var it ListItem
 		var sentAt sql.NullString
-		if err = rows.Scan(&it.ID, &it.UID, &sentAt, &it.Subject, &it.FromAddr, &it.IsRead, &it.IsFlagged); err != nil {
+		if err = rows.Scan(&it.ID, &it.UID, &sentAt, &it.Subject, &it.FromAddr, &it.IsRead, &it.IsFlagged, &it.Size, &it.BlobKey); err != nil {
 			return nil, fmt.Errorf("扫描搜索行: %w", err)
 		}
 		it.SentAt = parseTimestampOrZero(sentAt)

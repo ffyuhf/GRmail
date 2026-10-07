@@ -253,20 +253,48 @@ func Load(path string) (*Config, error) {
 }
 
 // Save 原子写入配置到 path（临时文件 + rename，崩溃安全；热加载链路第 1 步）。
-// 参数：path 目标路径；c 待写入配置。
-func Save(path string, c *Config) error {
+// 配置并发批 F1（A-10+D3+C14 崩溃安全收口）：唯一临时名（os.CreateTemp——并发
+// Save 互不覆写）+ 文件 fsync + rename + 父目录 fsync（文件内容与目录项双持久——
+// 断电/崩溃窗口下 rename 后目录项不丢失）；CreateTemp 缺省 0600 权限语义保持。
+// 参数：path 目标路径；c 待写入配置。返回：写入/持久化失败原因。
+func Save(path string, c *Config) (err error) {
 	data, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {
 		return fmt.Errorf("序列化配置: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("创建配置目录: %w", err)
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return fmt.Errorf("创建临时文件: %w", err)
+	}
+	tmpName := tmp.Name()
+	defer func() {
+		if err != nil {
+			_ = os.Remove(tmpName) // 失败路径清理临时文件（成功路径 rename 已移走）
+		}
+	}()
+	if _, err = tmp.Write(data); err != nil {
+		_ = tmp.Close()
 		return fmt.Errorf("写入临时文件: %w", err)
 	}
-	return os.Rename(tmp, path)
+	if err = tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("持久化临时文件: %w", err)
+	}
+	if err = tmp.Close(); err != nil {
+		return fmt.Errorf("关闭临时文件: %w", err)
+	}
+	if err = os.Rename(tmpName, path); err != nil {
+		return fmt.Errorf("替换配置文件: %w", err)
+	}
+	if d, derr := os.Open(dir); derr == nil { // 父目录 fsync（目录项持久——尽力语义）
+		_ = d.Sync()
+		_ = d.Close()
+	}
+	return nil
 }
 
 // Subscriber 配置变更订阅者（认证栈/TLS 等组件实现本接口以接收热加载回调）
@@ -370,11 +398,16 @@ func (w *Watcher) Subscribe(s Subscriber) {
 	w.subs = append(w.subs, s)
 }
 
-// Current 返回当前生效配置的只读快照（禁止调用方缓存后绕过订阅机制）
+// Current 返回当前生效配置的只读快照副本（禁止调用方缓存后绕过订阅机制）。
+// 配置并发批 F1（A-10/D3 快照数据竞态根治）：自本版起返回深拷贝副本——Config
+// 全字段为值类型（无切片/映射/指针），`*current` 值拷贝即完整深复制；调用方
+// 持有的副本与内部实例零共享（saveConfig 类就地修改不再污染并发读者——
+// 热加载窗口的半更新配置观察面消除）。
 func (w *Watcher) Current() *Config {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
-	return w.current
+	cp := *w.current
+	return &cp
 }
 
 // Close 停止监听（幂等）

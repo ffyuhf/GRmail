@@ -221,6 +221,20 @@ func (q *Queries) ListMailboxesByStatus(ctx context.Context, status string) ([]L
 	return items, nil
 }
 
+const lockMailboxForUID = `-- name: LockMailboxForUID :one
+SELECT id FROM mailboxes WHERE id = $1 FOR UPDATE
+`
+
+// 配置并发批 F5（B-C2 UID 分配可串行化）：StoreAppend/CopyAtomic 事务内邮箱行锁
+// ——并发同邮箱 UID 分配（MAX+1 非锁定读撞 UNIQUE）经行锁串行化；SQLite 整库
+// 单写者保持原查询（不引入本变体）。
+func (q *Queries) LockMailboxForUID(ctx context.Context, id int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, lockMailboxForUID, id)
+	var id_2 int64
+	err := row.Scan(&id_2)
+	return id_2, err
+}
+
 const markTOTPStep = `-- name: MarkTOTPStep :execresult
 UPDATE mailboxes
 SET totp_last_step = $1, updated_at = $2

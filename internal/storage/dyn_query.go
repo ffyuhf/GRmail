@@ -106,6 +106,7 @@ func buildIMAPSearchSQLMySQL(ctx context.Context, q IMAPSearchQuery) (string, []
 			expr.Quote("mm", "id"), expr.Quote("mm", "uid"), expr.Quote("m", "sent_at"),
 			expr.Quote("m", "subject"), expr.Quote("m", "from_addr"),
 			expr.Quote("mm", "is_read"), expr.Quote("mm", "is_flagged"),
+			expr.Quote("m", "raw_size"), expr.Quote("m", "blob_key"), // F10（M3）：尾部两列单查询直取
 		),
 		msm.From("mailbox_messages AS mm"),
 		msm.InnerJoin("messages AS m ON m.id = mm.message_id"),
@@ -192,6 +193,7 @@ func buildIMAPSearchSQLPG(ctx context.Context, q IMAPSearchQuery) (string, []any
 			expr.Quote("mm", "id"), expr.Quote("mm", "uid"), expr.Quote("m", "sent_at"),
 			expr.Quote("m", "subject"), expr.Quote("m", "from_addr"),
 			expr.Quote("mm", "is_read"), expr.Quote("mm", "is_flagged"),
+			expr.Quote("m", "raw_size"), expr.Quote("m", "blob_key"), // F10（M3）：尾部两列单查询直取
 		),
 		psm.From("mailbox_messages AS mm"),
 		psm.InnerJoin("messages AS m ON m.id = mm.message_id"),
@@ -316,7 +318,8 @@ func (r dynQueryRunner) webmailItems(ctx context.Context, query string, args []a
 	return items, rows.Err()
 }
 
-// imapSearch IMAP SEARCH 执行+扫描（7 列对齐；UID 升序）。
+// imapSearch IMAP SEARCH 执行+扫描（9 列对齐——尾部 raw_size/blob_key 为配置并发批
+// F10〔M3〕新增；UID 升序）。
 func (r dynQueryRunner) imapSearch(ctx context.Context, q IMAPSearchQuery) ([]*ListItem, error) {
 	query, args, err := r.imapSearchSQL(ctx, q)
 	if err != nil {
@@ -332,7 +335,7 @@ func (r dynQueryRunner) imapSearch(ctx context.Context, q IMAPSearchQuery) ([]*L
 		var it ListItem
 		var sentAt sql.NullTime
 		var subject, fromAddr sql.NullString
-		if err = rows.Scan(&it.ID, &it.UID, &sentAt, &subject, &fromAddr, &it.IsRead, &it.IsFlagged); err != nil {
+		if err = rows.Scan(&it.ID, &it.UID, &sentAt, &subject, &fromAddr, &it.IsRead, &it.IsFlagged, &it.Size, &it.BlobKey); err != nil {
 			return nil, fmt.Errorf("扫描搜索行: %w", err)
 		}
 		it.SentAt = zeroTimeIfInvalid(sentAt)

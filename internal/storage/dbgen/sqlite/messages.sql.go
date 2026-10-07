@@ -752,26 +752,50 @@ func (q *Queries) SelectIDsByMessageIDs(ctx context.Context, messageids []int64)
 
 const updateMailboxMessageFlags = `-- name: UpdateMailboxMessageFlags :execrows
 UPDATE mailbox_messages
-SET is_read = ?, is_flagged = ?, is_answered = ?, is_draft = ?, status = ?
-WHERE id = ?
+SET is_read = CASE WHEN ?1 IS NULL THEN is_read ELSE ?2 END,
+    is_flagged = CASE WHEN ?3 IS NULL THEN is_flagged ELSE ?4 END,
+    is_answered = CASE WHEN ?5 IS NULL THEN is_answered ELSE ?6 END,
+    is_draft = CASE WHEN ?7 IS NULL THEN is_draft ELSE ?8 END,
+    status = CASE
+        WHEN ?9 IS NULL THEN status
+        WHEN ?10 THEN 'deleted'
+        ELSE 'normal'
+    END
+WHERE id = ?11
 `
 
 type UpdateMailboxMessageFlagsParams struct {
-	IsRead     bool
-	IsFlagged  bool
-	IsAnswered bool
-	IsDraft    bool
-	Status     string
-	ID         int64
+	ReadSet     interface{}
+	ReadVal     bool
+	FlaggedSet  interface{}
+	FlaggedVal  bool
+	AnsweredSet interface{}
+	AnsweredVal bool
+	DraftSet    interface{}
+	DraftVal    bool
+	DeletedSet  interface{}
+	DeletedFlag string
+	ID          int64
 }
 
+// F4 (B-C1, config-concurrency batch): the three-valued flag patch is
+// atomized into a single statement. Guard params (*_set) appear only inside
+// "IS NULL" so they map to nullable values (nil = leave column unchanged);
+// value params (*_val) live in the ELSE arm and map to the column type.
+// This closes the non-transactional read-modify-write race (lost updates on
+// concurrent flag writes) across all three dialects.
 func (q *Queries) UpdateMailboxMessageFlags(ctx context.Context, arg UpdateMailboxMessageFlagsParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, updateMailboxMessageFlags,
-		arg.IsRead,
-		arg.IsFlagged,
-		arg.IsAnswered,
-		arg.IsDraft,
-		arg.Status,
+		arg.ReadSet,
+		arg.ReadVal,
+		arg.FlaggedSet,
+		arg.FlaggedVal,
+		arg.AnsweredSet,
+		arg.AnsweredVal,
+		arg.DraftSet,
+		arg.DraftVal,
+		arg.DeletedSet,
+		arg.DeletedFlag,
 		arg.ID,
 	)
 	if err != nil {

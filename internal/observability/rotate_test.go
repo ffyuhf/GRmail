@@ -65,18 +65,22 @@ func TestDailyRotateSameDay(t *testing.T) {
 
 // TestDailyRotateCrossDaySwitch 跨日切换：新日期文件承载新写；旧文件 Close 后 gzip。
 func TestDailyRotateCrossDaySwitch(t *testing.T) {
-	dir := t.TempDir()
+	// 配置并发批 F3④ 形态适配：跨日双归档 goroutine 与 TempDir 清理钩子的极端
+	// 尾迹竞态改经 manualTempDir 容忍清理（断言零变化——rotate_closed_test.go 辅助）
+	dir := manualTempDir(t)
 	base := filepath.Join(dir, "app.log")
 	now := time.Date(2026, 10, 1, 23, 59, 0, 0, time.Local)
 	w := newRotateTestWriter(base, func() time.Time { return now }, 0)
 	writeEntry(t, w, "day1")
 	now = now.Add(2 * time.Hour) // 跨到 10-02
 	writeEntry(t, w, "day2")
-	if err := w.Close(); err != nil {
-		t.Fatal(err)
-	}
+	// 配置并发批 F3④ 形态适配：切新文件断言移至 Close 前（原 Close 后 stat 依赖
+	// 异步归档竞态窗——F3 后 Close 同步等待归档完成，当日源文件已压缩删除）
 	if _, err := os.Stat(dayFileOf(base, "20261002")); err != nil {
 		t.Fatalf("跨日应切新文件: %v", err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
 	}
 	// 旧日文件异步压缩——等待压缩落名（goroutine 尽力，轮询窗口 2s）
 	deadline := time.Now().Add(2 * time.Second)
