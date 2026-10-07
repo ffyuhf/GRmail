@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"sync/atomic"
 
 	"GRmail/internal/account"
 	"GRmail/internal/observability"
@@ -67,8 +68,9 @@ func (s *Server) protocolDebug() bool {
 
 // Server ManageSieve 服务端（4190 明文承载+连接级 STARTTLS 升级）。
 type Server struct {
-	cfg ServerConfig
-	ln  net.Listener
+	cfg   ServerConfig
+	ln    net.Listener
+	conns atomic.Int64 // F8：活动连接计数（上限判定）
 }
 
 // NewServer 构造服务端。
@@ -98,9 +100,22 @@ func (s *Server) Serve(ln net.Listener) error {
 		if err != nil {
 			return err
 		}
-		go s.serveConn(conn)
+		// F8（访问协议资源限制批）：连接上限——超限即时关闭（NFR-002 资源面防御）。
+		if s.conns.Add(1) > managesieveMaxConns {
+			s.conns.Add(-1)
+			_ = conn.Close()
+			slog.Warn("ManageSieve 连接超上限拒绝", "max", managesieveMaxConns, "remote", conn.RemoteAddr().String())
+			continue
+		}
+		go func() {
+			defer s.conns.Add(-1)
+			s.serveConn(conn)
+		}()
 	}
 }
+
+// managesieveMaxConns 单端点连接数上限（F8——NFR-002：与其他三端点同档 256）。
+const managesieveMaxConns = 256
 
 // Shutdown 优雅停止。
 func (s *Server) Shutdown() error {

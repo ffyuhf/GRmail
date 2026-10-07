@@ -86,9 +86,17 @@ func VerifyPassword(password, phc string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("password: 非法键编码: %w", err)
 	}
-	// 参数越界防护：恶意串内参数可触发巨量内存分配（复现 argon2 DoS 向量）
-	if memoryKiB == 0 || memoryKiB > 1<<22 || timeIter == 0 || threads == 0 || threads > 255 {
-		return false, fmt.Errorf("password: PHC 参数越界（m=%d,t=%d,p=%d）", memoryKiB, timeIter, threads)
+	// 参数越界防护（安全原子性批 F5 2026-10-06 强化）：version 必须匹配当前
+	// argon2.Version；t 加上限（OWASP 推荐 t=2~3，64 为宽松防御界——阻断 t=2^32-1
+	// CPU DoS）；p 上限 16（uint8 使 >255 恒假死条件修正）；m 下界对齐 argon2 规范
+	// m>=8*p；派生键长度下界 4（argon2 规范）。存量档位（v=19,m=19456,t=2,p=1,
+	// key=32）全通过。
+	if version != argon2.Version {
+		return false, fmt.Errorf("password: 非法 PHC 版本（v=%d，需 v=%d）", version, argon2.Version)
+	}
+	if memoryKiB == 0 || memoryKiB > 1<<22 || memoryKiB < 8*uint32(threads) ||
+		timeIter == 0 || timeIter > 64 || threads == 0 || threads > 16 || len(want) < 4 {
+		return false, fmt.Errorf("password: PHC 参数越界（m=%d,t=%d,p=%d,k=%d）", memoryKiB, timeIter, threads, len(want))
 	}
 	got := argon2.IDKey([]byte(password), salt, timeIter, memoryKiB, threads, uint32(len(want)))
 	return subtle.ConstantTimeCompare(got, want) == 1, nil

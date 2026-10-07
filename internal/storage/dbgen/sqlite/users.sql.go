@@ -26,6 +26,28 @@ func (q *Queries) ClearAdmin2FA(ctx context.Context, arg ClearAdmin2FAParams) er
 	return err
 }
 
+const consumeAdminRecoveryCodeCAS = `-- name: ConsumeAdminRecoveryCodeCAS :execresult
+UPDATE users
+SET recovery_codes = ?, updated_at = ?
+WHERE id = ? AND recovery_codes = ?
+`
+
+type ConsumeAdminRecoveryCodeCASParams struct {
+	RecoveryCodes   interface{}
+	UpdatedAt       string
+	ID              int64
+	RecoveryCodes_2 interface{}
+}
+
+func (q *Queries) ConsumeAdminRecoveryCodeCAS(ctx context.Context, arg ConsumeAdminRecoveryCodeCASParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, consumeAdminRecoveryCodeCAS,
+		arg.RecoveryCodes,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.RecoveryCodes_2,
+	)
+}
+
 const ensureAdmin = `-- name: EnsureAdmin :execresult
 INSERT OR IGNORE INTO users (username, password_hash, is_admin, created_at, updated_at)
 VALUES (?, ?, 1, ?, ?)
@@ -95,21 +117,26 @@ func (q *Queries) GetUserByName(ctx context.Context, username string) (GetUserBy
 	return i, err
 }
 
-const markAdminTOTPStep = `-- name: MarkAdminTOTPStep :exec
+const markAdminTOTPStep = `-- name: MarkAdminTOTPStep :execresult
 UPDATE users
 SET totp_last_step = ?, updated_at = ?
-WHERE id = ?
+WHERE id = ? AND (totp_last_step IS NULL OR totp_last_step < ?)
 `
 
 type MarkAdminTOTPStepParams struct {
-	TotpLastStep interface{}
-	UpdatedAt    string
-	ID           int64
+	TotpLastStep   interface{}
+	UpdatedAt      string
+	ID             int64
+	TotpLastStep_2 interface{}
 }
 
-func (q *Queries) MarkAdminTOTPStep(ctx context.Context, arg MarkAdminTOTPStepParams) error {
-	_, err := q.db.ExecContext(ctx, markAdminTOTPStep, arg.TotpLastStep, arg.UpdatedAt, arg.ID)
-	return err
+func (q *Queries) MarkAdminTOTPStep(ctx context.Context, arg MarkAdminTOTPStepParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, markAdminTOTPStep,
+		arg.TotpLastStep,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.TotpLastStep_2,
+	)
 }
 
 const setAdmin2FASecret = `-- name: SetAdmin2FASecret :exec

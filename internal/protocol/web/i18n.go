@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"encoding/csv"
 	"fmt"
+	"html"
 	"net/http"
 	"net/mail"
 	"strings"
@@ -86,8 +87,11 @@ func (s *Server) csvImportPOST(c *gin.Context) {
 	b.WriteString(templates.Tr(lang, "compose.csvTarget"))
 	b.WriteString(`</p><table>`)
 	for _, r := range rows {
+		// 安全原子性批 F8（2026-10-06）：地址/姓名列 HTML 转义（Go 标准库）——
+		// 该片段经 compose.templ innerHTML 消费，未转义姓名可注入标记/脚本语义
+		// （Addr 虽经 net/mail 校验仍统一转义——纵深防御）。
 		fmt.Fprintf(&b, `<tr><td><input type="checkbox" class="csv-addr" value=%q/></td><td>%s</td><td>%s</td></tr>`,
-			r.Addr, r.Addr, r.Name)
+			r.Addr, html.EscapeString(r.Addr), html.EscapeString(r.Name))
 	}
 	b.WriteString(`</table><p>`)
 	fmt.Fprintf(&b, "%d rows, %d skipped", len(rows), skipped)

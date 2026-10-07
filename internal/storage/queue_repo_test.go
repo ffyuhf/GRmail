@@ -5,6 +5,10 @@
 // 修改历史：
 //
 //	2026-09-17 11:55:00 | 新建 | U5 SMTP 提交与投递（计划书步骤 5 检查点）
+//	2026-10-07 09:14:00 | 适配 | 队列防丢信收口批 F4：TestReclaimStale 回拨
+//	增 heartbeat_at 列（Stale 判据改 COALESCE(heartbeat_at, updated_at)——仅回拨
+//	updated_at 不再触发回收，心跳续期防误回收语义的正向体现；G2 批准 2026-10-07
+//	01:03:52；断言语义保持——超时→pending 恢复链不变）
 package storage
 
 import (
@@ -186,8 +190,12 @@ func TestReclaimStale(t *testing.T) {
 	if err != nil || n != 0 {
 		t.Fatalf("未超时应恢复 0 行: n=%d err=%v", n, err)
 	}
-	// 人工回拨 updated_at 至 11 分钟前（模拟崩溃残留）
-	if _, err = repo.db.Exec(`UPDATE delivery_queue SET updated_at = ?`, formatTimestamp(now.Add(-11*time.Minute))); err != nil {
+	// 人工回拨 updated_at/heartbeat_at 至 11 分钟前（模拟崩溃残留）
+	// 队列防丢信收口批 F4 适配：Stale 判据改 COALESCE(heartbeat_at, updated_at)
+	// ——认领时 heartbeat_at 非空成为判据主位，回拨须两列同步（仅回拨 updated_at
+	// 不再触发回收，即「在途投递持续续期不被误回收」语义的正向体现）
+	if _, err = repo.db.Exec(`UPDATE delivery_queue SET updated_at = ?, heartbeat_at = ?`,
+		formatTimestamp(now.Add(-11*time.Minute)), formatTimestamp(now.Add(-11*time.Minute))); err != nil {
 		t.Fatalf("回拨时间: %v", err)
 	}
 	n, err = repo.ReclaimStale(ctx, 10*time.Minute)

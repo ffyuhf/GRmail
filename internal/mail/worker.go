@@ -8,13 +8,26 @@
 // 入收件箱/外域入队 envelope_from="<>";收件人 "<>" 跳过——rfc3464 防循环 MUST）；
 // 流程设计 3.2 不变量 1（启动 ReclaimStale(10min) 幂等恢复）/不变量 3（failed 必 DSN）；
 // NFR-016（每次尝试 LogID+queue_id/message_id 四元组关联）。
+// 队列防丢信收口批（G2 批准 2026-10-07 08:41:07）：
+//   - F1（A-14②）：MarkResult 迟到回写（ErrQueueStaleWrite）Warn 丢弃——不覆盖
+//     回收后的新状态
+//   - F4（A-14①/D1）：Send 前 TouchClaim 心跳续期（claim_token 归属）——在途投递
+//     持续续期不被 Stale 回收重投
+//   - F5（B-R2）：emitDSN 成功/抑制后 MarkDSNSent 置位；RescanPendingDSNs 重扫
+//     （启动+周期消费 ListFailedDSNPending——failed 必产 DSN 强保证）；
+//     F6（B-R3）：ErrDSNSuppressed（原信 Auto-Submitted≠no）置位不生成
+//   - M7（复核遗漏项）：stopped 通道 close 收敛 sync.Once——双 worker 并发退出
+//     双 close panic 根治
+//
 // 修改历史：
 //
 //	2026-09-17 12:12:00 | 新建 | U5 SMTP 提交与投递（计划书步骤 9）
+//	2026-10-07 09:00:00 | 修正 | 队列防丢信收口批 F1/F4/F5/F6/M7（迁移 00012）
 package mail
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sort"
 	"sync"
@@ -28,12 +41,20 @@ import (
 // ───────────────────────── 窄接口 ─────────────────────────
 
 // queueClaimStore worker 消费的队列仓储窄接口（SQLiteQueueRepo 满足）。
+// F4/F5 扩展（队列防丢信收口批）：TouchClaim/MarkDSNSent/ListFailedDSNPending——
+// 实现=storage.QueueClaimOps 窄视图；契约四方法签名零变更（v1.32.0 注记承载）。
 type queueClaimStore interface {
 	ClaimDue(ctx context.Context, now time.Time, limit int) ([]*storage.QueueItem, error)
 	MarkResult(ctx context.Context, id int64, r storage.AttemptResult) error
 	ReclaimStale(ctx context.Context, olderThan time.Duration) (int, error)
 	Enqueue(ctx context.Context, items []*storage.QueueItem) error
 	StoreSubmission(ctx context.Context, txmeta *storage.SubmissionMeta) error
+	// TouchClaim 心跳续期（F4：每 MX 尝试前——claim_token 归属校验）。
+	TouchClaim(ctx context.Context, token string) error
+	// MarkDSNSent 置位 DSN 回执（F5：emitDSN 成功/抑制后——幂等守卫）。
+	MarkDSNSent(ctx context.Context, id int64) error
+	// ListFailedDSNPending 重扫批查（F5：failed 且 DSN 未发行）。
+	ListFailedDSNPending(ctx context.Context, limit int) ([]*storage.QueueItem, error)
 }
 
 // deliveryConfigFunc 退避配置快照（config.Watcher.Current 适配；热生效 Q5-C）。
@@ -43,16 +64,17 @@ type deliveryConfigFunc func() config.DeliveryConf
 
 // QueueWorker 投递队列 worker（2 池按域串行）。
 type QueueWorker struct {
-	queue   queueClaimStore
-	sender  OutboundSender
-	dsn     DSNBuilder
-	signer  outboundSigner
-	blobs   blobWriter
-	conf    deliveryConfigFunc
-	domain  string
-	wake    chan struct{}
-	stopped chan struct{}
-	stopMu  sync.Mutex
+	queue    queueClaimStore
+	sender   OutboundSender
+	dsn      DSNBuilder
+	signer   outboundSigner
+	blobs    blobWriter
+	conf     deliveryConfigFunc
+	domain   string
+	wake     chan struct{}
+	stopped  chan struct{}
+	stopOnce sync.Once // M7：并发退出恰一次 close（select-default 竞态根治）
+	stopMu   sync.Mutex
 }
 
 // blobWriter Blob 写入窄接口（storage.BlobStore 满足）。
@@ -81,14 +103,19 @@ func (w *QueueWorker) Wake() {
 	}
 }
 
-// Start 启动 worker 池：启动恢复+2 goroutine 循环。返回 stopped 通道（优雅退出等待位）。
+// Start 启动 worker 池：启动恢复+首轮 DSN 重扫+2 goroutine 循环。
+// 返回 stopped 通道（优雅退出等待位——恰关闭一次，M7）。
 func (w *QueueWorker) Start(ctx context.Context) <-chan struct{} {
-	// 崩溃恢复（流程设计 3.2 不变量 1：in_flight→pending 幂等；Stale=10min，1.5⑦）
+	// 崩溃恢复（流程设计 3.2 不变量 1：in_flight→pending 幂等；Stale=10min，1.5⑦）。
+	// F2 附带：回收行经退避阶梯重置 next_attempt_at（storage 侧承载）。
 	if n, err := w.queue.ReclaimStale(ctx, 10*time.Minute); err != nil {
 		slog.Default().Error("启动崩溃恢复失败", "error", err)
 	} else if n > 0 {
 		slog.Default().Info("启动崩溃恢复完成", "reclaimed", n)
 	}
+	// F5（B-R2）首轮重扫：上次进程在 MarkResult(failed) 成功后、emitDSN 完成前崩溃
+	// 的行——补发 DSN 收口（沿 runTokenPurgeLoop「首轮即跑」先例）。
+	w.RescanPendingDSNs(ctx)
 	for i := 1; i <= 2; i++ {
 		go w.loop(ctx, i)
 	}
@@ -97,21 +124,14 @@ func (w *QueueWorker) Start(ctx context.Context) <-chan struct{} {
 
 // loop 单 worker 循环：唤醒等待（30s tick 或 Wake 信号）→认领→按域分组串行投递。
 func (w *QueueWorker) loop(ctx context.Context, id int) {
-	defer func() {
-		w.stopMu.Lock()
-		// 双 worker 全退后再关闭 stopped（简化：单通道两写者各关一次改为计数）
-		w.stopMu.Unlock()
-	}()
 	logger := slog.Default().With("worker", id)
 	for {
 		select {
 		case <-ctx.Done():
 			logger.Info("worker 退出（上下文取消）")
-			select {
-			case <-w.stopped:
-			default:
-				close(w.stopped) // 首个退出者关闭信号（drain 语义由 main 的等待时长兜底）
-			}
+			// M7：sync.Once 收敛 close——双 worker 同收 ctx.Done 并发退出时
+			// 恰执行一次（原 select-default 检测-关闭窗口存在双 close panic）。
+			w.stopOnce.Do(func() { close(w.stopped) })
 			return
 		case <-time.After(30 * time.Second): // tick 轮询（deferred 到期兜底）
 		case <-w.wake: // 入队即时唤醒
@@ -137,12 +157,16 @@ func (w *QueueWorker) runBatch(ctx context.Context, logger *slog.Logger) {
 	}
 }
 
-// attempt 单项投递尝试：Send→退避计算→MarkResult→failed 终态 DSN 链。
+// attempt 单项投递尝试：心跳续期→Send→退避计算→MarkResult→failed 终态 DSN 链。
 func (w *QueueWorker) attempt(ctx context.Context, logger *slog.Logger, item *storage.QueueItem) {
 	// 每次尝试新 LogID（1.5⑪；observability 签名：ctx+logger 双返回）
 	attemptCtx, _ := observability.ContextWithNewLogID(ctx, logger)
 	logger = slog.Default().With("queue_id", item.ID, "message_id", item.MessageID,
 		"envelope_from", item.EnvelopeFrom, "rcpt_to", item.RcptTo)
+
+	// F4（A-14①/D1）：投递期心跳经 sender 注入回调承载（每 MX 尝试前
+	// TouchClaim(item.ClaimToken)——main 装配侧绑定；此处不前置重设：首个 MX 前
+	// sender 回调即完成首次续期，零 host 场景无投递无续期必要）。
 
 	result := w.sender.Send(attemptCtx, item)
 	result.Attempts = item.Attempts + 1
@@ -159,7 +183,14 @@ func (w *QueueWorker) attempt(ctx context.Context, logger *slog.Logger, item *st
 	}
 
 	// 回写（失败仅记日志——状态保持 in_flight 由 Stale 收敛，不重复投递，TC-021 判定②）
+	// F1（A-14②）：ErrQueueStaleWrite=迟到回写（行已被 Stale 回收进入新一轮投递）——
+	// 本次结果自然作废 Warn 丢弃，禁止覆盖回收后的新状态。
 	if err := w.queue.MarkResult(attemptCtx, item.ID, result); err != nil {
+		if errors.Is(err, storage.ErrQueueStaleWrite) {
+			logger.Warn("迟到回写已丢弃（行已被回收重投，本次结果作废）",
+				"status", string(result.Status))
+			return
+		}
 		logger.Error("结果回写失败，保持 in_flight 待 Stale 收敛", "error", err)
 		return
 	}
@@ -172,13 +203,28 @@ func (w *QueueWorker) attempt(ctx context.Context, logger *slog.Logger, item *st
 }
 
 // emitDSN failed 终态退信链：Build→DKIM 签名→Blob→messages 落库→按域投递入队。
+// F5：成功或抑制（F6）后置位 dsn_sent——重扫不再命中（failed 必产 DSN 强保证的
+// 完成侧锚点；置位失败仅日志，由周期重扫收敛补位）。
 func (w *QueueWorker) emitDSN(ctx context.Context, logger *slog.Logger, item *storage.QueueItem, result storage.AttemptResult) {
 	if item.EnvelopeFrom == "" || item.EnvelopeFrom == "<>" {
 		logger.Info("null sender 终态失败，不生成 DSN（rfc3464 防循环）")
+		// F5：null sender 跳过亦为终态——置位防重扫空转
+		if err := w.queue.MarkDSNSent(ctx, item.ID); err != nil {
+			logger.Warn("null sender DSN 回执置位失败（重扫将重试）", "error", err)
+		}
 		return
 	}
 	dsnRaw, err := w.dsn.Build(ctx, item, result)
 	if err != nil {
+		// F6（B-R3）：原信为自动消息（Auto-Submitted≠no）——抑制生成，置位终态
+		// （自动消息永不回应；不置位将导致重扫死循环）。
+		if errors.Is(err, ErrDSNSuppressed) {
+			logger.Info("原信为自动消息（Auto-Submitted≠no），DSN 抑制不生成（rfc3834 §2）")
+			if markErr := w.queue.MarkDSNSent(ctx, item.ID); markErr != nil {
+				logger.Warn("DSN 抑制回执置位失败（重扫将重试）", "error", markErr)
+			}
+			return
+		}
 		logger.Error("DSN 构造失败", "error", err)
 		return
 	}
@@ -207,8 +253,35 @@ func (w *QueueWorker) emitDSN(ctx context.Context, logger *slog.Logger, item *st
 		logger.Error("DSN 入库失败", "error", err)
 		return
 	}
+	// F5（B-R2）：投递入队成功——置位 dsn_sent（failed 必产 DSN 闭环）。
+	if err = w.queue.MarkDSNSent(ctx, item.ID); err != nil {
+		logger.Warn("DSN 回执置位失败（周期重扫将收敛补位）", "error", err)
+	}
 	w.Wake()
 	logger.Info("DSN 退信已生成并入队", "dsn_to", item.EnvelopeFrom)
+}
+
+// RescanPendingDSNs failed 行 DSN 补发重扫（F5/B-R2：进程崩溃致 failed 已落库而
+// emitDSN 未完成——「failed 必产生 DSN」不变量 3 的强保证；启动首轮+main 周期消费）。
+// 逐行：Build 防循环跳过（null sender/F6 抑制）→入队→置位；置位失败由下轮收敛。
+func (w *QueueWorker) RescanPendingDSNs(ctx context.Context) {
+	logger := slog.Default().With("component", "dsn_rescan")
+	items, err := w.queue.ListFailedDSNPending(ctx, 100)
+	if err != nil {
+		logger.Error("重扫 DSN 待发行失败", "error", err)
+		return
+	}
+	if len(items) == 0 {
+		return
+	}
+	for _, item := range items {
+		w.emitDSN(ctx, logger, item, storage.AttemptResult{
+			Status:   storage.AttemptFailed,
+			SMTPCode: item.LastSMTPCode,
+			Error:    item.LastError,
+		})
+	}
+	logger.Info("DSN 待发行重扫完成", "pending", len(items))
 }
 
 // backoffDelay 退避时长计算（Q5-C 裁决缺省档：base=60s/factor=2/cap=3600s；

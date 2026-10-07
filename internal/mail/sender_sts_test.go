@@ -6,6 +6,8 @@
 // 修改历史：
 //
 //	2026-10-01 23:38:00 | 新建 | 传输安全与日志增强批次（计划书步骤 2 定向锚）
+//	2026-10-07 15:35:00 | 适配 | 传输安全合规批 F7：stubTLSRecorder.Record 增
+//	policy 快照参数（签名扩展形态适配——断言面零变化）
 package mail
 
 import (
@@ -38,7 +40,7 @@ type stubTLSRecorder struct {
 	calls []string // "domain|mx|result" 形态
 }
 
-func (s *stubTLSRecorder) Record(domain, mxHost, resultType string) {
+func (s *stubTLSRecorder) Record(domain, mxHost, resultType string, _ *TLSPolicySnapshot) {
 	s.mu.Lock()
 	s.calls = append(s.calls, domain+"|"+mxHost+"|"+resultType)
 	s.mu.Unlock()

@@ -18,6 +18,9 @@
 //
 //	2026-09-20 00:48:00 | 新建 | U10 Setup 向导与 ACME（计划书步骤 4）
 //	2026-09-23 08:50:00 | 扩展 | U13 传输安全全量：域名清单扩展（计划书步骤 8/1.5④）
+//	2026-10-07 15:35:00 | 修正 | 传输安全合规批 F8（B-T3①②）：saveTLSPaths 失败
+//	强制重试标记（writeBackPending——绕过 needsRenewal 新证书 30d 窗）+obtain 互斥
+//	（EnsureIssued/Run 并发防双签）；G2 批准 2026-10-07 15:13:06
 package transport
 
 import (
@@ -31,6 +34,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
@@ -50,6 +54,12 @@ const renewWindow = 30 * 24 * time.Hour
 
 // renewTickInterval 续期检查周期（每日一次；真签发/续期动作仅在窗口内触发）
 const renewTickInterval = 24 * time.Hour
+
+// acmeRequestTimeout 签发链单 ACME API 请求超时预算（F7/M4-2，访问协议资源
+// 限制批——lego v4 Obtain 族 API 不接收 ctx，经 lego.Config.HTTPClient.Timeout
+// 承载；原全链无超时，CA/网络挂起则续期 goroutine 永久阻塞；整链上界≈请求数
+// ×本预算，每日 tick 重试链兜底）。
+const acmeRequestTimeout = 2 * time.Minute
 
 // ChallengeStore ACME HTTP-01 挑战 token 内存表（challenge.Provider 实现）。
 // Present 由 lego 在授权期回调存入 token→keyAuth 映射；web 80 端口挑战路由经
@@ -106,6 +116,13 @@ type ACMEManager struct {
 	saveTLSPaths func(certFile, keyFile string) error // 回写 config.json TLS 路径（main 注入：Current→改→Save→Watcher 广播→TLSManager 重载）
 	stsEnabled   func() bool                          // U13：MTA-STS 开关快照（清单扩展判定；nil=恒 false——单域既有形态）
 	store        *ChallengeStore
+	// F8②（B-T3，传输安全合规批）：签发链互斥——EnsureIssued（Setup 首签）与 Run
+	// （每日 tick）并发调用 obtain 时防双签（CA 配额保护）。
+	obtainMu sync.Mutex
+	// F8①（B-T3）：回写失败强制重试标记——saveTLSPaths 失败置位，下一 tick 绕过
+	// needsRenewal（新证书 NotAfter 判定 30d 窗内不再触发→证书文件在位但 config
+	// 未回写、TLSManager 不拾取的长期不接入窗口收口）；回写成功清位。
+	writeBackPending bool
 }
 
 // NewACMEManager 构造 ACME 管理器。
@@ -154,8 +171,8 @@ func (m *ACMEManager) EnsureIssued(ctx context.Context) error {
 	if !conf.Enabled {
 		return nil // 手动模式（Q5-A 双模式之另一态——证书经向导手动导入路径）
 	}
-	if !m.needsRenewal(conf) {
-		return nil
+	if !m.needsRenewal(conf) && !m.writeBackPending {
+		return nil // F8①：writeBackPending 置位时绕过窗口判定强制重签（回写收口）
 	}
 	return m.obtain(ctx, conf)
 }
@@ -175,8 +192,8 @@ func (m *ACMEManager) Run(ctx context.Context) {
 			if !conf.Enabled {
 				continue
 			}
-			if !m.needsRenewal(conf) {
-				continue
+			if !m.needsRenewal(conf) && !m.writeBackPending {
+				continue // F8①：回写待重试时强制触发（绕过 30d 窗）
 			}
 			if err := m.obtain(ctx, conf); err != nil {
 				logger.Error("ACME 续期失败（下一 tick 重试）", "error", err, "domain", m.domain)
@@ -189,8 +206,14 @@ func (m *ACMEManager) Run(ctx context.Context) {
 
 // obtain 签发全链：账户密钥加载/生成 → 客户端构造（目录端点构造期绑定）→
 // 账户注册/解析 → HTTP-01 provider 注入 → Obtain → 落盘 → 回写。
+// F7（M4-2，访问协议资源限制批）：签发链请求级超时预算——lego v4 Obtain 族
+// API 不接收 ctx（context.WithTimeout 对其内部网络调用无效），经 lego.Config
+// .HTTPClient.Timeout 承载单请求 2min 预算（原全链无超时——CA/网络挂起则续期
+// goroutine 永久阻塞；整链上界≈请求数×2min，每日 tick 重试链兜底）。
 func (m *ACMEManager) obtain(ctx context.Context, conf config.ACMEConf) error {
 	logger := observability.LoggerFromContext(ctx)
+	m.obtainMu.Lock() // F8②：签发链互斥（EnsureIssued/Run 并发防双签）
+	defer m.obtainMu.Unlock()
 
 	key, err := m.loadOrCreateAccountKey(conf.AccountKeyPath)
 	if err != nil {
@@ -207,6 +230,8 @@ func (m *ACMEManager) obtain(ctx context.Context, conf config.ACMEConf) error {
 	}
 	legoCfg := lego.NewConfig(user)
 	legoCfg.CADirURL = dirURL
+	// F7：请求级超时注入（目录/账户/挑战/签发各 ACME API 调用共享该客户端）
+	legoCfg.HTTPClient = &http.Client{Timeout: acmeRequestTimeout}
 
 	client, err := lego.NewClient(legoCfg)
 	if err != nil {
@@ -259,11 +284,13 @@ func (m *ACMEManager) obtain(ctx context.Context, conf config.ACMEConf) error {
 
 	if m.saveTLSPaths != nil {
 		if err := m.saveTLSPaths(certFile, keyFile); err != nil {
-			// 落盘成功但回写失败：证书文件在位（TLSManager 下次重启/路径变更时拾取），
-			// 返回错误促上层记录并由 tick 重试（重复签发前 needsRenewal 先生效——回写成功前 NotAfter 未到窗口会跳过重签，
-			// 极端窗口内重复签发受 CA 配额限制可容忍，登记修改文档第三章）
+			// 落盘成功但回写失败：F8① 置位强制重试标记——下一 tick 绕过 needsRenewal
+			// （新证书 30d 窗内不再触发的原缺陷收口）；重复签发受 CA 配额限制可容忍
+			// （原注释口径保持——修改文档第三章登记）
+			m.writeBackPending = true
 			return fmt.Errorf("回写 config.json TLS 路径: %w", err)
 		}
+		m.writeBackPending = false // F8①：回写成功清位
 	}
 	return nil
 }

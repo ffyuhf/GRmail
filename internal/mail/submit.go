@@ -13,6 +13,9 @@
 // 修改历史：
 //
 //	2026-09-17 12:02:00 | 新建 | U5 SMTP 提交与投递（计划书步骤 6）
+//	2026-10-07 15:20:00 | 扩展 | 传输安全合规批 F1/A-9：Submission 增 SkipTLSPolicy
+//	字段+入队传递（G2 批准 2026-10-07 15:13:06；rfc8460 §5.3.1 L1050-1051 MUST NOT
+//	honor——TLS-RPT 报告行豁免标记经提交链入队持久化）
 package mail
 
 import (
@@ -43,6 +46,11 @@ type Submission struct {
 	// TLSCipher 提交会话 TLS 加密套件注册名（F-9——rfc8314 §4.3 L511-523「tls」
 	// Received 子句承载；空=非 TLS 会话缺省兜底（提交端点认证强制 TLS，理论不可达））
 	TLSCipher string
+	// SkipTLSPolicy F1/A-9：TLS-RPT 报告行豁免标记（true=投递链跳过 MTA-STS/DANE
+	// 策略判定——rfc8460 §5.3.1「Sending MTAs MUST NOT honor MTA-STS or DANE TLSA
+	// failures」；TLS 本身仍机会升级；仅 runTLSRPTReportRound 报告提交置位，
+	// SMTP 提交端点/Webmail 恒零值——普通邮件判定零变化）
+	SkipTLSPolicy bool
 }
 
 // DSNParam rfc3461 提交参数记录（Q7-A；值域经 rfc3461 第 4 章原文回读定稿）。
@@ -164,7 +172,8 @@ func (s *SubmissionPipelineService) Submit(ctx context.Context, in *Submission, 
 			RcptTo:        rcpt,
 			Status:        storage.QueuePending,
 			NextAttemptAt: now,
-			RetFull:       retFull, // F-L3：持久化至 worker DSN 构造消费
+			RetFull:       retFull,          // F-L3：持久化至 worker DSN 构造消费
+			SkipTLSPolicy: in.SkipTLSPolicy, // F1/A-9：报告行豁免标记持久化（迁移 00013）
 		})
 	}
 	// DSNParams 语法已在会话层校验；此处日志登记（透传记录义务，Q7-A）

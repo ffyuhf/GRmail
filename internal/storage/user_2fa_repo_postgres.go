@@ -66,37 +66,62 @@ func (r *PostgresUserRepo) ConfirmTwoFactor(ctx context.Context, userID int64, c
 	return nil
 }
 
-// MarkTOTPStep 记录 TOTP 验证成功步（rfc6238 §5.2 同窗重放拒绝）。
+// MarkTOTPStep 记录 TOTP 验证成功步（rfc6238 §5.2 同窗重放拒绝；安全原子性批 F3
+// 2026-10-06：SQL 条件 UPDATE 原子守卫——0 行受影响 → ErrTOTPStepConflict）。
 func (r *PostgresUserRepo) MarkTOTPStep(ctx context.Context, userID, step int64) error {
-	if err := r.q.MarkAdminTOTPStep(ctx, dbgen.MarkAdminTOTPStepParams{
-		TotpLastStep: sql.NullInt64{Int64: step, Valid: true},
-		UpdatedAt:    time.Now().UTC(),
-		ID:           userID,
-	}); err != nil {
+	res, err := r.q.MarkAdminTOTPStep(ctx, dbgen.MarkAdminTOTPStepParams{
+		TotpLastStep:   sql.NullInt64{Int64: step, Valid: true},
+		UpdatedAt:      time.Now().UTC(),
+		ID:             userID,
+		TotpLastStep_2: sql.NullInt64{Int64: step, Valid: true}, // 条件守卫参数
+	})
+	if err != nil {
 		return fmt.Errorf("记录管理员 TOTP 验证步: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("记录管理员 TOTP 验证步（受影响行数）: %w", err)
+	}
+	if n == 0 {
+		return ErrTOTPStepConflict
 	}
 	return nil
 }
 
-// ConsumeRecoveryCode 消耗一枚恢复码（事务读→匹配→移除→写回；false=未命中拒绝）。
+// ConsumeRecoveryCode 消耗一枚管理员恢复码（安全原子性批 F4 2026-10-06：CAS 覆写
+// +单轮重试——同码并发恰一成功；见 mailbox 侧注记）。
 func (r *PostgresUserRepo) ConsumeRecoveryCode(ctx context.Context, userID int64, codeHash string) (bool, error) {
-	tx, err := r.db.BeginTx(ctx, nil)
-	if err != nil {
-		return false, fmt.Errorf("开启事务: %w", err)
+	for attempt := 0; attempt < 2; attempt++ {
+		consumed, retry, err := r.consumeRecoveryCodeOnce(ctx, userID, codeHash)
+		if err != nil {
+			return false, err
+		}
+		if !retry {
+			return consumed, nil
+		}
+	}
+	return false, nil
+}
+
+// consumeRecoveryCodeOnce 单轮消耗尝试（独立事务；CAS 参数为 sql.NullString 形态）。
+func (r *PostgresUserRepo) consumeRecoveryCodeOnce(ctx context.Context, userID int64, codeHash string) (consumed, retry bool, err error) {
+	tx, txErr := r.db.BeginTx(ctx, nil)
+	if txErr != nil {
+		return false, false, fmt.Errorf("开启事务: %w", txErr)
 	}
 	defer func() { _ = tx.Rollback() }()
 
 	qtx := r.q.WithTx(tx)
-	row, err := qtx.GetAdmin2FAByID(ctx, userID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, ErrUserNotFound
+	row, gerr := qtx.GetAdmin2FAByID(ctx, userID)
+	if errors.Is(gerr, sql.ErrNoRows) {
+		return false, false, ErrUserNotFound
 	}
-	if err != nil {
-		return false, fmt.Errorf("查询管理员恢复码集: %w", err)
+	if gerr != nil {
+		return false, false, fmt.Errorf("查询管理员恢复码集: %w", gerr)
 	}
-	hashes, err := parseRecoveryCodesJSON(row.RecoveryCodes.String)
-	if err != nil {
-		return false, err
+	hashes, perr := parseRecoveryCodesJSON(row.RecoveryCodes.String)
+	if perr != nil {
+		return false, false, perr
 	}
 	idx := -1
 	for i, h := range hashes {
@@ -106,24 +131,33 @@ func (r *PostgresUserRepo) ConsumeRecoveryCode(ctx context.Context, userID int64
 		}
 	}
 	if idx < 0 {
-		return false, nil // 未命中：重放/伪造拒绝
+		return false, false, nil // 未命中：重放/伪造拒绝
 	}
 	remaining := append(hashes[:idx:idx], hashes[idx+1:]...)
-	codes, err := marshalRecoveryCodes(remaining)
-	if err != nil {
-		return false, err
+	codes, merr := marshalRecoveryCodes(remaining)
+	if merr != nil {
+		return false, false, merr
 	}
-	if err := qtx.UpdateAdminRecoveryCodes(ctx, dbgen.UpdateAdminRecoveryCodesParams{
-		RecoveryCodes: nullString(codes),
-		UpdatedAt:     time.Now().UTC(),
-		ID:            userID,
-	}); err != nil {
-		return false, fmt.Errorf("消耗管理员恢复码: %w", err)
+	res, uerr := qtx.ConsumeAdminRecoveryCodeCAS(ctx, dbgen.ConsumeAdminRecoveryCodeCASParams{
+		RecoveryCodes:   nullString(codes),
+		UpdatedAt:       time.Now().UTC(),
+		ID:              userID,
+		RecoveryCodes_2: row.RecoveryCodes, // CAS 条件：本事务读到的旧集原串
+	})
+	if uerr != nil {
+		return false, false, fmt.Errorf("消耗管理员恢复码: %w", uerr)
 	}
-	if err := tx.Commit(); err != nil {
-		return false, fmt.Errorf("提交事务: %w", err)
+	n, rerr := res.RowsAffected()
+	if rerr != nil {
+		return false, false, fmt.Errorf("消耗管理员恢复码（受影响行数）: %w", rerr)
 	}
-	return true, nil
+	if n == 0 {
+		return false, true, nil // CAS 冲突——由调用方重试
+	}
+	if cerr := tx.Commit(); cerr != nil {
+		return false, false, fmt.Errorf("提交事务: %w", cerr)
+	}
+	return true, false, nil
 }
 
 // ClearTwoFactor 停用 2FA（三列同清）。

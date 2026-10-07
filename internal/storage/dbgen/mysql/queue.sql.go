@@ -13,7 +13,7 @@ import (
 
 const claimDueQueueItemsUpdate = `-- name: ClaimDueQueueItemsUpdate :execrows
 UPDATE delivery_queue
-SET status = 'in_flight', updated_at = ?
+SET status = 'in_flight', claim_token = ?, heartbeat_at = ?, updated_at = ?
 WHERE id IN (
     SELECT id FROM (
         SELECT due.id FROM delivery_queue AS due
@@ -25,13 +25,24 @@ WHERE id IN (
 `
 
 type ClaimDueQueueItemsUpdateParams struct {
+	ClaimToken    sql.NullString
+	HeartbeatAt   sql.NullTime
 	UpdatedAt     time.Time
 	NextAttemptAt time.Time
 	Limit         int32
 }
 
+// F3/F4 (A-14-4/D1): the claim token is written together with the
+// pending->in_flight transition; the follow-up read selects by token so the
+// historical updated_at=now same-value read-back race is eliminated.
 func (q *Queries) ClaimDueQueueItemsUpdate(ctx context.Context, arg ClaimDueQueueItemsUpdateParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, claimDueQueueItemsUpdate, arg.UpdatedAt, arg.NextAttemptAt, arg.Limit)
+	result, err := q.db.ExecContext(ctx, claimDueQueueItemsUpdate,
+		arg.ClaimToken,
+		arg.HeartbeatAt,
+		arg.UpdatedAt,
+		arg.NextAttemptAt,
+		arg.Limit,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -39,13 +50,30 @@ func (q *Queries) ClaimDueQueueItemsUpdate(ctx context.Context, arg ClaimDueQueu
 }
 
 const getQueueItem = `-- name: GetQueueItem :one
-SELECT id, message_id, envelope_from, rcpt_to, status, attempts, next_attempt_at, last_smtp_code, last_error, created_at, updated_at, ret_full
+SELECT id, message_id, envelope_from, rcpt_to, status, attempts, next_attempt_at, last_smtp_code, last_error, created_at, updated_at, ret_full, claim_token, skip_tls_policy
 FROM delivery_queue WHERE id = ?
 `
 
-func (q *Queries) GetQueueItem(ctx context.Context, id int64) (DeliveryQueue, error) {
+type GetQueueItemRow struct {
+	ID            int64
+	MessageID     int64
+	EnvelopeFrom  string
+	RcptTo        string
+	Status        string
+	Attempts      int32
+	NextAttemptAt time.Time
+	LastSmtpCode  sql.NullInt32
+	LastError     sql.NullString
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	RetFull       bool
+	ClaimToken    sql.NullString
+	SkipTlsPolicy bool
+}
+
+func (q *Queries) GetQueueItem(ctx context.Context, id int64) (GetQueueItemRow, error) {
 	row := q.db.QueryRowContext(ctx, getQueueItem, id)
-	var i DeliveryQueue
+	var i GetQueueItemRow
 	err := row.Scan(
 		&i.ID,
 		&i.MessageID,
@@ -59,13 +87,36 @@ func (q *Queries) GetQueueItem(ctx context.Context, id int64) (DeliveryQueue, er
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.RetFull,
+		&i.ClaimToken,
+		&i.SkipTlsPolicy,
 	)
 	return i, err
 }
 
+const heartbeatQueueClaim = `-- name: HeartbeatQueueClaim :execrows
+UPDATE delivery_queue
+SET heartbeat_at = ?, updated_at = ?
+WHERE claim_token = ? AND status = 'in_flight'
+`
+
+type HeartbeatQueueClaimParams struct {
+	HeartbeatAt sql.NullTime
+	UpdatedAt   time.Time
+	ClaimToken  sql.NullString
+}
+
+// F4 (A-14-1/D1): renew heartbeat before each MX attempt (token-guarded).
+func (q *Queries) HeartbeatQueueClaim(ctx context.Context, arg HeartbeatQueueClaimParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, heartbeatQueueClaim, arg.HeartbeatAt, arg.UpdatedAt, arg.ClaimToken)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const insertQueueItem = `-- name: InsertQueueItem :execresult
-INSERT INTO delivery_queue (message_id, envelope_from, rcpt_to, status, attempts, next_attempt_at, ret_full, created_at, updated_at)
-VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?)
+INSERT INTO delivery_queue (message_id, envelope_from, rcpt_to, status, attempts, next_attempt_at, ret_full, skip_tls_policy, created_at, updated_at)
+VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
 `
 
 type InsertQueueItemParams struct {
@@ -75,6 +126,7 @@ type InsertQueueItemParams struct {
 	Status        string
 	NextAttemptAt time.Time
 	RetFull       bool
+	SkipTlsPolicy bool
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
 }
@@ -87,15 +139,96 @@ func (q *Queries) InsertQueueItem(ctx context.Context, arg InsertQueueItemParams
 		arg.Status,
 		arg.NextAttemptAt,
 		arg.RetFull,
+		arg.SkipTlsPolicy,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)
 }
 
+const listFailedDSNPending = `-- name: ListFailedDSNPending :many
+SELECT id, message_id, envelope_from, rcpt_to, status, attempts, next_attempt_at, last_smtp_code, last_error, created_at, updated_at, ret_full, claim_token, skip_tls_policy
+FROM delivery_queue
+WHERE status = 'failed' AND dsn_sent = 0
+ORDER BY id
+LIMIT ?
+`
+
+type ListFailedDSNPendingRow struct {
+	ID            int64
+	MessageID     int64
+	EnvelopeFrom  string
+	RcptTo        string
+	Status        string
+	Attempts      int32
+	NextAttemptAt time.Time
+	LastSmtpCode  sql.NullInt32
+	LastError     sql.NullString
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	RetFull       bool
+	ClaimToken    sql.NullString
+	SkipTlsPolicy bool
+}
+
+// F5 (B-R2): rescan source for crashed-before-emitDSN failed rows.
+func (q *Queries) ListFailedDSNPending(ctx context.Context, limit int32) ([]ListFailedDSNPendingRow, error) {
+	rows, err := q.db.QueryContext(ctx, listFailedDSNPending, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListFailedDSNPendingRow{}
+	for rows.Next() {
+		var i ListFailedDSNPendingRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.MessageID,
+			&i.EnvelopeFrom,
+			&i.RcptTo,
+			&i.Status,
+			&i.Attempts,
+			&i.NextAttemptAt,
+			&i.LastSmtpCode,
+			&i.LastError,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.RetFull,
+			&i.ClaimToken,
+			&i.SkipTlsPolicy,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const markQueueDSNSent = `-- name: MarkQueueDSNSent :execresult
+UPDATE delivery_queue
+SET dsn_sent = 1, updated_at = ?
+WHERE id = ? AND status = 'failed' AND dsn_sent = 0
+`
+
+type MarkQueueDSNSentParams struct {
+	UpdatedAt time.Time
+	ID        int64
+}
+
+// F5 (B-R2): DSN-issued marker on the failed row (idempotent guard).
+func (q *Queries) MarkQueueDSNSent(ctx context.Context, arg MarkQueueDSNSentParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, markQueueDSNSent, arg.UpdatedAt, arg.ID)
+}
+
 const markQueueResult = `-- name: MarkQueueResult :execresult
 UPDATE delivery_queue
-SET status = ?, attempts = ?, next_attempt_at = ?, last_smtp_code = ?, last_error = ?, updated_at = ?
-WHERE id = ?
+SET status = ?, attempts = ?, next_attempt_at = ?, last_smtp_code = ?, last_error = ?, claim_token = NULL, heartbeat_at = NULL, updated_at = ?
+WHERE id = ? AND status = 'in_flight'
 `
 
 type MarkQueueResultParams struct {
@@ -108,6 +241,8 @@ type MarkQueueResultParams struct {
 	ID            int64
 }
 
+// F1 (A-14-2): guarded by status='in_flight'; late writes after a Stale
+// reclaim affect zero rows and are dropped by the caller with a Warn.
 func (q *Queries) MarkQueueResult(ctx context.Context, arg MarkQueueResultParams) (sql.Result, error) {
 	return q.db.ExecContext(ctx, markQueueResult,
 		arg.Status,
@@ -122,34 +257,76 @@ func (q *Queries) MarkQueueResult(ctx context.Context, arg MarkQueueResultParams
 
 const reclaimStaleQueueItems = `-- name: ReclaimStaleQueueItems :execresult
 UPDATE delivery_queue
-SET status = 'pending', updated_at = ?
-WHERE status = 'in_flight' AND updated_at < ?
+SET status = 'pending', claim_token = NULL, heartbeat_at = NULL, updated_at = ?,
+    next_attempt_at = CASE attempts
+        WHEN 0 THEN ? WHEN 1 THEN ? WHEN 2 THEN ? WHEN 3 THEN ?
+        WHEN 4 THEN ? WHEN 5 THEN ? ELSE ? END
+WHERE status = 'in_flight' AND COALESCE(heartbeat_at, updated_at) < ?
 `
 
 type ReclaimStaleQueueItemsParams struct {
-	UpdatedAt   time.Time
-	UpdatedAt_2 time.Time
+	UpdatedAt       time.Time
+	NextAttemptAt   time.Time
+	NextAttemptAt_2 time.Time
+	NextAttemptAt_3 time.Time
+	NextAttemptAt_4 time.Time
+	NextAttemptAt_5 time.Time
+	NextAttemptAt_6 time.Time
+	NextAttemptAt_7 time.Time
+	HeartbeatAt     sql.NullTime
 }
 
+// F2 (A-14-3) + F4: reclaim resets next_attempt_at by the attempts-based
+// backoff ladder (t0..t6 absolute timestamps from the repo layer) and
+// judges staleness by COALESCE(heartbeat_at, updated_at).
 func (q *Queries) ReclaimStaleQueueItems(ctx context.Context, arg ReclaimStaleQueueItemsParams) (sql.Result, error) {
-	return q.db.ExecContext(ctx, reclaimStaleQueueItems, arg.UpdatedAt, arg.UpdatedAt_2)
+	return q.db.ExecContext(ctx, reclaimStaleQueueItems,
+		arg.UpdatedAt,
+		arg.NextAttemptAt,
+		arg.NextAttemptAt_2,
+		arg.NextAttemptAt_3,
+		arg.NextAttemptAt_4,
+		arg.NextAttemptAt_5,
+		arg.NextAttemptAt_6,
+		arg.NextAttemptAt_7,
+		arg.HeartbeatAt,
+	)
 }
 
 const selectClaimedQueueItems = `-- name: SelectClaimedQueueItems :many
-SELECT id, message_id, envelope_from, rcpt_to, status, attempts, next_attempt_at, last_smtp_code, last_error, created_at, updated_at, ret_full
+SELECT id, message_id, envelope_from, rcpt_to, status, attempts, next_attempt_at, last_smtp_code, last_error, created_at, updated_at, ret_full, claim_token, skip_tls_policy
 FROM delivery_queue
-WHERE status = 'in_flight' AND updated_at = ?
+WHERE claim_token = ?
 `
 
-func (q *Queries) SelectClaimedQueueItems(ctx context.Context, updatedAt time.Time) ([]DeliveryQueue, error) {
-	rows, err := q.db.QueryContext(ctx, selectClaimedQueueItems, updatedAt)
+type SelectClaimedQueueItemsRow struct {
+	ID            int64
+	MessageID     int64
+	EnvelopeFrom  string
+	RcptTo        string
+	Status        string
+	Attempts      int32
+	NextAttemptAt time.Time
+	LastSmtpCode  sql.NullInt32
+	LastError     sql.NullString
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	RetFull       bool
+	ClaimToken    sql.NullString
+	SkipTlsPolicy bool
+}
+
+// F3: read back the claimed set by the unique claim token (not by
+// updated_at) -- concurrent claim batches can never cross-read rows.
+func (q *Queries) SelectClaimedQueueItems(ctx context.Context, claimToken sql.NullString) ([]SelectClaimedQueueItemsRow, error) {
+	rows, err := q.db.QueryContext(ctx, selectClaimedQueueItems, claimToken)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []DeliveryQueue{}
+	items := []SelectClaimedQueueItemsRow{}
 	for rows.Next() {
-		var i DeliveryQueue
+		var i SelectClaimedQueueItemsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.MessageID,
@@ -163,6 +340,8 @@ func (q *Queries) SelectClaimedQueueItems(ctx context.Context, updatedAt time.Ti
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.RetFull,
+			&i.ClaimToken,
+			&i.SkipTlsPolicy,
 		); err != nil {
 			return nil, err
 		}

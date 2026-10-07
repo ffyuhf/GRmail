@@ -107,6 +107,14 @@ var (
 	ErrFolderIsSystem = errors.New("folder: 系统文件夹不允许此操作")
 	// ErrFolderNotEmpty 文件夹内仍有邮件引用，禁止删除（FK 约束拒绝；表现层提示归 U8/U9）
 	ErrFolderNotEmpty = errors.New("folder: 文件夹内仍有邮件")
+	// ErrMailboxStatusConflict SetCredentials 原状态限定未命中（安全原子性批 F2
+	// 2026-10-06）——目标邮箱处于 disabled 等不可设密状态（或行不存在）：改密/激活
+	// 路径不得静默复活管理员禁用邮箱（FR-001 地址隔离/FR-002 管理语义）。
+	ErrMailboxStatusConflict = errors.New("mailbox: 邮箱状态不允许设置凭据")
+	// ErrTOTPStepConflict TOTP 步进条件更新未命中（安全原子性批 F3 2026-10-06）——
+	// 并发同窗重放或回退步（rfc6238 §5.2 L343-347 MUST NOT 第二次接受；mailbox/
+	// users 双表共用哨兵）。
+	ErrTOTPStepConflict = errors.New("twofactor: TOTP 验证步冲突（同窗重放拒绝）")
 )
 
 // ───────────────────────── 接口族（契约 2.1 逐字） ─────────────────────────
@@ -264,14 +272,25 @@ func (r *SQLiteMailboxRepo) ListByStatus(ctx context.Context, status MailboxStat
 	return out, nil
 }
 
-// SetCredentials 设凭据并激活（SQL 内联 status='active'：REQ-020 影子→激活原地继承）。
+// SetCredentials 设凭据并激活（SQL 内联 status='active'：REQ-020 影子→激活原地继承；
+// 安全原子性批 F2 2026-10-06：WHERE 限定 status IN ('active','shadow') +
+// :execresult RowsAffected 消费——disabled 邮箱改密被拒（ErrMailboxStatusConflict），
+// 消除"改密路径静默复活禁用邮箱"授权旁路）。
 func (r *SQLiteMailboxRepo) SetCredentials(ctx context.Context, id int64, hash string) error {
-	if err := r.q.SetMailboxCredentials(ctx, dbgen.SetMailboxCredentialsParams{
+	res, err := r.q.SetMailboxCredentials(ctx, dbgen.SetMailboxCredentialsParams{
 		PasswordHash: hashOrNil(hash),
 		UpdatedAt:    formatTimestamp(time.Now().UTC()),
 		ID:           id,
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("设置邮箱凭据: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("设置邮箱凭据（受影响行数）: %w", err)
+	}
+	if n == 0 {
+		return ErrMailboxStatusConflict
 	}
 	return nil
 }

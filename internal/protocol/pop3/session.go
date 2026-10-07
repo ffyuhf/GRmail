@@ -65,6 +65,9 @@ type session struct {
 
 	mbox *storage.Mailbox // 认证后邮箱（nil=AUTHORIZATION 态）
 	msgs []pop3Msg        // maildrop 快照（message-number=index+1）
+
+	// lockedMailbox 持有 maildrop 锁的邮箱 ID（0=未持锁）——F4/A-13④。
+	lockedMailbox int64
 }
 
 // newSession 构造会话。
@@ -80,6 +83,10 @@ func newSession(s *Server, conn net.Conn, logID string) *session {
 
 // serve 会话主循环（greeting→命令分派→QUIT/断连退出）。
 func (ss *session) serve() {
+	// F4：会话任意退出路径释放 maildrop 锁（幂等——rfc1939 §4 L213-217 独占
+	// 语义的会话生命周期承载：非 QUIT 终止同样释放，"非 QUIT 终止不删除"由
+	// UPDATE 提交仅在 QUIT 路径触发的既有语义保证）。
+	defer ss.releaseMaildrop()
 	// rfc1939 §4：greeting 为单行正响应
 	ss.writeLine("+OK POP3 server ready")
 	for {
@@ -197,15 +204,33 @@ func (ss *session) cmdAuth(arg string) {
 		return
 	}
 	ss.mbox = mbox
-	if err := ss.loadMaildrop(); err != nil {
-		// maildrop 打开失败：拒绝进入 TRANSACTION（rfc1939 §4）
+	// F4（A-13④）：maildrop 独占锁——TRANSACTION 期防双会话删除集互覆（原应答
+	// 文本宣称 locked 无实际锁）；锁失败按 rfc1939 §4 L221-234 负响应语义拒绝
+	//（不进 TRANSACTION、不删消息、可重新认证或 QUIT）。
+	if !ss.server.locks.tryLock(mbox.ID) {
 		ss.mbox = nil
+		ss.writeLine("-ERR unable to lock maildrop")
+		return
+	}
+	ss.lockedMailbox = mbox.ID
+	if err := ss.loadMaildrop(); err != nil {
+		// maildrop 打开失败：拒绝进入 TRANSACTION（rfc1939 §4）——释放锁后再拒绝
+		ss.mbox = nil
+		ss.releaseMaildrop()
 		slog.Error("POP3 maildrop 载入失败", "logid", ss.logID, "error", err)
 		ss.writeLine("-ERR unable to open maildrop")
 		return
 	}
 	slog.Info("POP3 认证成功", "logid", ss.logID, "mailbox", mbox.Address)
 	ss.writeLine("+OK maildrop locked and ready")
+}
+
+// releaseMaildrop 释放 maildrop 独占锁（F4——幂等；serve defer 与中途失败路径共用）。
+func (ss *session) releaseMaildrop() {
+	if ss.lockedMailbox != 0 {
+		ss.server.locks.unlock(ss.lockedMailbox)
+		ss.lockedMailbox = 0
+	}
 }
 
 // splitAuthArg 拆分 AUTH mechanism [initial-response]。

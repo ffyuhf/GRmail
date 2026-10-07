@@ -26,16 +26,25 @@
 //
 // 聚合形态：S4-W Q1-A 裁决（2026-10-01 23:05:16）——内存态聚合（重启丢当期统计，
 // 对每日报告粒度可接受；零表改动）。
+// F9（M8，队列防丢信收口批 G2 批准 2026-10-07 08:41:07）：聚合域数上限——单日
+// 大量不同外域收件时 map 单调增长（NFR-002 512MB 风险面）；超限丢弃新域计数+
+// 周期性 Warn（报告语义尽力——日界 SnapshotAndReset 后自然恢复）。
 // 修改历史：
 //
 //	2026-10-01 23:12:00 | 新建 | 传输安全与日志增强批次 L-B（计划书步骤 3；
 //	G2 批准 2026-10-01 22:54:41；S4-W Q1-A 内存聚合裁决）
+//	2026-10-07 08:58:00 | 扩展 | 队列防丢信收口批 F9：tlsrptMaxDomains 上限
+//	2026-10-07 15:30:00 | 扩展 | 传输安全合规批 F7/B-T2：TLSPolicySnapshot 类型+
+//	TLSRPTDomainStats 三字段+Record 签名扩展（策略快照按域首见记录——rfc8460
+//	§4.4 policy{policy-type/policy-string/mx-host-pattern}/§4.5 两形态数组结构
+//	完整化；G2 批准 2026-10-07 15:13:06）
 package transport
 
 import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -59,6 +68,10 @@ const (
 // TLSRPTSuccess 成功计数哨兵（空串区分成功/失败——Record 入口约定）。
 const TLSRPTSuccess = ""
 
+// tlsrptMaxDomains 聚合域数上限（F9/M8：单管理员自托管场景日投递外域量级远低于
+// 此；防御性上限防异常流量下的内存单调增长——NFR-002 伴随）。
+const tlsrptMaxDomains = 10000
+
 // tlsrptFailureKey 聚合粒度键（result-type@mx-host——rfc8460 §4.4 failure-details
 // 按 result-type+接收主机聚合）。
 type tlsrptFailureKey struct {
@@ -66,21 +79,38 @@ type tlsrptFailureKey struct {
 	MXHost     string
 }
 
+// TLSPolicySnapshot TLS 策略快照（F7——rfc8460 §4.4/§4.5 报告结构载体；main 适配器
+// 从 mail.TLSPolicySnapshot 转换——mail/transport 双视图隔离先例保持）。
+type TLSPolicySnapshot struct {
+	PolicyType     string   // sts | tlsa
+	PolicyString   []string // §4.5：STS=策略行数组（每 mx 独立元素）/DANE=TLSA RDATA presentation 数组
+	MXHostPatterns []string // sts 态策略 mx 模式集（tlsa 态为空）
+}
+
 // TLSRPTDomainStats 单策略域统计快照（SnapshotAndReset 返回值）。
+// F7（传输安全合规批）：增策略快照三字段——报告轮按此入报（PolicyType 空串=报告
+// 构造侧兜底 no-policy-found——main.go 既有兜底保持）。
 type TLSRPTDomainStats struct {
-	Success  int64                      // total-successful-session-count
-	Failures map[tlsrptFailureKey]int64 // result-type×mx-host → failed-session-count
+	Success        int64                      // total-successful-session-count
+	Failures       map[tlsrptFailureKey]int64 // result-type×mx-host → failed-session-count
+	PolicyType     string                     // sts | tlsa | 空串（首见无策略——兜底 no-policy-found）
+	PolicyString   []string                   // §4.5 策略原文（快照首见记录）
+	MXHostPatterns []string                   // sts 态 mx 模式集（快照首见记录）
 }
 
 // TLSRPTAggregator TLS 投递结果内存聚合器（S4-W Q1-A——并发安全；零表承载）。
 type TLSRPTAggregator struct {
 	mu      sync.Mutex
 	domains map[string]*tlsrptDomainAgg
+	dropped int64 // F9：超限丢弃累计（周期 Warn 限频计数）
 }
 
 type tlsrptDomainAgg struct {
-	success  int64
-	failures map[tlsrptFailureKey]int64
+	success        int64
+	failures       map[tlsrptFailureKey]int64
+	policyType     string   // F7：首见快照（域内策略恒定——STS id 变更属新周期）
+	policyString   []string // F7
+	mxHostPatterns []string // F7
 }
 
 // NewTLSRPTAggregator 构造聚合器。
@@ -88,16 +118,34 @@ func NewTLSRPTAggregator() *TLSRPTAggregator {
 	return &TLSRPTAggregator{domains: map[string]*tlsrptDomainAgg{}}
 }
 
-// Record 记录一次投递 TLS 结果（mail 域 TLSResultRecorder 消费视图）。
+// Record 记录一次投递 TLS 结果（mail 域 TLSResultRecorder 消费视图——main 适配器
+// 类型转换后调用）。
 // 参数：domain 对端策略域（小写规范化）；mxHost 接收 MX 主机；resultType 结果类型
-// （TLSRPTSuccess=""=成功会话）。瞬态网络失败不记录（§4.3.4 不要求）。
-func (a *TLSRPTAggregator) Record(domain, mxHost, resultType string) {
+// （TLSRPTSuccess=""=成功会话）；policy 策略快照（F7——nil=无策略域；按域首见记录，
+// 后续计数沿用首见快照——同域策略在单统计窗内恒定，STS id 变更属新周期边界）。
+// 瞬态网络失败不记录（§4.3.4 不要求）。
+func (a *TLSRPTAggregator) Record(domain, mxHost, resultType string, policy *TLSPolicySnapshot) {
 	domain = strings.ToLower(strings.TrimSuffix(domain, "."))
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	agg, ok := a.domains[domain]
 	if !ok {
+		if len(a.domains) >= tlsrptMaxDomains {
+			// F9：超限丢弃新域（既有域继续累计——上限约束键集非总量）；
+			// 每 1000 次丢弃 Warn 一次（限频防刷屏）。
+			a.dropped++
+			if a.dropped%1000 == 1 {
+				slog.Default().Warn("TLS-RPT 聚合域数超上限，新域统计丢弃",
+					"max_domains", tlsrptMaxDomains, "dropped_total", a.dropped)
+			}
+			return
+		}
 		agg = &tlsrptDomainAgg{failures: map[tlsrptFailureKey]int64{}}
+		if policy != nil { // F7：首见快照落域（nil=无策略域零值保持）
+			agg.policyType = policy.PolicyType
+			agg.policyString = policy.PolicyString
+			agg.mxHostPatterns = policy.MXHostPatterns
+		}
 		a.domains[domain] = agg
 	}
 	if resultType == TLSRPTSuccess {
@@ -114,7 +162,13 @@ func (a *TLSRPTAggregator) SnapshotAndReset() map[string]TLSRPTDomainStats {
 	defer a.mu.Unlock()
 	out := make(map[string]TLSRPTDomainStats, len(a.domains))
 	for domain, agg := range a.domains {
-		out[domain] = TLSRPTDomainStats{Success: agg.success, Failures: agg.failures}
+		out[domain] = TLSRPTDomainStats{
+			Success:        agg.success,
+			Failures:       agg.failures,
+			PolicyType:     agg.policyType,     // F7：首见快照随统计窗输出
+			PolicyString:   agg.policyString,   // F7
+			MXHostPatterns: agg.mxHostPatterns, // F7
+		}
 	}
 	a.domains = map[string]*tlsrptDomainAgg{}
 	return out

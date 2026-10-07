@@ -4,6 +4,9 @@
 // 修改历史：
 //
 //	2026-10-03 06:40:00 | 新建 | U25影子邮箱聚合可达批次（G2 批准 2026-10-02 19:41:00）
+//	2026-10-07 09:05:00 | 适配 | 迁移 00012 队列防丢信收口批（末版本演进 00011→00012
+//	——TestU25MigrationRoundTrip 回退步数两→三对齐 U25 断言面；断言面不变；
+//	G2 批准 2026-10-07 01:03:52）
 package storage
 
 import (
@@ -241,8 +244,14 @@ func TestU25MigrationRoundTrip(t *testing.T) {
 		t.Fatalf("迁移至末版: %v", err)
 	}
 
-	// 回退至 00009（U25 前）预置 postmaster 邮箱与存量归档（迁移演进后末版本=00011
-	// 〔管理员主体增强批次〕——两步回退对齐 U25 断言面；沿 U24 加入 00009 时适配先例）
+	// 回退至 00009（U25 前）预置 postmaster 邮箱与存量归档（迁移演进后末版本=00013
+	// 〔传输安全合规批〕——四步回退对齐 U25 断言面；沿 U24/管理员/队列批加入时适配先例）
+	if err = u18MigrateDownOne(ctx, db, "sqlite"); err != nil {
+		t.Fatalf("Down 至 00012: %v", err)
+	}
+	if err = u18MigrateDownOne(ctx, db, "sqlite"); err != nil {
+		t.Fatalf("Down 至 00011: %v", err)
+	}
 	if err = u18MigrateDownOne(ctx, db, "sqlite"); err != nil {
 		t.Fatalf("Down 至 00010: %v", err)
 	}
@@ -267,7 +276,13 @@ func TestU25MigrationRoundTrip(t *testing.T) {
 		t.Fatalf("Up 后聚合文件夹应 1: n=%d err=%v", n, err)
 	}
 
-	// Down 两步（00011→00010→00009——末版本演进适配）：聚合文件夹消除+postmaster 邮箱无损
+	// Down 四步（00013→00012→00011→00010→00009——末版本演进适配）：聚合文件夹消除+postmaster 邮箱无损
+	if err = u18MigrateDownOne(ctx, db, "sqlite"); err != nil {
+		t.Fatalf("Down 00013: %v", err)
+	}
+	if err = u18MigrateDownOne(ctx, db, "sqlite"); err != nil {
+		t.Fatalf("Down 00012: %v", err)
+	}
 	if err = u18MigrateDownOne(ctx, db, "sqlite"); err != nil {
 		t.Fatalf("Down 00011: %v", err)
 	}

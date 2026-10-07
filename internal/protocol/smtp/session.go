@@ -469,23 +469,37 @@ func (sess *session) replyMulti(ctx context.Context, code int, lines ...string) 
 }
 
 // readLine 读取一行（剥 CRLF/LF；超长消费行尾后返回哨兵由调用方 500——4.5.3.1.9）。
+// F5（B-S8，访问协议资源限制批）：ReadSlice 循环计数形态——原 bufio.ReadLine 依赖
+// 默认 4096 缓冲返回 raw ≤4095，`len(raw) > cmdLineLimit(4096)` 恒假、errLineTooLong
+// 从未触发（超长命令被静默吞并剩余段、末段按整行处理）。现累计长度超限即标记，
+// 继续消费至行尾保持流同步（衔接既有"消费超长行剩余部分"语义），返回哨兵走
+// 500 应答实际生效（rfc5321bis §4.5.3.1.9）；零额外内存累积（分块判定）。
 func (sess *session) readLine() (string, error) {
-	raw, isPrefix, err := sess.r.ReadLine()
-	for isPrefix && err == nil {
-		var drop []byte
-		drop, isPrefix, err = sess.r.ReadLine() // 消费超长行剩余部分保持流同步
-		_ = drop
-		if err != nil {
-			break
+	var buf []byte
+	tooLong := false
+	for {
+		seg, err := sess.r.ReadSlice('\n')
+		if err != nil && err != bufio.ErrBufferFull {
+			return "", err // IO 错误/对端关闭（半行数据丢弃——未完成命令无语义）
 		}
+		if !tooLong && len(buf)+len(seg) > cmdLineLimit {
+			tooLong = true // 超长标记——本行作废，继续消费至行尾（协议同步）
+		}
+		if !tooLong {
+			buf = append(buf, seg...)
+		}
+		if err == bufio.ErrBufferFull {
+			continue // 行未完（缓冲满，seg 已并入）——继续读取
+		}
+		if err != nil {
+			return "", err
+		}
+		break // 行完成（含 '\n'）
 	}
-	if err != nil {
-		return "", err
-	}
-	if len(raw) > cmdLineLimit {
+	if tooLong {
 		return "", errLineTooLong
 	}
-	line := string(raw)
+	line := strings.TrimRight(string(buf), "\r\n")
 	sess.debugFrame("C", line+"\r\n") // U21 协议 debug（开启时输出——命令面）
 	return line, nil
 }

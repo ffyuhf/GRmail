@@ -49,18 +49,21 @@ var ErrMissingFrom = errors.New("auth: From 头缺失或不可解析")
 
 // ───────────────────────── DMARC 适配器 ─────────────────────────
 
-// txtResolverAdapter 将 Resolver 适配为 dmarc.TXTResolver（错误分类映射：
-// ravendns.IsNotFound→dmarc.ErrNoRecord；IsTemporary→dmarc.ErrTemporary）。
+// txtResolverAdapter 将 Resolver 适配为 dmarc.TXTResolver（错误分类映射——
+// 安全原子性批 F6 2026-10-06 对齐 rfc7208 §4.4 L819-821：仅 NXDOMAIN
+// 〔ravendns.IsNotFound〕映射 dmarc.ErrNoRecord〔→ none〕；其余一切错误
+// 〔SERVFAIL/超时/REFUSED/NOTIMP 等 RCODE≠0/3〕一律 dmarc.ErrTemporary
+// 〔→ temperror〕——解析器故障不得呈现为"无策略"绕过 DMARC 评估呈现）。
 type txtResolverAdapter struct{ r Resolver }
 
 // LookupTXT 查询并映射错误分类（dmarc 包错误分类约定）。
 func (a txtResolverAdapter) LookupTXT(ctx context.Context, domain string) ([]string, error) {
 	res, err := a.r.LookupTXT(ctx, domain)
 	if err != nil {
-		if ravendns.IsTemporary(err) {
-			return nil, dmarc.ErrTemporary
+		if ravendns.IsNotFound(err) {
+			return nil, dmarc.ErrNoRecord // RCODE 3（NXDOMAIN）→ 无记录 → none
 		}
-		return nil, dmarc.ErrNoRecord
+		return nil, dmarc.ErrTemporary // 其余错误 → temperror（rfc7208 §4.4）
 	}
 	return res.Records, nil
 }

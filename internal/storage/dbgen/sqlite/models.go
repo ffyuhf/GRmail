@@ -31,6 +31,10 @@ type DeliveryQueue struct {
 	CreatedAt     string
 	UpdatedAt     string
 	RetFull       bool
+	ClaimToken    interface{}
+	HeartbeatAt   interface{}
+	DsnSent       int64
+	SkipTlsPolicy int64
 }
 
 type Folder struct {

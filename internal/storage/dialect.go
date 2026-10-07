@@ -161,9 +161,11 @@ func NewMessageRepoFor(driver string, db *sql.DB) MessageRepo {
 }
 
 // QueueStore QueueRepo 四契约方法 + StoreSubmission 提交入队事务（mail 域窄接口
-// submissionStore/queueClaimStore 的超集；SQLite 具体类型既有形态的接口化——U11 装配分派）。
+// submissionStore/queueClaimStore 的超集；SQLite 具体类型既有形态的接口化——U11 装配分派；
+// 队列防丢信收口批 F4/F5 增补 QueueClaimOps 三方法——装配层经本超集分派至 worker）。
 type QueueStore interface {
 	QueueRepo
+	QueueClaimOps
 	StoreSubmission(ctx context.Context, txmeta *SubmissionMeta) error
 }
 

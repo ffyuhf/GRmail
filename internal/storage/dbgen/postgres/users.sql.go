@@ -27,6 +27,28 @@ func (q *Queries) ClearAdmin2FA(ctx context.Context, arg ClearAdmin2FAParams) er
 	return err
 }
 
+const consumeAdminRecoveryCodeCAS = `-- name: ConsumeAdminRecoveryCodeCAS :execresult
+UPDATE users
+SET recovery_codes = $1, updated_at = $2
+WHERE id = $3 AND recovery_codes = $4
+`
+
+type ConsumeAdminRecoveryCodeCASParams struct {
+	RecoveryCodes   sql.NullString
+	UpdatedAt       time.Time
+	ID              int64
+	RecoveryCodes_2 sql.NullString
+}
+
+func (q *Queries) ConsumeAdminRecoveryCodeCAS(ctx context.Context, arg ConsumeAdminRecoveryCodeCASParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, consumeAdminRecoveryCodeCAS,
+		arg.RecoveryCodes,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.RecoveryCodes_2,
+	)
+}
+
 const ensureAdmin = `-- name: EnsureAdmin :execresult
 INSERT INTO users (username, password_hash, is_admin, created_at, updated_at)
 VALUES ($1, $2, true, $3, $4)
@@ -97,21 +119,26 @@ func (q *Queries) GetUserByName(ctx context.Context, username string) (GetUserBy
 	return i, err
 }
 
-const markAdminTOTPStep = `-- name: MarkAdminTOTPStep :exec
+const markAdminTOTPStep = `-- name: MarkAdminTOTPStep :execresult
 UPDATE users
 SET totp_last_step = $1, updated_at = $2
-WHERE id = $3
+WHERE id = $3 AND (totp_last_step IS NULL OR totp_last_step < $4)
 `
 
 type MarkAdminTOTPStepParams struct {
-	TotpLastStep sql.NullInt64
-	UpdatedAt    time.Time
-	ID           int64
+	TotpLastStep   sql.NullInt64
+	UpdatedAt      time.Time
+	ID             int64
+	TotpLastStep_2 sql.NullInt64
 }
 
-func (q *Queries) MarkAdminTOTPStep(ctx context.Context, arg MarkAdminTOTPStepParams) error {
-	_, err := q.db.ExecContext(ctx, markAdminTOTPStep, arg.TotpLastStep, arg.UpdatedAt, arg.ID)
-	return err
+func (q *Queries) MarkAdminTOTPStep(ctx context.Context, arg MarkAdminTOTPStepParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, markAdminTOTPStep,
+		arg.TotpLastStep,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.TotpLastStep_2,
+	)
 }
 
 const setAdmin2FASecret = `-- name: SetAdmin2FASecret :exec

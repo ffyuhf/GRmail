@@ -9,6 +9,9 @@
 // 修改历史：
 //
 //	2026-09-17 11:48:00 | 新建 | U5 SMTP 提交与投递（计划书步骤 4）
+//	2026-10-07 15:35:00 | 修正 | 传输安全合规批 F8③（B-T3）：OnConfigChange 换路径
+//	后重建证书监听（原 watcher 绑定初始目录——新路径文件替换不热重载收口；
+//	G2 批准 2026-10-07 15:13:06）
 package transport
 
 import (
@@ -34,6 +37,9 @@ type TLSManager struct {
 	certPath string
 	keyPath  string
 	watcher  *fsnotify.Watcher
+	// watchCtx F8③（传输安全合规批）：首次 WatchCertFiles 注入的生命周期上下文
+	// ——OnConfigChange 换路径重建监听时复用（事件循环取消联动）。
+	watchCtx context.Context
 	closed   bool
 }
 
@@ -107,12 +113,35 @@ func (m *TLSManager) OnConfigChange(newCfg *config.Config) {
 	m.certPath = newCfg.TLS.CertFile
 	m.keyPath = newCfg.TLS.KeyFile
 	err := m.load()
+	watchCtx := m.watchCtx
 	m.mu.Unlock()
 	if err != nil {
 		slog.Default().Error("证书路径变更后重载失败，保持原证书", "error", err, "certFile", newCfg.TLS.CertFile)
 		return
 	}
+	// F8③（B-T3）：路径变更后重建监听——原 watcher 绑定初始目录，新路径文件替换
+	// 不触发事件（手动证书续期热重载在新路径下失效的原缺陷收口；锁外重建——
+	// WatchCertFiles 自持锁）。
+	if watchCtx != nil {
+		m.rebuildWatcher(watchCtx)
+	}
 	slog.Default().Info("TLS 证书已按新路径重载", "certFile", newCfg.TLS.CertFile)
+}
+
+// rebuildWatcher 重建证书文件监听（F8③：Close 旧 watcher→按当前 certPath 重挂
+// 新目录+重启事件循环；旧循环随 Events 通道关闭自然退出）。失败 Warn（重启生效兜底）。
+// 参数：ctx 生命周期上下文（首次 WatchCertFiles 注入值）。
+func (m *TLSManager) rebuildWatcher(ctx context.Context) {
+	m.mu.Lock()
+	old := m.watcher
+	m.watcher = nil
+	m.mu.Unlock()
+	if old != nil {
+		_ = old.Close()
+	}
+	if err := m.WatchCertFiles(ctx); err != nil {
+		slog.Default().Warn("证书监听重建失败（新路径文件替换暂不热重载——重启生效兜底）", "error", err)
+	}
 }
 
 // WatchCertFiles 监听证书文件替换（手动证书续期场景：文件 rename 原子替换后
@@ -130,6 +159,7 @@ func (m *TLSManager) WatchCertFiles(ctx context.Context) error {
 		return fmt.Errorf("创建证书 fsnotify: %w", err)
 	}
 	m.watcher = fw
+	m.watchCtx = ctx // F8③：记录生命周期上下文（OnConfigChange 换路径重建复用）
 	m.mu.Unlock()
 
 	// 监听证书所在目录（rename 替换 inode，目录监听才持续收事件——沿 config.Watch 同口径）

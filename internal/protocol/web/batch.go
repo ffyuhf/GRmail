@@ -57,6 +57,12 @@ func (s *Server) mailsBatchPOST(c *gin.Context) {
 			patch.IsFlagged = &v
 		}
 		for _, id := range ids {
+			// 安全原子性批 F7（2026-10-06）：逐 id 归属预检（GetDetail 双限定——
+			// 对齐 batchDelete 同文件防线）；跨邮箱 id 跳过并告警（FR-001 隔离）。
+			if _, derr := s.messages.GetDetail(ctx, view.MailboxID, id); derr != nil {
+				sessLogger(c).Warn("批量标志跳过（无权或不存在）", "id", id, "error", derr)
+				continue
+			}
 			if err = s.messages.SetFlags(ctx, id, patch); err != nil {
 				sessLogger(c).Warn("批量标志位失败（逐项尽力）", "id", id, "error", err)
 			}
@@ -72,6 +78,11 @@ func (s *Server) mailsBatchPOST(c *gin.Context) {
 			return
 		}
 		for _, id := range ids {
+			// 安全原子性批 F7：归属预检同上（跨邮箱搬移防线补齐）。
+			if _, derr := s.messages.GetDetail(ctx, view.MailboxID, id); derr != nil {
+				sessLogger(c).Warn("批量移动跳过（无权或不存在）", "id", id, "error", derr)
+				continue
+			}
 			if err = s.messages.Move(ctx, id, folderID); err != nil {
 				sessLogger(c).Warn("批量移动失败（逐项尽力）", "id", id, "error", err)
 			}

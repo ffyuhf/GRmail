@@ -51,13 +51,16 @@ func buildWebmailListCountSQLMySQL(ctx context.Context, q ListQuery) (string, []
 	return query.Build(ctx)
 }
 
-// buildWebmailSearchPageSQLMySQL 关键词搜索分页（MySQL 方言；OR 三列复用既有条件形态）。
+// buildWebmailSearchPageSQLMySQL 关键词搜索分页（MySQL 方言；安全原子性批 F1
+// 2026-10-06：OR 集补第四列 body_cache——三库四列一致，消除 MySQL/PG 正文检索
+// 静默失效分叉〔SQLite webmail_query 四列口径为准绳〕）。
 func buildWebmailSearchPageSQLMySQL(ctx context.Context, q SearchQuery) (string, []any, error) {
 	kw := likeExpr("m", "subject", q.Keyword)
 	conds := []bob.Expression{
 		expr.OP("=", expr.Quote("mm", "mailbox_id"), expr.Arg(q.MailboxID)),
 		expr.OP("=", expr.Quote("mm", "status"), expr.Arg("normal")),
-		mysqldialect.Or(kw, likeExpr("m", "from_addr", q.Keyword), likeExpr("m", "to_addrs", q.Keyword)),
+		mysqldialect.Or(kw, likeExpr("m", "from_addr", q.Keyword), likeExpr("m", "to_addrs", q.Keyword),
+			likeExpr("m", "body_cache", q.Keyword)),
 	}
 	query := mysqldialect.Select(
 		msm.Columns(webmailListColumns()...),
@@ -70,7 +73,7 @@ func buildWebmailSearchPageSQLMySQL(ctx context.Context, q SearchQuery) (string,
 	return query.Build(ctx)
 }
 
-// buildWebmailSearchCountSQLMySQL 关键词搜索计数（MySQL 方言）。
+// buildWebmailSearchCountSQLMySQL 关键词搜索计数（MySQL 方言；F1 四列一致）。
 func buildWebmailSearchCountSQLMySQL(ctx context.Context, q SearchQuery) (string, []any, error) {
 	conds := []bob.Expression{
 		expr.OP("=", expr.Quote("mm", "mailbox_id"), expr.Arg(q.MailboxID)),
@@ -79,6 +82,7 @@ func buildWebmailSearchCountSQLMySQL(ctx context.Context, q SearchQuery) (string
 			likeExpr("m", "subject", q.Keyword),
 			likeExpr("m", "from_addr", q.Keyword),
 			likeExpr("m", "to_addrs", q.Keyword),
+			likeExpr("m", "body_cache", q.Keyword),
 		),
 	}
 	query := mysqldialect.Select(
@@ -134,13 +138,15 @@ func buildWebmailListCountSQLPG(ctx context.Context, q ListQuery) (string, []any
 	return query.Build(ctx)
 }
 
-// buildWebmailSearchPageSQLPG 关键词搜索分页（PostgreSQL 方言）。
+// buildWebmailSearchPageSQLPG 关键词搜索分页（PostgreSQL 方言；F1 四列一致——
+// body_cache 第四列补齐）。
 func buildWebmailSearchPageSQLPG(ctx context.Context, q SearchQuery) (string, []any, error) {
 	kw := likeExpr("m", "subject", q.Keyword)
 	conds := []bob.Expression{
 		expr.OP("=", expr.Quote("mm", "mailbox_id"), expr.Arg(q.MailboxID)),
 		expr.OP("=", expr.Quote("mm", "status"), expr.Arg("normal")),
-		psqldialect.Or(kw, likeExpr("m", "from_addr", q.Keyword), likeExpr("m", "to_addrs", q.Keyword)),
+		psqldialect.Or(kw, likeExpr("m", "from_addr", q.Keyword), likeExpr("m", "to_addrs", q.Keyword),
+			likeExpr("m", "body_cache", q.Keyword)),
 	}
 	query := psqldialect.Select(
 		psm.Columns(webmailListColumns()...),
@@ -153,7 +159,7 @@ func buildWebmailSearchPageSQLPG(ctx context.Context, q SearchQuery) (string, []
 	return query.Build(ctx)
 }
 
-// buildWebmailSearchCountSQLPG 关键词搜索计数（PostgreSQL 方言）。
+// buildWebmailSearchCountSQLPG 关键词搜索计数（PostgreSQL 方言；F1 四列一致）。
 func buildWebmailSearchCountSQLPG(ctx context.Context, q SearchQuery) (string, []any, error) {
 	conds := []bob.Expression{
 		expr.OP("=", expr.Quote("mm", "mailbox_id"), expr.Arg(q.MailboxID)),
@@ -162,6 +168,7 @@ func buildWebmailSearchCountSQLPG(ctx context.Context, q SearchQuery) (string, [
 			likeExpr("m", "subject", q.Keyword),
 			likeExpr("m", "from_addr", q.Keyword),
 			likeExpr("m", "to_addrs", q.Keyword),
+			likeExpr("m", "body_cache", q.Keyword),
 		),
 	}
 	query := psqldialect.Select(

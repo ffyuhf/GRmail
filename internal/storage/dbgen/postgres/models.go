@@ -32,6 +32,10 @@ type DeliveryQueue struct {
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
 	RetFull       bool
+	ClaimToken    sql.NullString
+	HeartbeatAt   sql.NullTime
+	DsnSent       bool
+	SkipTlsPolicy bool
 }
 
 type Folder struct {

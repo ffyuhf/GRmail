@@ -11,6 +11,10 @@
 //	2026-09-23 08:55:00 | 扩展 | U13 传输安全全量：daneValidatorAdapter（计划书步骤 9）
 //	2026-10-01 23:28:00 | 扩展 | 传输安全与日志增强批次 L-A/L-B：stsValidatorAdapter
 //	+tlsrptRecorderAdapter（G2 批准 2026-10-01 22:54:41，计划书步骤 2/3 装配配套）
+//	2026-10-07 15:30:00 | 扩展 | 传输安全合规批 F7/B-T2：三适配器增策略快照转换
+//	（sts→mail.STSDecision.Policy/dane RequireDANE→mail.DaneDecision.Snapshot〔RDATA
+//	presentation 格式 rfc8460 §4.5〕/tlsrpt Record 双视图转换；G2 批准 2026-10-07
+//	15:13:06）
 package main
 
 import (
@@ -104,6 +108,13 @@ func (a daneValidatorAdapter) Check(ctx context.Context, mxHost, nextHopDomain s
 		md.VerifyPeer = func(certs []*x509.Certificate) error {
 			return transport.VerifyPeerCertificates(td, certs)
 		}
+		// F7（传输安全合规批）：RequireDANE 态 TLSA 快照——RDATA presentation 格式
+		// "usage selector matching-type data"（rfc8460 §4.5 DANE policy-string 形态）
+		rdata := make([]string, 0, len(td.Records))
+		for _, r := range td.Records {
+			rdata = append(rdata, fmt.Sprintf("%d %d %d %x", r.Usage, r.Selector, r.MatchType, r.Data))
+		}
+		md.Snapshot = &mail.TLSPolicySnapshot{PolicyType: "tlsa", PolicyString: rdata}
 	}
 	return md, nil
 }
@@ -121,14 +132,32 @@ func (a stsValidatorAdapter) Check(ctx context.Context, policyDomain, mxHost str
 	if err != nil || td == nil {
 		return nil, err
 	}
-	return &mail.STSDecision{Mode: td.Mode, MXMatched: td.MXMatched}, nil
+	md := &mail.STSDecision{Mode: td.Mode, MXMatched: td.MXMatched}
+	// F7（传输安全合规批）：策略快照转换（§4.5 MTA-STS 形态——策略行数组每 mx
+	// 独立元素；无策略 nil）
+	if td.Policy != nil {
+		md.Policy = &mail.TLSPolicySnapshot{
+			PolicyType:     "sts",
+			PolicyString:   td.Policy.RawLines,
+			MXHostPatterns: td.Policy.MXPatterns,
+		}
+	}
+	return md, nil
 }
 
 // tlsrptRecorderAdapter transport.TLSRPTAggregator → mail.TLSResultRecorder 适配
 // （传输安全与日志增强批次 L-B——同上先例）。
 type tlsrptRecorderAdapter struct{ inner *transport.TLSRPTAggregator }
 
-// Record 结果采集透传（domain/mxHost/resultType 三参同构）。
-func (a tlsrptRecorderAdapter) Record(domain, mxHost, resultType string) {
-	a.inner.Record(domain, mxHost, resultType)
+// Record 结果采集透传（F7：mail/transport 双视图快照转换——nil 透传）。
+func (a tlsrptRecorderAdapter) Record(domain, mxHost, resultType string, policy *mail.TLSPolicySnapshot) {
+	var tp *transport.TLSPolicySnapshot
+	if policy != nil {
+		tp = &transport.TLSPolicySnapshot{
+			PolicyType:     policy.PolicyType,
+			PolicyString:   policy.PolicyString,
+			MXHostPatterns: policy.MXHostPatterns,
+		}
+	}
+	a.inner.Record(domain, mxHost, resultType, tp)
 }

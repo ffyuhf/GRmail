@@ -12,31 +12,60 @@ import (
 
 const claimDueQueueItems = `-- name: ClaimDueQueueItems :many
 UPDATE delivery_queue
-SET status = 'in_flight', updated_at = ?
+SET status = 'in_flight', claim_token = ?, heartbeat_at = ?, updated_at = ?
 WHERE id IN (
     SELECT due.id FROM delivery_queue AS due
     WHERE due.status IN ('pending', 'deferred') AND due.next_attempt_at <= ?
     ORDER BY due.next_attempt_at, due.id
     LIMIT ?
 )
-RETURNING id, message_id, envelope_from, rcpt_to, status, attempts, next_attempt_at, last_smtp_code, last_error, created_at, updated_at, ret_full
+RETURNING id, message_id, envelope_from, rcpt_to, status, attempts, next_attempt_at, last_smtp_code, last_error, created_at, updated_at, ret_full, claim_token, skip_tls_policy
 `
 
 type ClaimDueQueueItemsParams struct {
+	ClaimToken    interface{}
+	HeartbeatAt   interface{}
 	UpdatedAt     string
 	NextAttemptAt string
 	Limit         int64
 }
 
-func (q *Queries) ClaimDueQueueItems(ctx context.Context, arg ClaimDueQueueItemsParams) ([]DeliveryQueue, error) {
-	rows, err := q.db.QueryContext(ctx, claimDueQueueItems, arg.UpdatedAt, arg.NextAttemptAt, arg.Limit)
+type ClaimDueQueueItemsRow struct {
+	ID            int64
+	MessageID     int64
+	EnvelopeFrom  string
+	RcptTo        string
+	Status        string
+	Attempts      int64
+	NextAttemptAt string
+	LastSmtpCode  sql.NullInt64
+	LastError     sql.NullString
+	CreatedAt     string
+	UpdatedAt     string
+	RetFull       bool
+	ClaimToken    interface{}
+	SkipTlsPolicy int64
+}
+
+// F4 (queue batch 3): claim token + heartbeat written atomically with the
+// pending->in_flight transition; ReclaimStale judges staleness by
+// COALESCE(heartbeat_at, updated_at) so in-flight deliveries that keep
+// renewing the heartbeat are never reclaimed and re-delivered.
+func (q *Queries) ClaimDueQueueItems(ctx context.Context, arg ClaimDueQueueItemsParams) ([]ClaimDueQueueItemsRow, error) {
+	rows, err := q.db.QueryContext(ctx, claimDueQueueItems,
+		arg.ClaimToken,
+		arg.HeartbeatAt,
+		arg.UpdatedAt,
+		arg.NextAttemptAt,
+		arg.Limit,
+	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []DeliveryQueue{}
+	items := []ClaimDueQueueItemsRow{}
 	for rows.Next() {
-		var i DeliveryQueue
+		var i ClaimDueQueueItemsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.MessageID,
@@ -50,6 +79,8 @@ func (q *Queries) ClaimDueQueueItems(ctx context.Context, arg ClaimDueQueueItems
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.RetFull,
+			&i.ClaimToken,
+			&i.SkipTlsPolicy,
 		); err != nil {
 			return nil, err
 		}
@@ -65,13 +96,30 @@ func (q *Queries) ClaimDueQueueItems(ctx context.Context, arg ClaimDueQueueItems
 }
 
 const getQueueItem = `-- name: GetQueueItem :one
-SELECT id, message_id, envelope_from, rcpt_to, status, attempts, next_attempt_at, last_smtp_code, last_error, created_at, updated_at, ret_full
+SELECT id, message_id, envelope_from, rcpt_to, status, attempts, next_attempt_at, last_smtp_code, last_error, created_at, updated_at, ret_full, claim_token, skip_tls_policy
 FROM delivery_queue WHERE id = ?
 `
 
-func (q *Queries) GetQueueItem(ctx context.Context, id int64) (DeliveryQueue, error) {
+type GetQueueItemRow struct {
+	ID            int64
+	MessageID     int64
+	EnvelopeFrom  string
+	RcptTo        string
+	Status        string
+	Attempts      int64
+	NextAttemptAt string
+	LastSmtpCode  sql.NullInt64
+	LastError     sql.NullString
+	CreatedAt     string
+	UpdatedAt     string
+	RetFull       bool
+	ClaimToken    interface{}
+	SkipTlsPolicy int64
+}
+
+func (q *Queries) GetQueueItem(ctx context.Context, id int64) (GetQueueItemRow, error) {
 	row := q.db.QueryRowContext(ctx, getQueueItem, id)
-	var i DeliveryQueue
+	var i GetQueueItemRow
 	err := row.Scan(
 		&i.ID,
 		&i.MessageID,
@@ -85,13 +133,33 @@ func (q *Queries) GetQueueItem(ctx context.Context, id int64) (DeliveryQueue, er
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.RetFull,
+		&i.ClaimToken,
+		&i.SkipTlsPolicy,
 	)
 	return i, err
 }
 
+const heartbeatQueueClaim = `-- name: HeartbeatQueueClaim :execresult
+UPDATE delivery_queue
+SET heartbeat_at = ?, updated_at = ?
+WHERE claim_token = ? AND status = 'in_flight'
+`
+
+type HeartbeatQueueClaimParams struct {
+	HeartbeatAt interface{}
+	UpdatedAt   string
+	ClaimToken  interface{}
+}
+
+// F4 (A-14-1/D1): renew the heartbeat before each MX attempt; the token
+// guard keeps the renewal bound to the claiming worker only.
+func (q *Queries) HeartbeatQueueClaim(ctx context.Context, arg HeartbeatQueueClaimParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, heartbeatQueueClaim, arg.HeartbeatAt, arg.UpdatedAt, arg.ClaimToken)
+}
+
 const insertQueueItem = `-- name: InsertQueueItem :execresult
-INSERT INTO delivery_queue (message_id, envelope_from, rcpt_to, status, attempts, next_attempt_at, ret_full, created_at, updated_at)
-VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?)
+INSERT INTO delivery_queue (message_id, envelope_from, rcpt_to, status, attempts, next_attempt_at, ret_full, skip_tls_policy, created_at, updated_at)
+VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
 `
 
 type InsertQueueItemParams struct {
@@ -101,6 +169,7 @@ type InsertQueueItemParams struct {
 	Status        string
 	NextAttemptAt string
 	RetFull       bool
+	SkipTlsPolicy int64
 	CreatedAt     string
 	UpdatedAt     string
 }
@@ -113,15 +182,98 @@ func (q *Queries) InsertQueueItem(ctx context.Context, arg InsertQueueItemParams
 		arg.Status,
 		arg.NextAttemptAt,
 		arg.RetFull,
+		arg.SkipTlsPolicy,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)
 }
 
+const listFailedDSNPending = `-- name: ListFailedDSNPending :many
+SELECT id, message_id, envelope_from, rcpt_to, status, attempts, next_attempt_at, last_smtp_code, last_error, created_at, updated_at, ret_full, claim_token, skip_tls_policy
+FROM delivery_queue
+WHERE status = 'failed' AND dsn_sent = 0
+ORDER BY id
+LIMIT ?
+`
+
+type ListFailedDSNPendingRow struct {
+	ID            int64
+	MessageID     int64
+	EnvelopeFrom  string
+	RcptTo        string
+	Status        string
+	Attempts      int64
+	NextAttemptAt string
+	LastSmtpCode  sql.NullInt64
+	LastError     sql.NullString
+	CreatedAt     string
+	UpdatedAt     string
+	RetFull       bool
+	ClaimToken    interface{}
+	SkipTlsPolicy int64
+}
+
+// F5 (B-R2): rescan source -- failed rows whose DSN has not been issued
+// (process crashed after MarkResult but before emitDSN completed).
+func (q *Queries) ListFailedDSNPending(ctx context.Context, limit int64) ([]ListFailedDSNPendingRow, error) {
+	rows, err := q.db.QueryContext(ctx, listFailedDSNPending, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListFailedDSNPendingRow{}
+	for rows.Next() {
+		var i ListFailedDSNPendingRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.MessageID,
+			&i.EnvelopeFrom,
+			&i.RcptTo,
+			&i.Status,
+			&i.Attempts,
+			&i.NextAttemptAt,
+			&i.LastSmtpCode,
+			&i.LastError,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.RetFull,
+			&i.ClaimToken,
+			&i.SkipTlsPolicy,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const markQueueDSNSent = `-- name: MarkQueueDSNSent :execresult
+UPDATE delivery_queue
+SET dsn_sent = 1, updated_at = ?
+WHERE id = ? AND status = 'failed' AND dsn_sent = 0
+`
+
+type MarkQueueDSNSentParams struct {
+	UpdatedAt string
+	ID        int64
+}
+
+// F5 (B-R2): mark the failed row as DSN-issued after emitDSN succeeds;
+// guarded double-condition keeps the rescan idempotent.
+func (q *Queries) MarkQueueDSNSent(ctx context.Context, arg MarkQueueDSNSentParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, markQueueDSNSent, arg.UpdatedAt, arg.ID)
+}
+
 const markQueueResult = `-- name: MarkQueueResult :execresult
 UPDATE delivery_queue
-SET status = ?, attempts = ?, next_attempt_at = ?, last_smtp_code = ?, last_error = ?, updated_at = ?
-WHERE id = ?
+SET status = ?, attempts = ?, next_attempt_at = ?, last_smtp_code = ?, last_error = ?, claim_token = NULL, heartbeat_at = NULL, updated_at = ?
+WHERE id = ? AND status = 'in_flight'
 `
 
 type MarkQueueResultParams struct {
@@ -134,6 +286,9 @@ type MarkQueueResultParams struct {
 	ID            int64
 }
 
+// F1 (A-14-2): the write is guarded by status='in_flight' so a late result
+// arriving after a Stale reclaim (row already back to pending/deferred) can
+// never overwrite the newer state; RowsAffected==0 means stale write.
 func (q *Queries) MarkQueueResult(ctx context.Context, arg MarkQueueResultParams) (sql.Result, error) {
 	return q.db.ExecContext(ctx, markQueueResult,
 		arg.Status,
@@ -148,15 +303,40 @@ func (q *Queries) MarkQueueResult(ctx context.Context, arg MarkQueueResultParams
 
 const reclaimStaleQueueItems = `-- name: ReclaimStaleQueueItems :execresult
 UPDATE delivery_queue
-SET status = 'pending', updated_at = ?
-WHERE status = 'in_flight' AND updated_at < ?
+SET status = 'pending', claim_token = NULL, heartbeat_at = NULL, updated_at = ?,
+    next_attempt_at = CASE attempts
+        WHEN 0 THEN ? WHEN 1 THEN ? WHEN 2 THEN ? WHEN 3 THEN ?
+        WHEN 4 THEN ? WHEN 5 THEN ? ELSE ? END
+WHERE status = 'in_flight' AND COALESCE(heartbeat_at, updated_at) < ?
 `
 
 type ReclaimStaleQueueItemsParams struct {
-	UpdatedAt   string
-	UpdatedAt_2 string
+	UpdatedAt       string
+	NextAttemptAt   string
+	NextAttemptAt_2 string
+	NextAttemptAt_3 string
+	NextAttemptAt_4 string
+	NextAttemptAt_5 string
+	NextAttemptAt_6 string
+	NextAttemptAt_7 string
+	HeartbeatAt     interface{}
 }
 
+// F2 (A-14-3) + F4: reclaim resets next_attempt_at by the attempts-based
+// backoff ladder (t0..t6 absolute timestamps supplied by the repo layer,
+// mirroring worker.backoffDelay default profile) so a crash-recovery batch
+// does not fire a thundering herd of immediate retries; claim bookkeeping
+// columns are cleared for the fresh pending state.
 func (q *Queries) ReclaimStaleQueueItems(ctx context.Context, arg ReclaimStaleQueueItemsParams) (sql.Result, error) {
-	return q.db.ExecContext(ctx, reclaimStaleQueueItems, arg.UpdatedAt, arg.UpdatedAt_2)
+	return q.db.ExecContext(ctx, reclaimStaleQueueItems,
+		arg.UpdatedAt,
+		arg.NextAttemptAt,
+		arg.NextAttemptAt_2,
+		arg.NextAttemptAt_3,
+		arg.NextAttemptAt_4,
+		arg.NextAttemptAt_5,
+		arg.NextAttemptAt_6,
+		arg.NextAttemptAt_7,
+		arg.HeartbeatAt,
+	)
 }

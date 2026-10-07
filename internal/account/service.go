@@ -183,7 +183,16 @@ func (s *Service) SetMailboxPassword(ctx context.Context, addr, newPassword stri
 	if err != nil {
 		return err
 	}
-	return s.mailboxes.SetCredentials(ctx, m.ID, hash)
+	// 安全原子性批 F2（2026-10-06）：SQL 原状态限定后 disabled 邮箱改密返回
+	// ErrMailboxStatusConflict——统一映射 ErrInvalidStatus（与影子拒绝同呈现，
+	// 管理员须先启用再改密）。
+	if err := s.mailboxes.SetCredentials(ctx, m.ID, hash); err != nil {
+		if errors.Is(err, storage.ErrMailboxStatusConflict) {
+			return fmt.Errorf("%w: 邮箱已禁用（请先启用再修改密码）", ErrInvalidStatus)
+		}
+		return err
+	}
+	return nil
 }
 
 // SetMailboxStatus 管理员状态管理（FR-002：禁用 disabled / 激活 active）。

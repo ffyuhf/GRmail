@@ -24,12 +24,17 @@
 //
 //	2026-10-01 23:10:00 | 新建 | 传输安全与日志增强批次 L-A（计划书步骤 2；
 //	G2 批准 2026-10-01 22:54:41；S3-W 范围裁决 3 4 7 8 9）
+//	2026-10-07 15:35:00 | 修正 | 传输安全合规批 F2/F3/F4/F5（B-T1 五子项）：
+//	id 比对修复（缓存条目 txtID——原 policyIDOf 恒空死代码收口）/cache·recent 淘汰/
+//	RefreshLoop 主动刷新（§3.3 L583-589 SHOULD）/失败限速 per version ID（§3.3
+//	L552-557）；G2 批准 2026-10-07 15:13:06
 package transport
 
 import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"strconv"
@@ -43,6 +48,12 @@ const (
 	stsFetchTimeout    = time.Minute
 	stsPolicyMaxBytes  = 64 * 1024
 	stsFailureCooldown = 5 * time.Minute
+	// stsMaxCacheDomains 缓存域数上限（F3——B-T1③：防异常流量下 cache/recent map
+	// 单调增长，NFR-002 伴随；沿 tlsrptMaxDomains=10000 先例档）。
+	stsMaxCacheDomains = 10000
+	// stsRefreshInterval 主动刷新周期（F4——B-T1④：rfc8461 §3.3 L585「a suggested
+	// refresh frequency is once per day」建议档）。
+	stsRefreshInterval = 24 * time.Hour
 )
 
 // STSTXTResolver TXT 记录解析窄接口（生产=net.Resolver；测试=内存 stub——NFR-015）。
@@ -113,6 +124,15 @@ type STSSenderPolicy struct {
 type stsCacheEntry struct {
 	policy    *STSSenderPolicy
 	fetchedAt time.Time
+	// txtID F2（传输安全合规批）：发现该策略时的 _mta-sts TXT id（rfc8461 §3.1——
+	// id 仅在 TXT 记录、策略体无 id 字段；原 policyIDOf 从策略体提取恒空死代码收口）
+	txtID string
+}
+
+// stsRecentFail 失败限速条目（F5——per version ID：记录失败时刻与当时的 TXT id）。
+type stsRecentFail struct {
+	at time.Time
+	id string
 }
 
 // STSSenderService 发送侧 MTA-STS 验证器（策略发现→缓存→MX 匹配判定）。
@@ -123,7 +143,7 @@ type STSSenderService struct {
 	now    func() time.Time // 时钟注入（测试跨期控制）
 	mu     sync.RWMutex
 	cache  map[string]*stsCacheEntry // policyDomain → 有效策略
-	recent map[string]time.Time      // policyDomain → 最近一次发现失败时刻（§3.3 限速）
+	recent map[string]stsRecentFail  // policyDomain → 最近一次抓取失败（§3.3 per-id 限速——F5）
 }
 
 // NewSTSSenderService 构造验证器（生产入参零配置默认态）。
@@ -133,13 +153,13 @@ func NewSTSSenderService() *STSSenderService {
 		fetch:  &httpSTSPolicyFetcher{client: &http.Client{CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }}},
 		now:    time.Now,
 		cache:  map[string]*stsCacheEntry{},
-		recent: map[string]time.Time{},
+		recent: map[string]stsRecentFail{}, // F5：per version ID 限速条目
 	}
 }
 
 // newSTSSenderServiceForTest 测试构造（依赖与时钟注入——NFR-015 脱网独立驱动）。
 func newSTSSenderServiceForTest(txt STSTXTResolver, fetch STSPolicyFetcher, now func() time.Time) *STSSenderService {
-	return &STSSenderService{txt: txt, fetch: fetch, now: now, cache: map[string]*stsCacheEntry{}, recent: map[string]time.Time{}}
+	return &STSSenderService{txt: txt, fetch: fetch, now: now, cache: map[string]*stsCacheEntry{}, recent: map[string]stsRecentFail{}}
 }
 
 // STSSenderDecision 单 MX 主机判定结果（供投递链消费）。
@@ -167,7 +187,8 @@ func (s *STSSenderService) Check(ctx context.Context, policyDomain, mxHost strin
 	}, nil
 }
 
-// policy 策略获取主流程（§3 发现全链+§5.1 缓存控制流）。
+// policy 策略获取主流程（§3 发现全链+§5.1 缓存控制流；F2/F5 修正：id 比对承载+
+// per version ID 限速）。
 // 返回 nil 策略=对端无 MTA-STS（或不可达且无缓存——放行语义）。
 func (s *STSSenderService) policy(ctx context.Context, domain string) (*STSSenderPolicy, error) {
 	now := s.now()
@@ -178,54 +199,121 @@ func (s *STSSenderService) policy(ctx context.Context, domain string) (*STSSende
 		return e.policy, nil
 	}
 	s.mu.RUnlock()
-	// 2. 失败限速（§3.3：失败后 5min 内不重试同域发现）
-	s.mu.Lock()
-	if t, ok := s.recent[domain]; ok && now.Sub(t) < stsFailureCooldown {
-		s.mu.Unlock()
-		return s.cachedEvenExpired(domain), nil // 限速期内回退缓存（可过期——§3.3 无 live 有缓存应用之）
-	}
-	s.mu.Unlock()
-	// 3. TXT 发现（§3.1：_mta-sts.<域>；恰一条 v=STSv1 记录有效）
+	// 2. TXT 发现（§3.1：_mta-sts.<域>；恰一条 v=STSv1 记录有效；TXT 查询经系统
+	//    解析器缓存——轻量无风暴面，不限速）
 	txts, err := s.txt.LookupTXT(ctx, "_mta-sts."+domain)
 	id, found := discoverSTSRecordID(txts)
 	if err != nil || !found {
 		// 无 TXT / 多记录 / 语法无效：无 MTA-STS——但不删缓存（§3.1 注：TXT 缺失不
 		// 足以移除缓存；§5.1 控制流同语义）；缓存过期则本次按无策略放行
-		s.recordFailure(domain, now)
 		return s.cachedEvenExpired(domain), nil
 	}
-	// 4. id 未变：缓存即当前（§3「senders need only check the TXT record's version "id"
-	//    against the cached value」——省 HTTPS 抓取）
+	// 3. id 未变：缓存即当前（F2——§3「senders need only check the TXT record's
+	//    version id against the cached value」省 HTTPS 抓取；比对源=缓存条目 txtID
+	//    〔发现时记录〕——原 policyIDOf 从策略体提取恒空死代码已收口）
 	s.mu.RLock()
-	if e, ok := s.cache[domain]; ok && policyIDOf(e.policy) == id {
+	if e, ok := s.cache[domain]; ok && e.txtID == id {
 		s.mu.RUnlock()
 		return e.policy, nil
 	}
 	s.mu.RUnlock()
+	// 4. 失败限速（F5——§3.3 L552-557「limit further attempts to a period of five
+	//    minutes or longer per version ID」：同 id 抓取失败 5min 内不重试；TXT 返回
+	//    新 id 即绕过〔策略更新即时生效〕）
+	s.mu.RLock()
+	t, hadFail := s.recent[domain]
+	s.mu.RUnlock()
+	if hadFail && t.id == id && now.Sub(t.at) < stsFailureCooldown {
+		return s.cachedEvenExpired(domain), nil // 同 id 限速窗内：回退缓存（可过期——§3.3 无 live 有缓存应用之）
+	}
 	// 5. HTTPS 抓取+解析（§3.2/§3.3）
 	body, ferr := s.fetch.Fetch(ctx, domain)
 	if ferr != nil {
-		s.recordFailure(domain, now)
+		s.recordFailure(domain, id, now)
 		// §3.3：TXT 有效但抓取失败——有缓存用缓存（even expired 语义同上），无缓存=无策略
 		return s.cachedEvenExpired(domain), nil
 	}
 	policy, perr := ParseSTSPolicy(body)
 	if perr != nil {
-		s.recordFailure(domain, now)
+		s.recordFailure(domain, id, now)
 		return s.cachedEvenExpired(domain), nil // 策略语法无效=不可用（§3.1 语义外延）
 	}
 	s.mu.Lock()
-	s.cache[domain] = &stsCacheEntry{policy: policy, fetchedAt: now}
+	// F3（B-T1③）：缓存域数上限——超限时先淘汰过期条目（正常运营下过期条目占大头）
+	if len(s.cache) >= stsMaxCacheDomains {
+		s.sweepLocked(now)
+	}
+	if len(s.cache) >= stsMaxCacheDomains {
+		// 淘汰后仍超限（全未过期但域量异常）：不入缓存（本次返回策略——零增长防御）
+		s.mu.Unlock()
+		return policy, nil
+	}
+	s.cache[domain] = &stsCacheEntry{policy: policy, fetchedAt: now, txtID: id}
 	delete(s.recent, domain)
 	s.mu.Unlock()
 	return policy, nil
 }
 
-// recordFailure 登记发现失败时刻（限速窗起点）。
-func (s *STSSenderService) recordFailure(domain string, now time.Time) {
+// recordFailure 登记抓取失败（F5：per version ID 限速窗起点——携带当时的 TXT id）。
+func (s *STSSenderService) recordFailure(domain, id string, now time.Time) {
 	s.mu.Lock()
-	s.recent[domain] = now
+	s.recent[domain] = stsRecentFail{at: now, id: id}
 	s.mu.Unlock()
+}
+
+// sweepLocked 惰性淘汰（F3——B-T1③：cache 过期条目〔now-fetchedAt > MaxAge〕+
+// recent 超限速窗条目；policy() 写缓存路径超上限时调用）。持写锁（s.mu）。
+func (s *STSSenderService) sweepLocked(now time.Time) {
+	for d, e := range s.cache {
+		if now.Sub(e.fetchedAt) > e.policy.MaxAge {
+			delete(s.cache, d)
+		}
+	}
+	for d, t := range s.recent {
+		if now.Sub(t.at) >= stsFailureCooldown {
+			delete(s.recent, d)
+		}
+	}
+}
+
+// RefreshLoop 到期前主动刷新循环（F4——B-T1④：rfc8461 §3.3 L583-586「MTAs SHOULD
+// proactively refresh cached policies before they expire; a suggested refresh
+// frequency is once per day」SHOULD 承载；失败 Warn 告警——L586-589；main 装配
+// go 启动沿 runTLSRPTRoutine 周期任务先例）。
+// 参数：ctx 生命周期（rootCtx——取消即返回）。
+func (s *STSSenderService) RefreshLoop(ctx context.Context) {
+	logger := slog.Default()
+	ticker := time.NewTicker(stsRefreshInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			s.refreshOnce(ctx, logger)
+		}
+	}
+}
+
+// refreshOnce 单轮刷新：快照缓存域集→逐域 policy() 预取（id 未变仅 TXT 查询〔F2〕，
+// id 变更或过期边缘自然 HTTPS 抓取续期）；mode=none 域无刷新告警义务（§3.3 末句）。
+func (s *STSSenderService) refreshOnce(ctx context.Context, logger *slog.Logger) {
+	s.mu.RLock()
+	domains := make([]string, 0, len(s.cache))
+	for d, e := range s.cache {
+		if e.policy.Mode != "none" {
+			domains = append(domains, d)
+		}
+	}
+	s.mu.RUnlock()
+	for _, d := range domains {
+		if ctx.Err() != nil {
+			return
+		}
+		if _, err := s.policy(ctx, d); err != nil {
+			logger.Warn("MTA-STS 策略主动刷新失败", "domain", d, "error", err)
+		}
+	}
 }
 
 // cachedEvenExpired 读缓存（不限过期——§3.3「no live policy but a valid (non-expired)

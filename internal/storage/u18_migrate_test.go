@@ -8,6 +8,8 @@
 // 修改历史：
 //
 //	2026-09-26 16:15:00 | 新建 | U18 登记项收尾（计划书步骤 5/1.5⑥，G2 批准 2026-09-26 15:25:47）
+//	2026-10-07 09:05:00 | 适配 | 迁移 00012 队列防丢信收口批（末版本演进 00011→00012
+//	——Down 步数三→四对齐断言面；断言面保持不变；G2 批准 2026-10-07 01:03:52）
 package storage
 
 import (
@@ -105,10 +107,17 @@ func u18RoundTrip(t *testing.T, driver, dsn string) {
 		t.Fatalf("[%s] 预置 users 行: %v", driver, err)
 	}
 
-	// 2. Down 三步（00011→00010→00009→00008）：mailboxes 2FA 四列消失+mailbox_keywords/
-	// internal_date/ret_full 保持+users 行无损（迁移演进后末版本=00011〔管理员主体增强
-	// 批次 users 2FA 三列〕——三步回退至 v8 对齐断言面；数据行无损语义不变；沿 00006~00010
-	// 加入时的同一适配先例：U24 断言面 mailboxes 2FA 列组保持，本批仅增一步回退）
+	// 2. Down 五步（00013→00012→00011→00010→00009→00008）：mailboxes 2FA 四列消失+
+	// mailbox_keywords/internal_date/ret_full 保持+users 行无损（迁移演进后末版本=00013
+	// 〔传输安全合规批 delivery_queue skip_tls_policy 列〕——五步回退至 v8 对齐断言面；
+	// 数据行无损语义不变；沿 00006~00012 加入时的同一适配先例：既有断言面保持，本批仅
+	// 增一步回退）
+	if err = u18MigrateDownOne(ctx, db, driver); err != nil {
+		t.Fatalf("[%s] 迁移 Down 00013: %v", driver, err)
+	}
+	if err = u18MigrateDownOne(ctx, db, driver); err != nil {
+		t.Fatalf("[%s] 迁移 Down 00012: %v", driver, err)
+	}
 	if err = u18MigrateDownOne(ctx, db, driver); err != nil {
 		t.Fatalf("[%s] 迁移 Down 00011: %v", driver, err)
 	}

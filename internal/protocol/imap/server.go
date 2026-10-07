@@ -25,6 +25,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/emersion/go-imap/v2"
 	"github.com/emersion/go-imap/v2/imapserver"
@@ -61,6 +62,7 @@ type Server struct {
 	blobs     storage.BlobStore
 	notifier  *Notifier
 	inner     *imapserver.Server
+	connCount atomic.Int64 // F8：活动连接计数（connLimitListener 消费）
 	mu        sync.Mutex
 	listeners []net.Listener
 	closed    bool
@@ -186,7 +188,54 @@ func (s *Server) ListenAndServeTLS(addr string) error {
 	s.mu.Lock()
 	s.listeners = append(s.listeners, ln)
 	s.mu.Unlock()
-	return s.inner.Serve(tcpListenerTLS{ln, tlsCfg})
+	// F8（访问协议资源限制批）：经 connLimitListener 注入连接上限（IMAP 连接
+	// 由库层 inner.Serve 承载，Accept 循环不可直接注入判定逻辑）。计数包装
+	//（countedConn）位于 TLS 内层、tls.Server 外层包裹——库层 *tls.Conn 类型
+	// 断言保持成立（外层包装会破坏断言致 PRIVACYREQUIRED 拒认证，u6 e2e 实证）；
+	// Close 经 TLS 层传导释放计数。
+	return s.inner.Serve(&connLimitListener{Listener: ln, count: &s.connCount, tlsCfg: tlsCfg})
+}
+
+// imapMaxConns 单端点连接数上限（F8——NFR-002：连接风暴下 goroutine/内存
+// 无界防御；单管理员自托管+512MB 场景 256/端点最坏 ~15MB 受控）。
+const imapMaxConns = 256
+
+// connLimitListener 连接上限注入监听器（F8——Accept 层拦截：超限连接即时
+// 关闭后仍返回已关连接（库层读取即错会话即终；Accept 错误形态会终止库层
+// Serve 监听循环，不可采用）。计数包装（countedConn）位于 TLS 内层、
+// tls.Server 外层包裹——库层 *tls.Conn 类型断言保持成立；Close 经 TLS 层
+// 传导释放计数。
+type connLimitListener struct {
+	net.Listener // 原始 TCP 监听（TLS 包装由本层承担）
+	count        *atomic.Int64
+	tlsCfg       *tls.Config
+}
+
+// Accept 接受连接并执行上限判定与 TLS 包裹。
+func (l *connLimitListener) Accept() (net.Conn, error) {
+	conn, err := l.Listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+	cc := &countedConn{Conn: conn, count: l.count}
+	if l.count.Add(1) > imapMaxConns {
+		_ = cc.Close() // 计数经 once 即时释放；库层对已关连接会话即终
+		slog.Warn("IMAP 连接超上限拒绝", "max", imapMaxConns, "remote", conn.RemoteAddr().String())
+	}
+	return tls.Server(cc, l.tlsCfg), nil // 外层 *tls.Conn——库层 TLS 断言成立
+}
+
+// countedConn 计数连接（Close 时递减——once 保证幂等）。
+type countedConn struct {
+	net.Conn
+	count *atomic.Int64
+	once  sync.Once
+}
+
+// Close 关闭连接并释放计数（幂等）。
+func (c *countedConn) Close() error {
+	c.once.Do(func() { c.count.Add(-1) })
+	return c.Conn.Close()
 }
 
 // Addr 当前监听地址（测试与运维探活；未监听返回 nil）。

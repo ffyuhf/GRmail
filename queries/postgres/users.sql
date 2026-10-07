@@ -28,10 +28,15 @@ UPDATE users
 SET recovery_codes = $1, updated_at = $2
 WHERE id = $3;
 
--- name: MarkAdminTOTPStep :exec
+-- name: MarkAdminTOTPStep :execresult
 UPDATE users
 SET totp_last_step = $1, updated_at = $2
-WHERE id = $3;
+WHERE id = $3 AND (totp_last_step IS NULL OR totp_last_step < $4);
+
+-- name: ConsumeAdminRecoveryCodeCAS :execresult
+UPDATE users
+SET recovery_codes = $1, updated_at = $2
+WHERE id = $3 AND recovery_codes = $4;
 
 -- name: ClearAdmin2FA :exec
 UPDATE users

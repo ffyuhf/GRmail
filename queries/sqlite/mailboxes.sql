@@ -13,10 +13,10 @@ FROM mailboxes
 WHERE status = ?
 ORDER BY id;
 
--- name: SetMailboxCredentials :exec
+-- name: SetMailboxCredentials :execresult
 UPDATE mailboxes
 SET password_hash = ?, status = 'active', updated_at = ?
-WHERE id = ?;
+WHERE id = ? AND status IN ('active', 'shadow');
 
 -- name: SetMailboxStatus :exec
 UPDATE mailboxes
@@ -38,10 +38,15 @@ UPDATE mailboxes
 SET recovery_codes = ?, updated_at = ?
 WHERE id = ?;
 
--- name: MarkTOTPStep :exec
+-- name: MarkTOTPStep :execresult
 UPDATE mailboxes
 SET totp_last_step = ?, updated_at = ?
-WHERE id = ?;
+WHERE id = ? AND (totp_last_step IS NULL OR totp_last_step < ?);
+
+-- name: ConsumeRecoveryCodeCAS :execresult
+UPDATE mailboxes
+SET recovery_codes = ?, updated_at = ?
+WHERE id = ? AND recovery_codes = ?;
 
 -- name: ClearTwoFactor :exec
 UPDATE mailboxes

@@ -25,11 +25,42 @@ import (
 	"log/slog"
 	"net"
 	"sync"
+	"sync/atomic"
 
 	"GRmail/internal/account"
 	"GRmail/internal/observability"
 	"GRmail/internal/storage"
 )
+
+// maildropLocks per-mailbox 独占锁表（F4/A-13④——rfc1939 §4 L213-217 "as
+// necessary" 描述性义务的进程内承载：TRANSACTION 期独占防双会话 UPDATE 期
+// 互相覆盖删除集；单实例部署形态下进程内锁即全量锁）。
+type maildropLocks struct {
+	mu   sync.Mutex
+	held map[int64]bool // mailboxID → 持有标记
+}
+
+// newMaildropLocks 构造锁表。
+func newMaildropLocks() *maildropLocks { return &maildropLocks{held: make(map[int64]bool)} }
+
+// tryLock 非阻塞尝试获取邮箱 maildrop 锁。
+// 参数：mailboxID 邮箱 ID。返回：是否获取成功。
+func (l *maildropLocks) tryLock(mailboxID int64) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.held[mailboxID] {
+		return false
+	}
+	l.held[mailboxID] = true
+	return true
+}
+
+// unlock 释放邮箱 maildrop 锁（幂等）。
+func (l *maildropLocks) unlock(mailboxID int64) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	delete(l.held, mailboxID)
+}
 
 // Server POP3 服务端（995 隐式 TLS 端点，rfc8314 §3.2 连接即握手）。
 type Server struct {
@@ -38,10 +69,12 @@ type Server struct {
 	messages  storage.MessageRepo
 	folders   storage.FolderRepo
 	blobs     storage.BlobStore
+	locks     *maildropLocks // F4：maildrop 独占锁表
 	mu        sync.Mutex
 	listeners []net.Listener
 	closed    bool
 	wg        sync.WaitGroup
+	conns     atomic.Int64 // F8：活动连接计数（上限判定）
 }
 
 // ServerConfig POP3 服务端配置（依赖注入位——架构第四章：接入层不含业务）。
@@ -62,7 +95,7 @@ func (s *Server) protocolDebug() bool {
 // folders 文件夹仓储（定位 kind=inbox）；blobs CAS 字节存储（RETR/TOP 原文）。
 // 返回：服务实例。
 func NewServer(cfg ServerConfig, accounts *account.Service, messages storage.MessageRepo, folders storage.FolderRepo, blobs storage.BlobStore) *Server {
-	return &Server{cfg: cfg, accounts: accounts, messages: messages, folders: folders, blobs: blobs}
+	return &Server{cfg: cfg, accounts: accounts, messages: messages, folders: folders, blobs: blobs, locks: newMaildropLocks()}
 }
 
 // ErrTLSNotReady 证书未就绪（调用方据此跳过端点启动并告警——U5 1.5⑫ 同口径）。
@@ -101,13 +134,25 @@ func (s *Server) Serve(ln net.Listener) error {
 			}
 			return err
 		}
+		// F8：连接上限——超限即时关闭（NFR-002 资源面防御，256/端点档）。
+		if s.conns.Add(1) > pop3MaxConns {
+			s.conns.Add(-1)
+			_ = conn.Close()
+			slog.Warn("POP3 连接超上限拒绝", "max", pop3MaxConns, "remote", conn.RemoteAddr().String())
+			continue
+		}
 		s.wg.Add(1)
 		go func() {
 			defer s.wg.Done()
+			defer s.conns.Add(-1)
 			s.handleConn(conn)
 		}()
 	}
 }
+
+// pop3MaxConns 单端点连接数上限（F8——NFR-002：连接风暴下 goroutine/内存
+// 无界防御；单管理员自托管+512MB 场景 256/端点最坏 ~15MB 受控）。
+const pop3MaxConns = 256
 
 // handleConn 单连接生命周期（连接入口 LogID——NFR-016；rfc1939 §4 超时≥10min：
 // 到期不进 UPDATE 直接断连不应答）。

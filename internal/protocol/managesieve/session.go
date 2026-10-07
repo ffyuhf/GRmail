@@ -32,6 +32,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"time"
 
 	"GRmail/internal/observability"
 	"GRmail/internal/storage"
@@ -267,11 +268,18 @@ func (s *session) cmdAuthenticate(line string) {
 
 // cmdPutScript PUTSCRIPT <name> <content 字面量>（语法校验先行+HAVESPACE 配额；
 // 激活态保持——rfc5804 §2 语义）。
+// F3（A-13③，访问协议资源限制批）：配额判定前置至字面量读取前——原
+// readLiteralBytes 先 make([]byte,n) 分配后校验配额，n 无上限（OOM 面）；
+// 现按声明计数前置拒绝（读后重复判定保留为终态防线）。
 func (s *session) cmdPutScript(line string) {
 	rest := strings.TrimSpace(line[len("putscript"):])
 	name, n, litOK := s.parseNameThenLiteral(rest)
 	if !litOK {
 		s.writeNO("PUTSCRIPT 须脚本名+字面量内容")
+		return
+	}
+	if msg, ok := s.checkLiteralCount(n); !ok {
+		s.writeNO("%s", msg)
 		return
 	}
 	content, err := s.readLiteralBytes(n)
@@ -458,6 +466,11 @@ func (s *session) cmdCheckScript(line string) {
 		}
 		n = n2
 	}
+	// F3（A-13③）：配额前置（同 PUTSCRIPT——读体前按声明计数拒绝）
+	if msg, ok := s.checkLiteralCount(n); !ok {
+		s.writeNO("%s", msg)
+		return
+	}
 	content, err := s.readLiteralBytes(n)
 	if err != nil {
 		s.writeNO("字面量读取失败: %v", err)
@@ -522,6 +535,44 @@ func (s *session) parseNameThenLiteral(rest string) (string, int, bool) {
 
 // parseLiteralCount 字面量前缀 "{n+}"/"{n}" 的长度解析（§1.2；同步形态 {n} 宽容接受）。
 // 参数：prefix 形如 {123+} 的前缀串。返回：字节数；形态是否合法。
+// F3 常量锚：literalNumberMax（rfc5804 语法章 L1855-1858 number=32-bit unsigned
+// 0 ≤ n < 4,294,967,296——超界为语法错误）；readLineMax（单行上限——沿 POP3
+// readLineMax=512 先例，命令行+字面量前缀总长 512 充裕）。
+const (
+	literalNumberMax = 4294967296
+	readLineMax      = 512
+)
+
+// cmdIdleTimeout 命令面不活动超时（F6/M4——原会话全程无 SetDeadline，挂死
+// 客户端/goroutine 长期占用；沿 POP3 inactivityTimeout=10min 先例，rfc5804
+// 无强制超时条款属工程防线）。
+const cmdIdleTimeout = 10 * time.Minute
+
+// literalIdleTimeout 字面量分块读取的块间超时（F6——大脚本慢速链路逐块续期，
+// 不被单次窗口掐断）；literalReadChunk 分块大小。
+const (
+	literalIdleTimeout = 10 * time.Minute
+	literalReadChunk   = 8192
+)
+
+// errLineTooLong 超长行哨兵（F3——会话终止承载：流同步确定性优先，超长行
+// 无合法协议场景〔字面量体经 readLiteralBytes 独立读取，命令行仅含名字+前缀〕）。
+var errLineTooLong = errors.New("managesieve: 行超长")
+
+// checkLiteralCount 字面量声明计数前置校验（F3——读体/分配前的统一防线；
+// QUOTA/MAXSIZE 响应码在调用方 writeNO 内平文承载〔与既有 F-M1 码语义一致，
+// 此处返回拒绝消息由 writeNO 输出〕）。
+// 参数：n 字面量声明字节数。返回：拒绝消息（""=通过）；是否通过。
+func (s *session) checkLiteralCount(n int) (string, bool) {
+	if n < 0 || n >= literalNumberMax {
+		return fmt.Sprintf("字面量计数 %d 超 32 位语法上界（rfc5804 number 文法）", n), false
+	}
+	if quota := s.quota(); n > quota.MaxBytes {
+		return fmt.Sprintf("脚本超单脚本上限 %d 字节（NO (QUOTA/MAXSIZE)）", quota.MaxBytes), false
+	}
+	return "", true
+}
+
 func parseLiteralCount(prefix string) (int, bool) {
 	if !strings.HasSuffix(prefix, "+}") {
 		if !strings.HasSuffix(prefix, "}") {
@@ -538,10 +589,25 @@ func parseLiteralCount(prefix string) (int, bool) {
 }
 
 // readLiteralBytes 读取字面量正文 n 字节+行界（§1.2——行内前缀已解析，此处读字节流）。
+// F3（A-13③）：分配防御——make 前二次校验 32 位上界与配额上限（调用点已前置
+// 判定，此处兜底任何路径不发生无界分配）；F6（M4）：分块读取逐块重置读
+// deadline（10min/块——大脚本慢速链路续期不被掐断；原全程零 deadline）。
 func (s *session) readLiteralBytes(n int) ([]byte, error) {
+	if msg, ok := s.checkLiteralCount(n); !ok {
+		return nil, errors.New(msg)
+	}
 	buf := make([]byte, n)
-	if _, err := io.ReadFull(s.br, buf); err != nil {
-		return nil, fmt.Errorf("读取 %d 字节: %w", n, err)
+	for remaining := n; remaining > 0; {
+		_ = s.conn.SetReadDeadline(time.Now().Add(literalIdleTimeout))
+		chunk := remaining
+		if chunk > literalReadChunk {
+			chunk = literalReadChunk
+		}
+		off := n - remaining
+		if _, err := io.ReadFull(s.br, buf[off:off+chunk]); err != nil {
+			return nil, fmt.Errorf("读取 %d 字节: %w", n, err)
+		}
+		remaining -= chunk
 	}
 	// 消费字面量后行界（\r\n 或 \n 宽容）
 	if _, err := s.br.ReadString('\n'); err != nil {
@@ -576,11 +642,36 @@ func (s *session) validate(src string) error {
 }
 
 // readLine 读单行（\r\n 或 \n 行界——宽容口径与词法器一致）。
+// F3：超长拒绝——ReadSlice 循环计数（ReadString 无界累积防御：超 readLineMax
+// 即停止累积消费至行尾返回哨兵，会话由 run 终止〔超长行无合法协议场景〕）；
+// F6（M4）：读取前设置命令面不活动 deadline。
 func (s *session) readLine() (string, error) {
-	line, err := s.br.ReadString('\n')
-	if err != nil {
-		return "", err
+	_ = s.conn.SetReadDeadline(time.Now().Add(cmdIdleTimeout))
+	var buf []byte
+	tooLong := false
+	for {
+		seg, err := s.br.ReadSlice('\n')
+		if err != nil && err != bufio.ErrBufferFull {
+			return "", err
+		}
+		if !tooLong && len(buf)+len(seg) > readLineMax {
+			tooLong = true
+		}
+		if !tooLong {
+			buf = append(buf, seg...)
+		}
+		if err == bufio.ErrBufferFull {
+			continue
+		}
+		if err != nil {
+			return "", err
+		}
+		break
 	}
+	if tooLong {
+		return "", errLineTooLong
+	}
+	line := string(buf)
 	s.debugFrame("C", line) // U23 协议 debug（开启时输出——命令面；字面量体经 readLiteralBytes 不经此处）
 	_ = s.bw.Flush()
 	return line, nil

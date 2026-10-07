@@ -44,6 +44,15 @@ func (m *memBlobs) Write(_ context.Context, key string, data []byte) error {
 }
 func (m *memBlobs) Read(_ context.Context, key string) ([]byte, error) { return m.data[key], nil }
 func (m *memBlobs) Delete(_ context.Context, key string) error         { delete(m.data, key); return nil }
+
+// List F7 扩展（接口 v1.32.0 增量适配——测试 stub 形态对齐 FS 实现）。
+func (m *memBlobs) List(_ context.Context) ([]string, error) {
+	keys := make([]string, 0, len(m.data))
+	for k := range m.data {
+		keys = append(keys, k)
+	}
+	return keys, nil
+}
 func (m *memBlobs) Exists(_ context.Context, key string) (bool, error) {
 	_, ok := m.data[key]
 	return ok, nil

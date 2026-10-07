@@ -162,7 +162,15 @@ func (s *TwoFactorService) VerifyLoginFactor(ctx context.Context, mailboxID int6
 		return ErrTwoFactorFormat
 	}
 	if step, ok := verifyTOTP(st.PendingSecret, code, st.LastTOTPStep); ok {
-		return s.mailboxes.MarkTOTPStep(ctx, mailboxID, step) // 重放基线推进
+		// 安全原子性批 F3（2026-10-06）：SQL 条件守卫的并发冲突（另一请求已推进
+		// 重放基线）按验证失败统一呈现——对调用方等同重放拒绝（rfc6238 §5.2）。
+		if err := s.mailboxes.MarkTOTPStep(ctx, mailboxID, step); err != nil {
+			if errors.Is(err, storage.ErrTOTPStepConflict) {
+				return ErrTwoFactorCode
+			}
+			return err
+		}
+		return nil // 重放基线推进成功
 	}
 	// 恢复码路径：SHA-256 hex 匹配消耗（高熵随机串快哈希——S4-W Q2-A；逐枚一次性）
 	sum := sha256.Sum256([]byte(code))

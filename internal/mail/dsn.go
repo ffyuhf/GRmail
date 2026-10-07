@@ -1,5 +1,5 @@
 // mail 域 DSN 退信构造：DSNBuilder 实现（multipart/report 三分量，rfc3464 第 2 章）。
-// 依据：模块接口契约 v1.2.0 2.3 节（DSNBuilder 签名逐字，v1.0.0 定义 U5 落地）；
+// 依据：模块接口契约 v1.32.0 2.3 节（DSNBuilder 签名逐字，v1.0.0 定义 U5 落地）；
 // rfc3464 原文锚点（步骤 2 回读）：2 节（multipart/report; report-type=delivery-status；
 // 三分量=人类可读+message/delivery-status+原信；DSN 收件人=原信封 return address；
 // DSN 自身信封 MUST NULL「<>」防循环；From SHOULD postmaster）；2.2 节（per-message：
@@ -7,14 +7,21 @@
 // Final-Recipient 必需 rfc822;地址；Action 必需五值域；Status 必需三段无前导零；
 // Diagnostic-Code smtp;码）；rfc3463（增强状态码）；
 // Q4-A 裁决（2026-09-17 11:28:56）：DSN 作完整邮件走标准链路。
-// PMail 全景 E2 先例：Auto-Submitted: auto-replied 头；原信已含 Auto-Submitted 不生成。
+// PMail 全景 E2 先例：Auto-Submitted: auto-replied 头。
+// F6（B-R3，队列防丢信收口批 G2 批准 2026-10-07 08:41:07）：原信含 Auto-Submitted
+// 头且值≠"no"时不生成 DSN——rfc3834 §2 L219-221「automatic responses SHOULD NOT be
+// issued in response to any message which contains an Auto-Submitted header field,
+// where that field has any value other than "no"」（防循环纵深第二道防线：与 worker
+// null sender 跳过并列；U5 头注释宣称与实现不符的缺陷收口）。
 // 修改历史：
 //
 //	2026-09-17 12:06:00 | 新建 | U5 SMTP 提交与投递（计划书步骤 7）
+//	2026-10-07 08:57:00 | 修正 | 队列防丢信收口批 F6：原信 Auto-Submitted 检查承载
 package mail
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -31,6 +38,11 @@ type DSNBuilder interface {
 
 // 编译期断言。
 var _ DSNBuilder = (*DSNBuilderService)(nil)
+
+// ErrDSNSuppressed F6 哨兵：原信为自动消息（Auto-Submitted 值≠"no"）——DSN 抑制
+// 不生成（rfc3834 §2 SHOULD NOT）；调用方识别本哨兵后置 dsn_sent=1（终态——自动
+// 消息永不回应，重扫不再命中该行）。
+var ErrDSNSuppressed = errors.New("原信为自动消息（Auto-Submitted≠no），DSN 抑制不生成")
 
 // ───────────────────────── 窄接口 ─────────────────────────
 
@@ -89,6 +101,14 @@ func (b *DSNBuilderService) Build(ctx context.Context, item *storage.QueueItem, 
 	// HDRS/缺省=text/rfc822-headers 既有缺省口径；长度上限 MAY 豁免口保留未设限）
 	origHeaders := b.originalHeaders(ctx, item)
 
+	// F6（B-R3）：原信 Auto-Submitted 防循环检查——头区含该字段且值≠"no"（rfc3834
+	// §2 L219-221 SHOULD NOT 响应自动消息；§5 L738-739 值域 auto-generated/
+	// auto-replied/extension）→抑制生成。头区文本逐行扫（ParseCachedHeaders 不含
+	// 该字段——第三分量原信头直读链复用）。
+	if suppressedByAutoSubmitted(origHeaders) {
+		return nil, ErrDSNSuppressed
+	}
+
 	// 人类可读分量（text/plain；编码 7bit 语义）
 	human := "Delivery to the following recipient failed permanently:\r\n\r\n\t" +
 		item.RcptTo + "\r\n\r\nReporting-MTA: " + b.domain + "\r\n"
@@ -122,6 +142,29 @@ func (b *DSNBuilderService) Build(ctx context.Context, item *storage.QueueItem, 
 	}
 	sb.WriteString("\r\n--" + boundary + "--\r\n")
 	return []byte(sb.String()), nil
+}
+
+// suppressedByAutoSubmitted 原信头区是否含抑制性 Auto-Submitted（F6 纯函数）：
+// 大小写不敏感定位字段行，值去空白后非 "no"（rfc3834 §5：值域 no/auto-generated/
+// auto-replied/extension——任何非 no 值均属自动消息）即抑制；头区为空（原信不可读
+// 降级）不抑制（退信可达性优先——与第三分量降级同口径）。
+func suppressedByAutoSubmitted(headerBlock string) bool {
+	if headerBlock == "" {
+		return false
+	}
+	for _, line := range strings.Split(headerBlock, "\r\n") {
+		name, value, found := strings.Cut(line, ":")
+		if !found || !strings.EqualFold(strings.TrimSpace(name), "Auto-Submitted") {
+			continue
+		}
+		value = strings.ToLower(strings.TrimSpace(value))
+		// 值首 token 比较（可选参数形如 "auto-replied; type=..." 仅取首段）
+		if idx := strings.IndexAny(value, ";"); idx >= 0 {
+			value = strings.TrimSpace(value[:idx])
+		}
+		return value != "no"
+	}
+	return false
 }
 
 // originalHeaders 读取原信并截取头区（第三分量降级口径：读失败返回空，构造不失败）。

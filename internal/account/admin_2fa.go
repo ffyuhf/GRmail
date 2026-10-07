@@ -17,6 +17,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 
 	"GRmail/internal/storage"
@@ -107,7 +108,15 @@ func (s *AdminTwoFactorService) VerifyLoginFactor(ctx context.Context, userID in
 		return ErrTwoFactorNotBound
 	}
 	if step, ok := verifyTOTP(st.PendingSecret, code, st.LastTOTPStep); ok {
-		return s.users.MarkTOTPStep(ctx, userID, step) // 重放基线推进
+		// 安全原子性批 F3（2026-10-06）：并发冲突哨兵按验证失败统一呈现（同
+		// mailbox 侧 TwoFactorService.VerifyLoginFactor 注记）。
+		if err := s.users.MarkTOTPStep(ctx, userID, step); err != nil {
+			if errors.Is(err, storage.ErrTOTPStepConflict) {
+				return ErrTwoFactorCode
+			}
+			return err
+		}
+		return nil // 重放基线推进成功
 	}
 	// 恢复码路径：SHA-256 hex 匹配消耗（逐枚一次性）
 	sum := sha256.Sum256([]byte(code))

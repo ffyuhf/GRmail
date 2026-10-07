@@ -27,6 +27,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"log/slog"
 	"net"
 	"sync"
 
@@ -111,13 +112,30 @@ func (s *Server) ListenAndServe(addr string) error {
 			}
 			return fmt.Errorf("SMTP 接受连接: %w", err)
 		}
-		s.track(conn, true)
+		// F8（访问协议资源限制批）：连接上限——复用 track 登记集判定（锁内
+		// 长度判定+登记原子完成，避免独立计数器与登记集双源漂移）；超限即时
+		// 关闭（NFR-002 资源面防御，256/端点档）。
+		s.mu.Lock()
+		overLimit := len(s.conns) >= smtpMaxConns
+		if !overLimit {
+			s.conns[conn] = struct{}{}
+		}
+		s.mu.Unlock()
+		if overLimit {
+			_ = conn.Close()
+			slog.Warn("SMTP 连接超上限拒绝", "max", smtpMaxConns, "remote", conn.RemoteAddr().String())
+			continue
+		}
 		go func() {
 			defer s.track(conn, false)
 			s.serveConn(conn) // 每连接一会话（状态机见 session.go）
 		}()
 	}
 }
+
+// smtpMaxConns 单端点连接数上限（F8——NFR-002：连接风暴下 goroutine/内存
+// 无界防御；单管理员自托管+512MB 场景 256/端点最坏 ~15MB 受控）。
+const smtpMaxConns = 256
 
 // Shutdown 优雅停止：关闭监听器与全部活动连接（先停新连接再收口旧连接）。
 func (s *Server) Shutdown() error {

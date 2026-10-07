@@ -125,14 +125,23 @@ func (r *MySQLMailboxRepo) ListByStatus(ctx context.Context, status MailboxStatu
 	return out, nil
 }
 
-// SetCredentials 设凭据并激活（REQ-020 影子→激活原地继承）。
+// SetCredentials 设凭据并激活（REQ-020 影子→激活原地继承；安全原子性批 F2
+// 2026-10-06：原状态限定+RowsAffected——disabled 改密被拒，见 sqlite 版注记）。
 func (r *MySQLMailboxRepo) SetCredentials(ctx context.Context, id int64, hash string) error {
-	if err := r.q.SetMailboxCredentials(ctx, dbgen.SetMailboxCredentialsParams{
+	res, err := r.q.SetMailboxCredentials(ctx, dbgen.SetMailboxCredentialsParams{
 		PasswordHash: nullString(hash),
 		UpdatedAt:    time.Now().UTC(),
 		ID:           id,
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("设置邮箱凭据: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("设置邮箱凭据（受影响行数）: %w", err)
+	}
+	if n == 0 {
+		return ErrMailboxStatusConflict
 	}
 	return nil
 }

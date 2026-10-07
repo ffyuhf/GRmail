@@ -208,10 +208,10 @@ func TestSTSSenderFetchFailFallback(t *testing.T) {
 // TestTLSRPTAggregatorRecordAndSnapshot 聚合→快照→清零往返。
 func TestTLSRPTAggregatorRecordAndSnapshot(t *testing.T) {
 	agg := NewTLSRPTAggregator()
-	agg.Record("Ext.IO", "mx1.ext.io", TLSRPTSuccess)
-	agg.Record("ext.io", "mx1.ext.io", TLSRPTSuccess)
-	agg.Record("ext.io", "mx2.ext.io", TLSRPTStarttlsNotSupported)
-	agg.Record("ext.io", "mx2.ext.io", TLSRPTStarttlsNotSupported)
+	agg.Record("Ext.IO", "mx1.ext.io", TLSRPTSuccess, nil)
+	agg.Record("ext.io", "mx1.ext.io", TLSRPTSuccess, nil)
+	agg.Record("ext.io", "mx2.ext.io", TLSRPTStarttlsNotSupported, nil)
+	agg.Record("ext.io", "mx2.ext.io", TLSRPTStarttlsNotSupported, nil)
 	snap := agg.SnapshotAndReset()
 	st, ok := snap["ext.io"]
 	if !ok || st.Success != 2 {
@@ -334,4 +334,106 @@ func gzipBytes(t *testing.T, data []byte) []byte {
 		t.Fatal(err)
 	}
 	return buf.Bytes()
+}
+
+// ─────────── 传输安全合规批 F2/F3/F4/F5（B-T1①③④⑤）——G2 批准 2026-10-07 15:13:06 ───────────
+
+// TestSTSSenderIDCacheHit F2（B-T1①）：同 id 二次判定零 HTTPS 抓取——缓存过期后 TXT
+// id 未变直用既有策略（rfc8461 §3「senders need only check the TXT record's version
+// id against the cached value」；原 policyIDOf 恒空死代码致过期后每次抓取的收口锚）。
+func TestSTSSenderIDCacheHit(t *testing.T) {
+	txt := &stubSTSTXT{txts: map[string][]string{"_mta-sts.ext.io": {"v=STSv1; id=1;"}}}
+	fetch := &stubSTSFetch{body: testSTSPolicyBody}
+	svc := newSTSTestSvc(txt, fetch)
+	if _, err := svc.Check(context.Background(), "ext.io", "mx1.ext.io"); err != nil {
+		t.Fatal(err)
+	}
+	if fetch.calls != 1 {
+		t.Fatalf("首判应抓取一次: %d", fetch.calls)
+	}
+	// 缓存过期（+2h > max_age 3600s）后同 id：id 比对命中——零 HTTPS 抓取（F2 修复锚）
+	svc.now = func() time.Time { return time.Date(2026, 10, 1, 14, 0, 0, 0, time.UTC) }
+	if _, err := svc.Check(context.Background(), "ext.io", "mx1.ext.io"); err != nil {
+		t.Fatal(err)
+	}
+	if fetch.calls != 1 {
+		t.Fatalf("同 id 过期后应零抓取（F2 id 比对）: %d", fetch.calls)
+	}
+	// id 变更：触发 HTTPS 抓取（新策略生效）
+	txt.txts["_mta-sts.ext.io"] = []string{"v=STSv1; id=2;"}
+	if _, err := svc.Check(context.Background(), "ext.io", "mx1.ext.io"); err != nil {
+		t.Fatal(err)
+	}
+	if fetch.calls != 2 {
+		t.Fatalf("id 变更应触发抓取: %d", fetch.calls)
+	}
+}
+
+// TestSTSSenderCooldownPerID F5（B-T1⑤）：同 id 抓取失败限速窗内零重试；TXT 返回新 id
+// 即绕过限速（§3.3 L552-557「five minutes or longer per version ID」——策略更新即时生效）。
+func TestSTSSenderCooldownPerID(t *testing.T) {
+	txt := &stubSTSTXT{txts: map[string][]string{"_mta-sts.ext.io": {"v=STSv1; id=1;"}}}
+	fetch := &stubSTSFetch{fail: true}
+	svc := newSTSTestSvc(txt, fetch)
+	if dec, err := svc.Check(context.Background(), "ext.io", "mx1.ext.io"); err != nil || dec.Mode != "" {
+		t.Fatalf("抓取失败无缓存应放行: %+v %v", dec, err)
+	}
+	if fetch.calls != 1 {
+		t.Fatalf("首次应抓取: %d", fetch.calls)
+	}
+	// 同 id 限速窗内（+1min < 5min）：零抓取（限速命中——per version ID）
+	svc.now = func() time.Time { return time.Date(2026, 10, 1, 12, 1, 0, 0, time.UTC) }
+	_, _ = svc.Check(context.Background(), "ext.io", "mx1.ext.io")
+	if fetch.calls != 1 {
+		t.Fatalf("同 id 限速窗内应零抓取: %d", fetch.calls)
+	}
+	// 新 id 发布：绕过限速立即抓取（F5 修复锚——旧实现按域限速新 id 仍被拦）
+	txt.txts["_mta-sts.ext.io"] = []string{"v=STSv1; id=2;"}
+	svc.now = func() time.Time { return time.Date(2026, 10, 1, 12, 2, 0, 0, time.UTC) }
+	_, _ = svc.Check(context.Background(), "ext.io", "mx1.ext.io")
+	if fetch.calls != 2 {
+		t.Fatalf("新 id 应绕过限速抓取: %d", fetch.calls)
+	}
+}
+
+// TestSTSSenderCacheSweep F3（B-T1③）：过期缓存条目淘汰+recent 超限速窗清理
+// （sweepLocked 惰性淘汰语义——未过期条目保持；超限触发归 policy() 写入路径消费）。
+func TestSTSSenderCacheSweep(t *testing.T) {
+	base := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+	svc := newSTSTestSvc(&stubSTSTXT{txts: map[string][]string{}}, &stubSTSFetch{})
+	svc.cache["fresh.io"] = &stsCacheEntry{policy: &STSSenderPolicy{Mode: "enforce", MaxAge: time.Hour}, fetchedAt: base}
+	svc.cache["stale.io"] = &stsCacheEntry{policy: &STSSenderPolicy{Mode: "enforce", MaxAge: time.Hour}, fetchedAt: base.Add(-2 * time.Hour)} // 已过期
+	svc.recent["cool.io"] = stsRecentFail{at: base.Add(-10 * time.Minute), id: "1"}                                                           // 超限速窗
+	svc.recent["warm.io"] = stsRecentFail{at: base.Add(-time.Minute), id: "1"}                                                                // 窗内保持
+	svc.sweepLocked(base)
+	if _, ok := svc.cache["fresh.io"]; !ok {
+		t.Fatal("未过期条目应保持")
+	}
+	if _, ok := svc.cache["stale.io"]; ok {
+		t.Fatal("过期条目应淘汰（F3）")
+	}
+	if _, ok := svc.recent["cool.io"]; ok {
+		t.Fatal("超限速窗 recent 条目应清理（F3）")
+	}
+	if _, ok := svc.recent["warm.io"]; !ok {
+		t.Fatal("窗内 recent 条目应保持")
+	}
+}
+
+// TestSTSSenderRefreshOnce F4（B-T1④）：refreshOnce 遍历缓存域预取——id 未变仅 TXT
+// 查询零 HTTPS 抓取（主动刷新不放大流量；§3.3 L583-586 SHOULD 承载锚）。
+func TestSTSSenderRefreshOnce(t *testing.T) {
+	txt := &stubSTSTXT{txts: map[string][]string{"_mta-sts.ext.io": {"v=STSv1; id=1;"}}}
+	fetch := &stubSTSFetch{body: testSTSPolicyBody}
+	svc := newSTSTestSvc(txt, fetch)
+	if _, err := svc.Check(context.Background(), "ext.io", "mx1.ext.io"); err != nil {
+		t.Fatal(err)
+	}
+	if fetch.calls != 1 {
+		t.Fatalf("首判应抓取: %d", fetch.calls)
+	}
+	svc.refreshOnce(context.Background(), nil) // logger nil 容错（成功路径零日志）
+	if fetch.calls != 1 {
+		t.Fatalf("刷新轮同 id 应零抓取（F2 联动）: %d", fetch.calls)
+	}
 }

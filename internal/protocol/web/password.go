@@ -82,6 +82,19 @@ func (s *Server) passwordChangePOST(c *gin.Context) {
 		c.Status(http.StatusInternalServerError)
 		return
 	}
+	// F3④/B-S10④（提交端点对齐批）：改密失败锁定判定——recordFail 既有计数的
+	// 消费闭环（沿 login 限流母版 s.locked；阈值内零影响，超限 423 防爆破）。
+	if locked, lerr := s.locked(ctx, "mailbox:"+m.Address); lerr != nil {
+		sessLogger(c).Error("改密限流查询故障", "error", lerr)
+		c.Status(http.StatusInternalServerError)
+		return
+	} else if locked {
+		renderPage(c, http.StatusLocked, templates.PasswordView(&templates.PasswordData{
+			Lang: string(lang), CSRFToken: sess.CSRFToken, IsAdmin: false,
+			Action: "/settings/password", ErrText: templates.Tr(lang, "login.errLocked"), Nav: s.sidebarDataFor(c),
+		}))
+		return
+	}
 	// 旧密码验证：VerifyCredentials 统一拒绝语义复用（影子/禁用/错密同拒——防枚举口径）
 	if _, verr := s.accounts.VerifyCredentials(ctx, m.Address, c.PostForm("oldPassword")); verr != nil {
 		s.recordFail(ctx, "mailbox:"+m.Address, c.ClientIP()) // 失败计数（防爆破——Q4-B 链路）
@@ -135,6 +148,19 @@ func (s *Server) adminPasswordChangePOST(c *gin.Context) {
 		return
 	}
 	username := strings.ToLower(strings.TrimSpace(c.PostForm("username")))
+	// F3④/B-S10④（提交端点对齐批）：改密失败锁定判定（沿 login 限流母版——键与
+	// 下方 recordFail 对称）。
+	if locked, lerr := s.locked(ctx, "admin:"+username); lerr != nil {
+		sessLogger(c).Error("管理员改密限流查询故障", "error", lerr)
+		c.Status(http.StatusInternalServerError)
+		return
+	} else if locked {
+		renderPage(c, http.StatusLocked, templates.PasswordView(&templates.PasswordData{
+			Lang: string(lang), CSRFToken: sess.CSRFToken, IsAdmin: true,
+			Action: "/admin/password", ErrText: templates.Tr(lang, "login.errLocked"), Nav: s.sidebarDataFor(c),
+		}))
+		return
+	}
 	valid, subjectID, verr := s.verifyAdmin(ctx, username, c.PostForm("oldPassword"))
 	if verr != nil {
 		sessLogger(c).Error("管理员改密查询故障", "error", verr)

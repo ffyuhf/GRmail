@@ -73,6 +73,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/tls"
+	"database/sql"
 	"errors"
 	"flag"
 	"fmt"
@@ -475,15 +476,34 @@ func main() {
 	// SetSieveRunner 先例构造签名零变更；rfc8461 §4/§5 发送侧验证+rfc8460 §4 采集）──
 	stsSender := transport.NewSTSSenderService()
 	sender.SetSTSValidator(stsValidatorAdapter{inner: stsSender})
+	go stsSender.RefreshLoop(rootCtx) // F4（传输安全合规批 B-T1④）：到期前主动刷新（rfc8461 §3.3 SHOULD——24h 周期）
 	tlsrptAgg := transport.NewTLSRPTAggregator()
 	sender.SetTLSReporter(tlsrptRecorderAdapter{inner: tlsrptAgg})
 	go runTLSRPTRoutine(rootCtx, tlsrptAgg, submissionPipeline, domain, logger)
+	// ── 队列防丢信收口批 F4（A-14①/D1）：投递期心跳注入——sender 每 MX 尝试前经
+	// 本回调 TouchClaim(item.ClaimToken) 续期（rootCtx 长生命周期；续期失败 Warn
+	// 吞错——行已回收时投递结果由 F1 迟到回写守卫丢弃，单次白投递无害）──
+	sender.SetHeartbeatFunc(func(it *storage.QueueItem) {
+		if it == nil || it.ClaimToken == "" {
+			return
+		}
+		if err := queueRepo.TouchClaim(rootCtx, it.ClaimToken); err != nil {
+			slog.Default().Warn("投递心跳续期失败", "queue_id", it.ID, "error", err)
+		}
+	})
 	dsnBuilder := mail.NewDSNBuilderService(domain, msgSrc)
 	worker := mail.NewQueueWorker(queueRepo, sender, dsnBuilder, signer, blobStore,
 		func() config.DeliveryConf { return configWatcher.Current().Mail.Delivery }, domain)
 	workerCtx, cancelWorker := context.WithCancel(rootCtx)
 	defer cancelWorker()
-	stopped := worker.Start(workerCtx) // 启动崩溃恢复（ReclaimStale 10min）+双 goroutine
+	stopped := worker.Start(workerCtx) // 启动崩溃恢复（ReclaimStale 10min）+首轮 DSN 重扫（F5）+双 goroutine
+	// ── 队列防丢信收口批 F5（B-R2）：failed 必产 DSN 周期重扫（24h——启动首轮由
+	// worker.Start 承载；周期轮兜底运行期 MarkResult 成功后 emitDSN 崩溃窗口）──
+	go runDSNRescanLoop(rootCtx, worker, 24*time.Hour)
+	// ── 队列防丢信收口批 F7（D2/B-R1）：blob 对账周期任务（24h——流程设计第四章
+	// 第 2 条既有承诺兑现：孤儿删除+DB 丢失告警；引用集查询沿 cmd 装配层 SQL 例外
+	// 条款〔架构第四章第 6 条 wire.go dbMessageSource 先例〕）──
+	go runBlobReconcileLoop(rootCtx, blobStore, db, 24*time.Hour, logger)
 	// 7.4.4 提交端点双端口（465 隐式 TLS 证书未配置跳过+告警，1.5⑫；587 明文 STARTTLS）
 	// U23：协议 debug 收口（U21 登记项①）——独立 submitSession 补齐 debugFrame 埋点，
 	// 快照注入与三协议同形态（每会话/每帧读热生效）。
@@ -492,6 +512,13 @@ func main() {
 		MaxMessageSize: func() int64 { return configWatcher.Current().Mail.MaxMessageSizeBytes },
 		TLSConfig:      func() *tls.Config { return tlsMgr.ServerTLSConfig(domain) },
 		ProtocolDebug:  func() bool { return configWatcher.Current().Log.ProtocolDebug }, // U23 协议 debug 快照（proto=submission）
+		// 提交端点对齐批（F3①/B-S10①）：AUTH 失败限流——login_attempts 仓储窄接口
+		// 注入+LoginLimit 快照（与 web 登录限流同源同参热生效；nil 渐进态防御在包内）。
+		Attempts: loginAttemptRepo,
+		AttemptLimit: func() (time.Duration, int64) {
+			ll := configWatcher.Current().LoginLimit
+			return time.Duration(ll.WindowMinutes) * time.Minute, int64(ll.Threshold)
+		},
 	}, submissionPipeline, credentialVerifierAdapter{inner: accounts.VerifyCredentials})
 	go func() {
 		cur := configWatcher.Current().Server
@@ -923,6 +950,57 @@ func runLoginAttemptPurgeLoop(ctx context.Context, attempts storage.LoginAttempt
 	}
 }
 
+// runDSNRescanLoop failed 行 DSN 补发周期循环（F5/B-R2——队列防丢信收口批：
+// 流程设计 3.2 不变量 3「failed 必产生 DSN」的运行期强保证；沿 runTokenPurgeLoop
+// 周期样板：ctx 退出联动+尽力 Warn。重扫逻辑归 worker.RescanPendingDSNs——
+// ListFailedDSNPending 批查→逐行 emitDSN→MarkDSNSent 收口，幂等防重发）。
+// SRS 条目：NFR-007（4.5 判定②伴随）；FR-005 DSN 伴随；TC-005/TC-021 关联锚。
+func runDSNRescanLoop(ctx context.Context, w *mail.QueueWorker, period time.Duration) {
+	ticker := time.NewTicker(period)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			w.RescanPendingDSNs(ctx)
+		}
+	}
+}
+
+// runBlobReconcileLoop blob 目录对账周期循环（F7/D2——24h 孤儿清理+引用缺失告警；
+// 首轮延迟一周期〔启动批处理任务密集——错峰；启动时孤儿仅占磁盘无正确性影响〕；
+// ctx 退出联动。SRS 条目：CON-004 伴随/NFR-016；流程设计第四章第 2 条承诺兑现）。
+func runBlobReconcileLoop(ctx context.Context, blobs storage.BlobStore, db *sql.DB, period time.Duration, logger *slog.Logger) {
+	ticker := time.NewTicker(period)
+	defer ticker.Stop()
+	referenced := func(ctx context.Context) ([]string, error) {
+		// cmd 装配层 SQL 例外条款（架构第四章第 6 条）：messages 引用键集点查
+		rows, err := db.QueryContext(ctx, "SELECT DISTINCT blob_key FROM messages")
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		var keys []string
+		for rows.Next() {
+			var k string
+			if err := rows.Scan(&k); err != nil {
+				return nil, err
+			}
+			keys = append(keys, k)
+		}
+		return keys, rows.Err()
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			storage.ReconcileBlobDir(ctx, blobs, referenced, logger)
+		}
+	}
+}
+
 // runTLSRPTRoutine TLS-RPT 每日报告周期任务（传输安全与日志增强批次 L-B——rfc8460
 // §4.1 全天报告窗+§5.3 邮件投递；沿 runTokenPurgeLoop 周期样板：ctx 退出联动+尽力
 // 失败语义。报告窗=本轮 tick 前一整天〔UTC 00:00-24:00 对齐〕；多部署实例因启动
@@ -945,16 +1023,21 @@ func runTLSRPTRoutine(ctx context.Context, agg *transport.TLSRPTAggregator, subm
 // runTLSRPTReportRound 单轮报告：统计快照读出清零→逐策略域发现 rua（_smtp._tls
 // TXT）→构造 JSON（§4.4）+gzip（§5.2 SHOULD）+报告邮件（§5.3 multipart/report）
 // →经 Submit 入队（信封 null path：authorizeSender 放行+DSN 同款防退信循环语义；
-// 报告投递不因 TLS 失败永久拒发——既有队列 deferred 重试链承载 §5.3 MUST NOT）。
+// F1/A-9：Submit 置位 SkipTLSPolicy——报告行投递链豁免 MTA-STS/DANE 判定
+// （rfc8460 §5.3.1 L1050-1051「Sending MTAs MUST NOT honor MTA-STS or DANE TLSA
+// failures」——迁移 00013 持久列，重试周期全程保持；TLS 本身仍机会升级）。
 // 统计已读出清零：单域提交失败即损失本期该域报告（尽力语义——Warn 落日志，真发送
 // 归 D7 部署域实录）；sending-mta-ip 首版空串（多网卡/NAT 环境不可静态判定——登记）。
+// F7/B-T2：报告窗=实际统计窗（上次快照~本次快照——date-range 如实标注，§4.4 L685
+// full UTC day 为 should 级、tick 错峰工程等价；原 Truncate(24h) 标签与内容错位收口）；
+// 策略快照入报（st.PolicyType 首见记录——空串兜底 no-policy-found）。
 func runTLSRPTReportRound(ctx context.Context, agg *transport.TLSRPTAggregator, submit mail.SubmissionPipeline, domain string, logger *slog.Logger) {
 	stats := agg.SnapshotAndReset()
 	if len(stats) == 0 {
 		return // 本周期零流量零报告（§4.2.1 成功心跳语义不适用——零会话域不产生报告）
 	}
-	end := time.Now().UTC().Truncate(24 * time.Hour)
-	start := end.Add(-24 * time.Hour)
+	end := time.Now().UTC()           // F7：实际统计窗终点（快照清零时刻——标签与内容一致）
+	start := end.Add(-24 * time.Hour) // F7：窗长 24h（上轮快照以来——周期恒定）
 	for policyDomain, st := range stats {
 		txts, err := net.DefaultResolver.LookupTXT(ctx, "_smtp._tls."+policyDomain)
 		if err != nil {
@@ -966,6 +1049,10 @@ func runTLSRPTReportRound(ctx context.Context, agg *transport.TLSRPTAggregator, 
 			continue // 对端未实现 TLSRPT（§3）——合法静默跳过
 		}
 		reportID := fmt.Sprintf("%s.%d.%d", policyDomain, start.Unix(), end.Unix())
+		policyType := st.PolicyType // F7：首见策略快照（§4.4 sts|tlsa；空串兜底）
+		if policyType == "" {
+			policyType = "no-policy-found" // 无策略域兜底（§4.4 第三合法值）
+		}
 		jsonBytes := transport.BuildTLSRPTReport(transport.TLSRPTReportInput{
 			OrganizationName: domain,
 			ContactEmail:     "tlsrpt@" + domain,
@@ -973,7 +1060,9 @@ func runTLSRPTReportRound(ctx context.Context, agg *transport.TLSRPTAggregator, 
 			WindowStart:      start,
 			WindowEnd:        end,
 			PolicyDomain:     policyDomain,
-			PolicyType:       "no-policy-found", // 统计面未存策略快照——首版按 §4.4 无策略形态（登记：策略快照入报归后续增强）
+			PolicyType:       policyType,        // F7：快照首见值（B-T2 硬编码收口）
+			PolicyString:     st.PolicyString,   // F7：§4.5 策略原文行集
+			MXHostPatterns:   st.MXHostPatterns, // F7：sts 态 mx 模式集
 			Stats:            st,
 		})
 		var gz bytes.Buffer
@@ -983,8 +1072,9 @@ func runTLSRPTReportRound(ctx context.Context, agg *transport.TLSRPTAggregator, 
 		filename := transport.TLSRPTReportFilename(domain, policyDomain, start, end, observability.NewLogID()[:8])
 		email := transport.BuildTLSRPTReportEmail(domain, policyDomain, rua, filename, reportID, gz.Bytes())
 		if err = submit.Submit(ctx, &mail.Submission{
-			Envelope:   auth.Envelope{MailFrom: "", Helo: domain}, // null path（授权放行+防循环）
-			Recipients: []string{rua},
+			Envelope:      auth.Envelope{MailFrom: "", Helo: domain}, // null path（授权放行+防循环）
+			Recipients:    []string{rua},
+			SkipTLSPolicy: true, // F1/A-9：报告行豁免（rfc8460 §5.3.1 MUST NOT honor——迁移 00013 持久）
 		}, email); err != nil {
 			logger.Warn("TLS-RPT 报告提交失败（本期该域报告损失——次日重试新周期）", "domain", policyDomain, "error", err)
 		}

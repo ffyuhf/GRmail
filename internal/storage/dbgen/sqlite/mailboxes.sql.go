@@ -26,6 +26,28 @@ func (q *Queries) ClearTwoFactor(ctx context.Context, arg ClearTwoFactorParams) 
 	return err
 }
 
+const consumeRecoveryCodeCAS = `-- name: ConsumeRecoveryCodeCAS :execresult
+UPDATE mailboxes
+SET recovery_codes = ?, updated_at = ?
+WHERE id = ? AND recovery_codes = ?
+`
+
+type ConsumeRecoveryCodeCASParams struct {
+	RecoveryCodes   interface{}
+	UpdatedAt       string
+	ID              int64
+	RecoveryCodes_2 interface{}
+}
+
+func (q *Queries) ConsumeRecoveryCodeCAS(ctx context.Context, arg ConsumeRecoveryCodeCASParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, consumeRecoveryCodeCAS,
+		arg.RecoveryCodes,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.RecoveryCodes_2,
+	)
+}
+
 const createMailbox = `-- name: CreateMailbox :execresult
 INSERT INTO mailboxes (local_part, domain, address, password_hash, status, created_at, updated_at)
 VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -194,27 +216,32 @@ func (q *Queries) ListMailboxesByStatus(ctx context.Context, status string) ([]L
 	return items, nil
 }
 
-const markTOTPStep = `-- name: MarkTOTPStep :exec
+const markTOTPStep = `-- name: MarkTOTPStep :execresult
 UPDATE mailboxes
 SET totp_last_step = ?, updated_at = ?
-WHERE id = ?
+WHERE id = ? AND (totp_last_step IS NULL OR totp_last_step < ?)
 `
 
 type MarkTOTPStepParams struct {
-	TotpLastStep interface{}
-	UpdatedAt    string
-	ID           int64
+	TotpLastStep   interface{}
+	UpdatedAt      string
+	ID             int64
+	TotpLastStep_2 interface{}
 }
 
-func (q *Queries) MarkTOTPStep(ctx context.Context, arg MarkTOTPStepParams) error {
-	_, err := q.db.ExecContext(ctx, markTOTPStep, arg.TotpLastStep, arg.UpdatedAt, arg.ID)
-	return err
+func (q *Queries) MarkTOTPStep(ctx context.Context, arg MarkTOTPStepParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, markTOTPStep,
+		arg.TotpLastStep,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.TotpLastStep_2,
+	)
 }
 
-const setMailboxCredentials = `-- name: SetMailboxCredentials :exec
+const setMailboxCredentials = `-- name: SetMailboxCredentials :execresult
 UPDATE mailboxes
 SET password_hash = ?, status = 'active', updated_at = ?
-WHERE id = ?
+WHERE id = ? AND status IN ('active', 'shadow')
 `
 
 type SetMailboxCredentialsParams struct {
@@ -223,9 +250,8 @@ type SetMailboxCredentialsParams struct {
 	ID           int64
 }
 
-func (q *Queries) SetMailboxCredentials(ctx context.Context, arg SetMailboxCredentialsParams) error {
-	_, err := q.db.ExecContext(ctx, setMailboxCredentials, arg.PasswordHash, arg.UpdatedAt, arg.ID)
-	return err
+func (q *Queries) SetMailboxCredentials(ctx context.Context, arg SetMailboxCredentialsParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, setMailboxCredentials, arg.PasswordHash, arg.UpdatedAt, arg.ID)
 }
 
 const setMailboxStatus = `-- name: SetMailboxStatus :exec

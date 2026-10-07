@@ -48,6 +48,16 @@ func (s *Server) adminLogin2FAPost(c *gin.Context) {
 		c.Status(http.StatusServiceUnavailable)
 		return
 	}
+	// F3④/B-S10④（提交端点对齐批）：admin 二步失败锁定判定（recordFail 既有计数
+	// 的消费闭环——沿 login 限流母版；超限 423+空凭据回密码步）。
+	if locked, lerr := s.locked(ctx, "admin:"+entry.address); lerr != nil {
+		sessLogger(c).Error("admin 2FA 限流查询故障", "error", lerr)
+		c.Status(http.StatusInternalServerError)
+		return
+	} else if locked {
+		renderPage(c, http.StatusLocked, templates.AdminLogin2FAView(lang, "", templates.Tr(lang, "login.errLocked")))
+		return
+	}
 	if err := s.adminTwoFactor.VerifyLoginFactor(ctx, entry.mailboxID, c.PostForm("code")); err != nil {
 		subjectKey := "admin:" + entry.address
 		s.recordFail(ctx, subjectKey, c.ClientIP())

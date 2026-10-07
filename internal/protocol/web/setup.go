@@ -32,10 +32,12 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -344,13 +346,28 @@ func (s *Server) setupPostDatabase(c *gin.Context) error {
 	if driver != "sqlite" && dsn == "" {
 		return &errSetupStep{msg: "MySQL/PostgreSQL 必须填写数据库连接信息"}
 	}
-	// 连接探活（fail-fast——storage.Open 语义：sqlite 建文件+探活，mysql/pg 真连）
+	// 连接探活（fail-fast——storage.Open 语义：sqlite 建文件+探活，mysql/pg 真连）。
+	// 安全原子性批 F10（2026-10-06）三项收敛：①每源 IP 探测限速（向导期匿名端点，
+	// 防批量 SSRF 探测）②DSN 主机为 IP 字面量且属非单播目标（未指定/组播/链路本地
+	// 单播）时拒绝探测——环回/私网为合法数据库部署形态保留③错误信息泛化（不回显
+	// 驱动差异细节——消除内网探测信息差）。
 	if driver != "sqlite" || dsn != "" {
+		if !setupProbeAllow(c.ClientIP(), time.Now()) {
+			return &errSetupStep{msg: "探测请求过于频繁，请稍后再试"}
+		}
+		if host := probeHostOf(driver, dsn); host != "" {
+			if ip := net.ParseIP(host); ip != nil &&
+				(ip.IsUnspecified() || ip.IsMulticast() || ip.IsLinkLocalUnicast()) {
+				return &errSetupStep{msg: "数据库地址非法（非单播目标不可探测）"}
+			}
+		}
 		probeCtx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 		defer cancel()
 		db, err := storage.Open(probeCtx, config.DatabaseConf{Driver: driver, DSN: dsn})
 		if err != nil {
-			return &errSetupStep{msg: "数据库连接失败：" + err.Error() + "（请检查地址/凭据）"}
+			observability.LoggerFromContext(c.Request.Context()).Warn(
+				"Setup 数据库探活失败（细节仅入日志）", "driver", driver, "error", err)
+			return &errSetupStep{msg: "数据库连接失败（请检查地址/端口/凭据/网络可达性）"}
 		}
 		_ = db.Close()
 	}
@@ -364,6 +381,63 @@ func (s *Server) setupPostDatabase(c *gin.Context) error {
 	}
 	sessLogger(c).Info("Setup 步骤 1 完成：数据库选定", "driver", driver)
 	return nil
+}
+
+// setupProbeMu/setupProbeSeen Setup 数据库探活限速器（安全原子性批 F10 2026-10-06
+// ——内存固定窗口：每源 IP 5 分钟窗口 10 次；向导期短生命周期进程内态即够，完成态
+// 后本端点由 setupGate 拦截不可达）。
+var (
+	setupProbeMu   sync.Mutex
+	setupProbeSeen = make(map[string][]time.Time)
+)
+
+// setupProbeAllow 判定本源 IP 是否允许发起新一轮探测（窗口外时间片顺带回收）。
+func setupProbeAllow(ip string, now time.Time) bool {
+	const window = 5 * time.Minute
+	const limit = 10
+	setupProbeMu.Lock()
+	defer setupProbeMu.Unlock()
+	kept := setupProbeSeen[ip][:0]
+	for _, t := range setupProbeSeen[ip] {
+		if now.Sub(t) < window {
+			kept = append(kept, t)
+		}
+	}
+	if len(kept) >= limit {
+		setupProbeSeen[ip] = kept
+		return false
+	}
+	setupProbeSeen[ip] = append(kept, now)
+	return true
+}
+
+// probeHostOf 从 DSN 尽力提取主机名（mysql "tcp(host:port)" 形态与
+// postgres URL 形态；解析失败返回空串=不拦截，交由驱动按连接错误处理）。
+func probeHostOf(driver, dsn string) string {
+	switch driver {
+	case "mysql":
+		i := strings.Index(dsn, "tcp(")
+		if i < 0 {
+			return ""
+		}
+		rest := dsn[i+len("tcp("):]
+		j := strings.IndexByte(rest, ')')
+		if j < 0 {
+			return ""
+		}
+		hostPort := rest[:j]
+		if k := strings.LastIndexByte(hostPort, ':'); k >= 0 {
+			return strings.Trim(hostPort[:k], "[]")
+		}
+		return strings.Trim(hostPort, "[]")
+	case "postgres":
+		u, perr := url.Parse(dsn)
+		if perr != nil {
+			return ""
+		}
+		return u.Hostname()
+	}
+	return ""
 }
 
 // buildDSNFromFields 分字段拼装 DSN（P11——Setup向导新手可用性批次）。

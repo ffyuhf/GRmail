@@ -1,5 +1,6 @@
 // mail 域出站投递：OutboundSender 实现（本域分流→MX 解析→TLS 策略（DANE 三态
-// U13+MTA-STS 发送侧 L-A）→SMTP 客户端投递→结果分类+TLS-RPT 结果采集（L-B））。
+// U13+MTA-STS 发送侧 L-A）→SMTP 客户端投递→结果分类+TLS-RPT 结果采集（L-B）；
+// F4 投递期心跳回调注入——队列防丢信收口批，G2 批准 2026-10-07 08:41:07）。
 // 依据：模块接口契约 v1.9.0 2.3 节（OutboundSender 签名逐字，v1.0.0 定义 U5 落地；
 // DaneValidator 构造注入 U13 增量——nil=U12b 末态等价）；
 // Q3-A 裁决（2026-09-17 11:28:56）：worker 消费侧本域分流——rcpt 域=本域复用 U4
@@ -31,6 +32,12 @@
 //	失败/无 STARTTLS/成功四采集点；rfc8461 §5.1 enforce 候选失败 continue 下一台+
 //	§5 临时错误语义由既有 deferred 链承载）
 //	（来源：G2 批准 2026-10-01 22:54:41，传输安全与日志增强计划书 v1.0.0 步骤 2/3）
+//	2026-10-07 09:03:00 | 扩展 | 队列防丢信收口批 F4：SetHeartbeatFunc 心跳回调
+//	（每 MX 尝试前续期——TouchClaim 绑定 claim_token；G2 批准 2026-10-07 08:41:07）
+//	2026-10-07 15:30:00 | 扩展 | 传输安全合规批 F1/F6/F7：SkipTLSPolicy 报告行豁免
+//	（rfc8460 §5.3.1 L1050-1051 MUST NOT honor——跳过 MTA-STS/DANE 策略判定，
+//	TLS 本身仍机会升级）+sts-policy-fetch-error 采集（§4.3.2.2）+TLSResultRecorder
+//	.Record 签名扩展（策略快照入报——§4.4/§4.5；G2 批准 2026-10-07 15:13:06）
 package mail
 
 import (
@@ -92,6 +99,9 @@ type DaneDecision struct {
 	Mode          DaneMode                              // 三态决策
 	BaseTLSDomain string                                // TLSA 基域（RequireDANE 态 SNI——rfc7672 §8.1）
 	VerifyPeer    func(certs []*x509.Certificate) error // 握手后 TLSA 匹配（失败=MUST NOT 投递）
+	// Snapshot F7（传输安全合规批）：RequireDANE 态 TLSA 策略快照（main 适配器按
+	// RDATA presentation 格式构造——rfc8460 §4.5；其余态 nil）
+	Snapshot *TLSPolicySnapshot
 }
 
 // DaneValidator 发送侧 DANE 决策窄接口（契约 v1.9.0 2.3 逐字签名；nil 注入=U12b
@@ -120,13 +130,27 @@ type STSValidator interface {
 type STSDecision struct {
 	Mode      string // enforce | testing | none | 空串（无策略）
 	MXMatched bool   // 目标 MX 是否匹配策略 mx 模式（§4.1）
+	// Policy F7（传输安全合规批）：对端策略快照（main 适配器从 transport.STSSenderPolicy
+	// 转换；nil=无策略——TLS-RPT 报告 policy-string/mx-host-pattern 载体，rfc8460 §4.5）
+	Policy *TLSPolicySnapshot
+}
+
+// TLSPolicySnapshot TLS 策略快照（F7——rfc8460 §4.4 policy{policy-type/policy-string/
+// mx-host-pattern} 的 mail 消费视图；main 装配桥接从 transport 视图转换，本包零
+// transport import 依赖方向保持）。
+type TLSPolicySnapshot struct {
+	PolicyType     string   // sts | tlsa（空串=无策略——报告构造侧兜底 no-policy-found）
+	PolicyString   []string // §4.5：STS=策略行数组（每 mx 独立元素）/DANE=TLSA RDATA presentation 数组
+	MXHostPatterns []string // sts 态策略 mx 模式集（tlsa 态为空）
 }
 
 // TLSResultRecorder TLS 投递结果采集窄接口（rfc8460 §4 聚合输入；实现归 transport
 // 域 TLSRPTAggregator——main 桥接；nil 注入=不采集末态等价）。
 // 约定：resultType 空串=成功会话计数；其余为 rfc8460 §4.3 注册值。
+// F7（传输安全合规批）：Record 增 policy 快照参数（nil=无策略域）——报告 policy-type/
+// policy-string/mx-host-pattern 结构完整化（§4.4/§4.5）；调用点唯一 recordTLS。
 type TLSResultRecorder interface {
-	Record(domain, mxHost, resultType string)
+	Record(domain, mxHost, resultType string, policy *TLSPolicySnapshot)
 }
 
 // ───────────────────────── 生产实现 ─────────────────────────
@@ -176,6 +200,10 @@ type OutboundSenderService struct {
 	messages MessageSource     // R5：出站原信读取源（构造注入——原进程级单例收敛，架构 8.2）
 	sts      STSValidator      // L-A：发送侧 MTA-STS 判定（nil=批次前末态等价——SetSTSValidator 注入）
 	tlsrpt   TLSResultRecorder // L-B：TLS 投递结果采集（nil=不采集——SetTLSReporter 注入）
+	// F4（A-14①/D1，队列防丢信收口批）：投递期心跳回调（每 MX 尝试前调用——按项
+	// 绑定 TouchClaim(item.ClaimToken)；多 MX 遍历长尾期间行不被 Stale 回收重投；
+	// nil=未注入）。
+	heartbeat func(item *storage.QueueItem)
 }
 
 // NewOutboundSenderService 构造出站投递器。
@@ -193,11 +221,18 @@ func (s *OutboundSenderService) SetSTSValidator(v STSValidator) { s.sts = v }
 // SetTLSReporter 可选注入 TLS-RPT 结果采集器（L-B——同上先例；nil/未调用=不采集）。
 func (s *OutboundSenderService) SetTLSReporter(r TLSResultRecorder) { s.tlsrpt = r }
 
+// SetHeartbeatFunc 可选注入投递期心跳回调（F4——同上先例：每 MX 尝试前调用；
+// nil/未调用=批次前末态等价）。参数：fn 心跳闭包（按队列项绑定——worker 装配侧
+// TouchClaim(item.ClaimToken)；无返回——续期失败不中断投递〔行已回收时结果将被
+// F1 迟到回写守卫丢弃，单次白投递无害〕）。
+func (s *OutboundSenderService) SetHeartbeatFunc(fn func(item *storage.QueueItem)) { s.heartbeat = fn }
+
 // recordTLS TLS-RPT 采集出口（nil 容错——未注入零开销）。
-// 参数：rcpt 收件地址（提取策略域）；mxHost 目标主机；resultType 结果类型（空串=成功）。
-func (s *OutboundSenderService) recordTLS(rcpt, mxHost, resultType string) {
+// 参数：rcpt 收件地址（提取策略域）；mxHost 目标主机；resultType 结果类型（空串=成功）；
+// policy 策略快照（F7——nil=无策略域，报告构造侧兜底 no-policy-found）。
+func (s *OutboundSenderService) recordTLS(rcpt, mxHost, resultType string, policy *TLSPolicySnapshot) {
 	if s.tlsrpt != nil {
-		s.tlsrpt.Record(rcptDomain(rcpt), mxHost, resultType)
+		s.tlsrpt.Record(rcptDomain(rcpt), mxHost, resultType, policy)
 	}
 }
 
@@ -276,14 +311,22 @@ func (s *OutboundSenderService) readItemRaw(ctx context.Context, item *storage.Q
 // deliverToHost 单 MX 主机投递：连接前 DANE 判定（U13）→连接→EHLO→（STARTTLS
 // 策略三态）→MAIL/RCPT/DATA→分类。
 func (s *OutboundSenderService) deliverToHost(ctx context.Context, host string, item *storage.QueueItem) storage.AttemptResult {
+	// F4：每 MX 尝试前心跳续期（60s 单主机超时窗内完成——多主机累计长尾期间
+	// 行的 Stale 判据持续刷新；未注入零开销）。
+	if s.heartbeat != nil {
+		s.heartbeat(item)
+	}
 	raw, err := s.readItemRaw(ctx, item)
 	if err != nil {
 		return storage.AttemptResult{Status: storage.AttemptDeferred, Error: "原信读取失败: " + err.Error()}
 	}
 	// 0. DANE 判定（U13——rfc7672 §2.2：DNS 阶段前置；错误=MX 不可达→deferred 转移
-	// 下一台（§2.1.2——禁止投递防降级）；nil validator=跳过（U12b 末态等价））
+	// 下一台（§2.1.2——禁止投递防降级）；nil validator=跳过（U12b 末态等价）；
+	// F1/A-9：SkipTLSPolicy（TLS-RPT 报告行）豁免——rfc8460 §5.3.1 L1050-1051
+	// 「when sending failure reports via SMTP, Sending MTAs MUST NOT honor MTA-STS
+	// or DANE TLSA failures」——报告投递不执行 DANE 判定（TLS 本身仍机会升级））
 	var dane *DaneDecision
-	if s.dane != nil {
+	if !item.SkipTLSPolicy && s.dane != nil {
 		d, derr := s.dane.Check(ctx, host, rcptDomain(item.RcptTo))
 		if derr != nil {
 			return deferred("DANE 判定失败（MX 不可达）", 0, derr)
@@ -293,12 +336,29 @@ func (s *OutboundSenderService) deliverToHost(ctx context.Context, host string, 
 	// 0.5 MTA-STS 判定（L-A——rfc8461 §4/§5：enforce 且 MX 不匹配策略→MUST NOT 投递
 	// 该主机（deferred 转移下一候选——§5.1 步骤 2「continue to the next candidate」；
 	// 全部候选失败的临时错误语义由既有 deferred 重试链承载——§5 末段「SHOULD treat
-	// as transient errors」）；nil validator=跳过；发现失败按无策略放行——§3.3）
-	if s.sts != nil {
-		if dec, derr := s.sts.Check(ctx, rcptDomain(item.RcptTo), host); derr == nil && dec != nil && dec.Mode == "enforce" && !dec.MXMatched {
-			s.recordTLS(item.RcptTo, host, "sts-policy-invalid") // L-B：enforce MX 不匹配计失败（§4.3.2.2）
-			return deferred("MTA-STS enforce：MX 不匹配策略（转移下一候选）", 0, nil)
+	// as transient errors」）；nil validator=跳过；发现失败按无策略放行——§3.3；
+	// F1/A-9：SkipTLSPolicy 豁免同上；F6：发现层失败采集 sts-policy-fetch-error
+	// ——rfc8461 §6「HTTPS policy fetch failures when a valid TXT record is present」
+	// SHOULD 报告+rfc8460 §4.3.2.2 注册值（放行降级语义保持零变化））
+	var stsPolicy *TLSPolicySnapshot
+	if !item.SkipTLSPolicy && s.sts != nil {
+		dec, derr := s.sts.Check(ctx, rcptDomain(item.RcptTo), host)
+		switch {
+		case derr != nil:
+			s.recordTLS(item.RcptTo, host, "sts-policy-fetch-error", nil) // F6：§4.3.2.2（无快照——发现未完成）
+		case dec != nil:
+			stsPolicy = dec.Policy // F7：快照保存（报告载体）
+			if dec.Mode == "enforce" && !dec.MXMatched {
+				s.recordTLS(item.RcptTo, host, "sts-policy-invalid", stsPolicy) // L-B：enforce MX 不匹配计失败（§4.3.2.2）
+				return deferred("MTA-STS enforce：MX 不匹配策略（转移下一候选）", 0, nil)
+			}
 		}
+	}
+	// F7：本主机投递的策略快照（STS 域优先；DANE RequireDANE 态次之——rfc8460 §4.4
+	// 单 policy 结构；均无=nil 报告侧兜底 no-policy-found）
+	policySnapshot := stsPolicy
+	if policySnapshot == nil && dane != nil && dane.Mode == DaneRequireDANE {
+		policySnapshot = dane.Snapshot
 	}
 	conn, err := s.dial.Dial(ctx, host+":25")
 	if err != nil {
@@ -328,7 +388,7 @@ func (s *OutboundSenderService) deliverToHost(ctx context.Context, host string, 
 	if hasCapability(lines, "STARTTLS") {
 		upgradedRW, tlsErr := s.tryStartTLS(rw, conn, host, dane)
 		if tlsErr != nil {
-			s.recordTLS(item.RcptTo, host, "certificate-not-trusted") // L-B：握手/证书验证失败（§4.3.1 笼统类——细节经 error 文本）
+			s.recordTLS(item.RcptTo, host, "certificate-not-trusted", policySnapshot) // L-B：握手/证书验证失败（§4.3.1 笼统类——细节经 error 文本）
 			return storage.AttemptResult{Status: storage.AttemptDeferred,
 				Error: "STARTTLS 升级失败: " + tlsErr.Error()}
 		}
@@ -342,11 +402,13 @@ func (s *OutboundSenderService) deliverToHost(ctx context.Context, host string, 
 			return deferred("TLS 后 EHLO 拒绝", code, err)
 		}
 		ehloCaps = caps2
-	} else if (dane != nil && dane.Mode != DaneOpportunistic) || (s.sts != nil && s.stsEnforce(ctx, item, host)) {
+	} else if (dane != nil && dane.Mode != DaneOpportunistic) || (!item.SkipTLSPolicy && s.sts != nil && s.stsEnforce(ctx, item, host)) {
 		// secure TLSA 承诺态（RequireDANE/RequireTLSOnly）或 MTA-STS enforce 态对端
 		// 无 STARTTLS：MUST NOT 明文投递（rfc7672 §2.2 第一/二分支/rfc8461 §5 enforce
 		// 「MUST NOT deliver ... that do not support STARTTLS」）→deferred 转移下一台 MX
-		s.recordTLS(item.RcptTo, host, "starttls-not-supported") // L-B：§4.3.1
+		// F1/A-9：SkipTLSPolicy 豁免 stsEnforce（dane 侧经判定跳过已为 nil——两豁免位
+		// 合成报告行无 TLS 承诺态拒明文路径，§5.3.1 MUST NOT honor 全语义）
+		s.recordTLS(item.RcptTo, host, "starttls-not-supported", policySnapshot) // L-B：§4.3.1
 		return deferred("对端无 STARTTLS（TLS 承诺态拒绝明文投递）", 0, nil)
 	}
 	// 4. MAIL FROM（null sender 以 <> 字面量；RF-H/F-L2/F-L8——出站声明面：
@@ -400,7 +462,7 @@ func (s *OutboundSenderService) deliverToHost(ctx context.Context, host string, 
 	if err = writeLine(rw.Writer, "QUIT"); err == nil {
 		_, _, _ = readReply(rw.Reader) // 221；错误忽略（对端已关亦可）
 	}
-	s.recordTLS(item.RcptTo, host, "") // L-B：成功会话计数（§4.2.1）
+	s.recordTLS(item.RcptTo, host, "", policySnapshot) // L-B：成功会话计数（§4.2.1）+F7 快照随成功计数入聚
 	return storage.AttemptResult{Status: storage.AttemptSent}
 }
 

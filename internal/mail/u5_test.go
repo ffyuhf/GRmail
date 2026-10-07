@@ -590,11 +590,12 @@ func TestWorkerAttemptStateMachine(t *testing.T) {
 	}
 }
 
-// noopQueue 记录型队列仓储（MarkResult 捕获）。
+// noopQueue 记录型队列仓储（MarkResult 捕获；dsnMarked——F5 置位捕获）。
 type noopQueue struct {
-	mu      sync.Mutex
-	results map[int64]storage.AttemptResult
-	dsnMeta []*storage.SubmissionMeta
+	mu        sync.Mutex
+	results   map[int64]storage.AttemptResult
+	dsnMeta   []*storage.SubmissionMeta
+	dsnMarked []int64
 }
 
 func (n *noopQueue) ClaimDue(context.Context, time.Time, int) ([]*storage.QueueItem, error) {
@@ -611,6 +612,18 @@ func (n *noopQueue) MarkResult(_ context.Context, id int64, r storage.AttemptRes
 }
 func (n *noopQueue) ReclaimStale(context.Context, time.Duration) (int, error) { return 0, nil }
 func (n *noopQueue) Enqueue(context.Context, []*storage.QueueItem) error      { return nil }
+
+// F4/F5 扩展（队列防丢信收口批——queueClaimStore 窄接口增量适配）。
+func (n *noopQueue) TouchClaim(context.Context, string) error { return nil }
+func (n *noopQueue) MarkDSNSent(_ context.Context, id int64) error {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.dsnMarked = append(n.dsnMarked, id)
+	return nil
+}
+func (n *noopQueue) ListFailedDSNPending(context.Context, int) ([]*storage.QueueItem, error) {
+	return nil, nil
+}
 func (n *noopQueue) StoreSubmission(_ context.Context, m *storage.SubmissionMeta) error {
 	n.mu.Lock()
 	defer n.mu.Unlock()

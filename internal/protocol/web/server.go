@@ -163,6 +163,10 @@ func NewServer(cfg ServerConfig, sessions storage.SessionRepo, users storage.Use
 		pending2fa:     newPendingLoginStore(),
 	}
 	s.engine = gin.New()
+	// 安全原子性批 F9（2026-10-06）：零信任代理——ClientIP 不消费 X-Forwarded-For
+	// 类头（Bearer token IP 绑定与会话 IP 突变告警不可被伪造头污染；直连部署语义
+	// 不变，反代形态需运维自行评估后另行配置）。
+	_ = s.engine.SetTrustedProxies(nil)
 	// U23：HTTP 请求摘要 debug 中间件（entryMiddleware 后——logid ctx 已建可取；Q2-A 摘要口径）
 	s.engine.Use(s.entryMiddleware(), s.httpDebugMiddleware(), gin.Recovery(), s.sessionMiddleware(), csrfProtect(), s.setupGate())
 	s.mountRoutes()

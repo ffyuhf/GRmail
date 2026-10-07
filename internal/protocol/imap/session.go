@@ -344,23 +344,33 @@ func (s *Session) refreshUIDs(ctx context.Context) error {
 
 // resolveNumSet 序号集/UID 集 → UID 列表（类型判定 UID 语义；越界序号忽略）。
 // 参数：numSet 命令消息集。返回：命中 UID 升序列表+是否 UID 集。
+// F2（A-13②，访问协议资源限制批）：两分支枚举上界收口——原 UIDSet 分支逐 UID
+// 枚举至 Stop（`1:4294967295` ≈42.9 亿次循环 CPU 放大）、SeqSet 分支 append 虽有
+// len(s.uids) 拦截但循环本身仍枚举至 Stop。现：UIDSet 交 s.uids 有效集线性扫
+// （输出受文件夹消息数上界；语义=忽略不存在者，rfc9051 §2.3.1.2 UID 引用惯例，
+// 输出与原实现一致）；SeqSet 循环上界截断 min(Stop, len(s.uids))。
 func (s *Session) resolveNumSet(numSet imap.NumSet) ([]int64, bool) {
 	var out []int64
 	byUID := false
 	switch set := numSet.(type) {
 	case imap.SeqSet:
 		for _, rng := range set {
-			for seq := rng.Start; seq <= rng.Stop; seq++ {
-				if int(seq) <= len(s.uids) {
-					out = append(out, s.uids[seq-1])
-				}
+			stop := rng.Stop
+			if int(stop) > len(s.uids) {
+				stop = uint32(len(s.uids)) // 越界序号无消息可映射——截断
+			}
+			for seq := rng.Start; seq <= stop; seq++ {
+				out = append(out, s.uids[seq-1])
 			}
 		}
 	case imap.UIDSet:
 		byUID = true
 		for _, rng := range set {
-			for uid := rng.Start; uid <= rng.Stop; uid++ {
-				out = append(out, int64(uid))
+			lo, hi := int64(rng.Start), int64(rng.Stop)
+			for _, u := range s.uids {
+				if u >= lo && u <= hi {
+					out = append(out, u)
+				}
 			}
 		}
 	}
@@ -435,9 +445,14 @@ func (s *Session) Expunge(w *imapserver.ExpungeWriter, uids *imap.UIDSet) error 
 }
 
 // Search 搜索（criteria→SearchFilter 中性翻译→storage.IMAPSearch，契约 v1.3.0 2.1）。
+// F2：refreshUIDs 前置于翻译——translateCriteria 的 UID 集交集化依赖最新有效
+// UID 集（新到达 UID 纳入交集，语义与原全枚举等价）。
 func (s *Session) Search(kind imapserver.NumKind, criteria *imap.SearchCriteria, _ *imap.SearchOptions) (*imap.SearchData, error) {
 	ctx := context.Background()
-	filter, err := translateCriteria(criteria)
+	if err := s.refreshUIDs(ctx); err != nil {
+		return nil, err
+	}
+	filter, err := translateCriteria(criteria, s.uids)
 	if err != nil {
 		return nil, err
 	}
@@ -445,9 +460,6 @@ func (s *Session) Search(kind imapserver.NumKind, criteria *imap.SearchCriteria,
 		MailboxID: s.mbox.ID, FolderID: s.folder.ID, Filter: filter,
 	})
 	if err != nil {
-		return nil, err
-	}
-	if err = s.refreshUIDs(ctx); err != nil {
 		return nil, err
 	}
 	if kind == imapserver.NumKindUID {
@@ -484,12 +496,18 @@ func (s *Session) folderUIDsASC(ctx context.Context, folderID int64) ([]int64, e
 
 // translateCriteria rfc9051 6.4.4 键子集 → 中性 SearchFilter（字段交集；NOT/OR 一层）。
 // 未承载头键（缓存列之外）以不可能匹配子串语义返回空集。
-func translateCriteria(criteria *imap.SearchCriteria) (storage.SearchFilter, error) {
+// F2（A-13②）：增 effectiveUIDs 参数——UID 集与当前有效 UID 集求交（原逐 UID
+// 枚举至 Stop 的无界展开根治；语义=忽略不存在者，rfc9051 §2.3.1.2，IN 匹配结果
+// 与原全枚举等价）。
+func translateCriteria(criteria *imap.SearchCriteria, effectiveUIDs []int64) (storage.SearchFilter, error) {
 	f := storage.SearchFilter{}
 	for _, us := range criteria.UID {
 		for _, rng := range us {
-			for uid := rng.Start; uid <= rng.Stop; uid++ {
-				f.UIDs = append(f.UIDs, int64(uid))
+			lo, hi := int64(rng.Start), int64(rng.Stop)
+			for _, u := range effectiveUIDs {
+				if u >= lo && u <= hi {
+					f.UIDs = append(f.UIDs, u)
+				}
 			}
 		}
 	}
@@ -549,18 +567,18 @@ func translateCriteria(criteria *imap.SearchCriteria) (storage.SearchFilter, err
 		}
 	}
 	if len(criteria.Not) > 0 {
-		inner, err := translateCriteria(&criteria.Not[0])
+		inner, err := translateCriteria(&criteria.Not[0], effectiveUIDs)
 		if err != nil {
 			return f, err
 		}
 		f.Not = &inner
 	}
 	for _, pair := range criteria.Or {
-		left, err := translateCriteria(&pair[0])
+		left, err := translateCriteria(&pair[0], effectiveUIDs)
 		if err != nil {
 			return f, err
 		}
-		right, err := translateCriteria(&pair[1])
+		right, err := translateCriteria(&pair[1], effectiveUIDs)
 		if err != nil {
 			return f, err
 		}
@@ -866,11 +884,20 @@ func (s *Session) Append(mailbox string, r imap.LiteralReader, options *imap.App
 	if err != nil {
 		return nil, errTryCreate(err)
 	}
-	raw, err := io.ReadAll(r)
+	// F1（A-13①，访问协议资源限制批）：大小判定前置——声明计数（LiteralReader
+	// .Size）零读取拒绝超大字面量；实际读取经 LimitReader(limit+1) 兜底（声明与
+	// 实际偏差防御——读取上界受控，原 io.ReadAll 无界读入后才判大小的 OOM 面
+	// 根治）；失败恢复原状语义由「读后拒绝不落库」满足（rfc9051 §6.3.12
+	// L3444-3446）。拒绝不消费剩余字面量字节——由库层会话终止/排空承载。
+	appendLimit := s.server.maxAppendSize()
+	if r.Size() > appendLimit {
+		return nil, errors.New("message too big")
+	}
+	raw, err := io.ReadAll(io.LimitReader(r, appendLimit+1))
 	if err != nil {
 		return nil, err
 	}
-	if int64(len(raw)) > s.server.maxAppendSize() {
+	if int64(len(raw)) > appendLimit {
 		return nil, errors.New("message too big")
 	}
 	sum := sha256.Sum256(raw)

@@ -23,6 +23,17 @@
 //	historical purposes only」废弃该码（§6 L992-993 同载），增强码 5.7.11 保留
 //	（L641-648）搭配现行基础码 530（L623）承载「加密要求」语义
 //	（依据：RFCSHOULD修正计划书 v1.0.0 步骤 3，G2 批准 2026-09-30 18:28:20）
+//	2026-10-06 19:50:00 | 修正 | 提交端点对齐批（评审修复批次 2/8）：F1/A-11
+//	DATA 大小终判（tooBig+552，rfc1870 §6.1 L231-233）；F2/A-12 终止检测复用
+//	indexDataTerminator（空消息前缀特判 rfc5321bis §4.1.1.4 L2206-2207）；
+//	F3/B-S10①②③ AUTH 限流（LoginAttemptRepo 联动 421）+SASLprep 消费
+//	（rfc4954 §4 L261-268）+AUTH 行超限 500 5.5.6（L255-259）；F4/B-F8
+//	STARTTLS 带参 501（rfc3207 §4 L108）+EHLO 空域 501（rfc5321bis §4.1.4）+
+//	收件人上限常量化（§4.5.3.1.8 MUST ≥100）+per-command 超时（§4.5.3.2
+//	L3846-3848 MUST）；F5/B-F9 NOTIFY/ORCPT 重复+值域校验（rfc3461 §4.1/
+//	§4.2/§4.5 L533-536）；F6/B-F10 VerifyCredentials/Submit 改传 ss.ctx
+//	（LogID 链闭环）（依据：提交端点对齐批计划书 v1.0.0，G2 批准
+//	2026-10-06 19:43:56；SRS FR-005/NFR-004/005/007/016、FR-013 伴随）
 package smtp
 
 import (
@@ -50,12 +61,42 @@ type CredentialVerifier interface {
 	VerifyCredentials(ctx context.Context, addr, password string) error
 }
 
+// ── 提交端点对齐批（B-S10①/③）常量与窄接口 ──
+
+const (
+	// rcptMaxRecipients 单事务收件人上限（F4/B-F8：rfc5321bis §4.5.3.1.8 L3771-3773
+	// 「MUST 缓冲≥100」——本值=MUST 最小值，超限应答 452（§4.5.3.1.10 L3833-3835）。
+	// 原魔数 100 常量化命名，行为零变化。
+	rcptMaxRecipients = 100
+	// authLineLimit AUTH 交换行读上限（F3/B-S10③：rfc4954 §4 L246-254——BASE64 挑战
+	// 响应可远超命令行限，12288 octets 为规范参考值；超限 500 5.5.6，L255-259）。
+	authLineLimit = 12288
+)
+
+// errAuthLineTooLong AUTH 交换行超限哨兵（应答 500 5.5.6 已在 readAuthLine 内发出，
+// 上层按错误返回终止本次 AUTH——rfc4954 §4 L255-259）。
+var errAuthLineTooLong = errors.New("smtp: AUTH 交换行超长")
+
+// AttemptRecorder AUTH 失败计数窄接口（F3/B-S10①：storage.LoginAttemptRepo 前
+// 三方法隐式满足——窄接口形态沿本文件 CredentialVerifier 先例，smtp 包零 storage
+// import，架构第四章依赖方向保持）。nil=限流关闭（渐进态，沿 U14 Tokens nil 先例）。
+type AttemptRecorder interface {
+	RecordAttempt(ctx context.Context, subjectKey, ip string, success bool, at time.Time) error
+	CountRecentFails(ctx context.Context, subjectKey string, since time.Time) (int64, error)
+	ClearSubject(ctx context.Context, subjectKey string) error
+}
+
 // SubmissionConfig 提交端点配置。
 type SubmissionConfig struct {
 	Domain         string             // 主域名（EHLO 应答/横幅）
 	MaxMessageSize func() int64       // SIZE 通告（快照；nil=35MiB）
 	TLSConfig      func() *tls.Config // 服务端 TLS（动态快照；nil=证书未就绪——TLS 端点不启动且 587 不通告 STARTTLS，rfc3207 4.1）
 	ProtocolDebug  func() bool        // 协议 debug 快照（U23——config Log.ProtocolDebug；nil=false 缺省热生效，命令应答面条件输出）
+	// Attempts AUTH 失败计数仓储（F3/B-S10①——提交端点对齐批；nil=限流关闭）。
+	Attempts AttemptRecorder
+	// AttemptLimit 限流参数快照（窗口/阈值——与 web 登录限流同源 config.LoginLimitConf；
+	// nil=15min/5 次兜底档，沿 web limitConf 形态）。
+	AttemptLimit func() (window time.Duration, threshold int64)
 }
 
 // SubmissionServer 提交端点服务端（465 隐式+587 STARTTLS 双端口；接入层零业务）。
@@ -189,7 +230,10 @@ type submitSession struct {
 // serveSubmission 单连接提交会话循环。
 func (s *SubmissionServer) serveSubmission(conn net.Conn, implicitTLS bool) {
 	defer func() { _ = conn.Close() }()
-	_ = conn.SetDeadline(time.Now().Add(5 * time.Minute)) // rfc5321bis 4.5.3.2 idle
+	// F4/B-F8（提交端点对齐批）：per-command 超时——每命令循环头重置 idle deadline
+	// （rfc5321bis §4.5.3.2 L3846-3848「MUST per-command timeouts」；idleTimeout
+	// =5min 同包常量对齐 §4.5.3.2.7；DATA 收流期由 data() 内 dataIdleTimeout
+	// 3min 逐块承载 §4.5.3.2.5——原单次绝对 5min 缺陷修正）。
 	// U23：LogID 会话锚点（proto=submission 与 25 端点 smtp 区分——NFR-016 观测链）
 	ctx := observability.LoggerIntoContext(context.Background(),
 		slog.Default().With("logid", observability.NewLogID(), "proto", "submission", "remote", conn.RemoteAddr().String()))
@@ -202,8 +246,13 @@ func (s *SubmissionServer) serveSubmission(conn net.Conn, implicitTLS bool) {
 	}
 	sess.reply(220, s.cfg.Domain+" ESMTP submission ready")
 	for {
+		_ = conn.SetDeadline(time.Now().Add(idleTimeout)) // F4：每命令重置（见上注）
 		line, err := sess.readLine()
 		if err != nil {
+			if errors.Is(err, errLineTooLong) { // F4：命令行超长 500 后会话继续（rfc5321bis §4.5.3.1.4/.9——行已整读流同步）
+				sess.reply(500, "5.5.6 Line too long")
+				continue
+			}
 			return
 		}
 		verb, arg := splitVerb(line)
@@ -215,7 +264,7 @@ func (s *SubmissionServer) serveSubmission(conn net.Conn, implicitTLS bool) {
 			sess.resetTx()
 			sess.reply(250, "ok")
 		case "STARTTLS":
-			sess.startTLS(conn)
+			sess.startTLS(conn, arg) // F4：arg 传入校验（rfc3207 §4 L108 带参 501）
 		case "AUTH":
 			sess.auth(arg)
 		case "MAIL":
@@ -259,6 +308,12 @@ func (ss *submitSession) tlsCipherName() string {
 
 // helo EHLO 处理：能力行按 TLS 状态差异化（1.5④；rfc3207 4.2 TLS 后列表可变）。
 func (ss *submitSession) helo(arg string) {
+	if strings.TrimSpace(arg) == "" {
+		// F4/B-F8（提交端点对齐批）：EHLO 需域名参数——空域 501（rfc5321bis
+		// §4.1.1.1/§4.1.4 命令语法要求；HELO 分支保持原口径零触碰）。
+		ss.reply(501, "5.5.4 domain required")
+		return
+	}
 	ss.heloDone = true
 	ss.resetTx()
 	caps := []string{ss.srv.cfg.Domain + " hello"}
@@ -281,7 +336,13 @@ func (ss *submitSession) helo(arg string) {
 }
 
 // startTLS STARTTLS 升级（rfc3207 第 4 章：无参 501/220/握手/重置；TLS 中禁重复）。
-func (ss *submitSession) startTLS(conn net.Conn) {
+func (ss *submitSession) startTLS(conn net.Conn, arg string) {
+	if strings.TrimSpace(arg) != "" {
+		// F4/B-F8（提交端点对齐批）：STARTTLS 不带参数——带参 501
+		// （rfc3207 §4 L108「501 Syntax error (no parameters allowed)」）。
+		ss.reply(501, "5.5.4 syntax error (no parameters allowed)")
+		return
+	}
 	if ss.inTLS {
 		ss.reply(503, "TLS already active") // rfc3207 4.2：TLS 会话中不得再 STARTTLS
 		return
@@ -346,22 +407,86 @@ func (ss *submitSession) auth(arg string) {
 		return
 	}
 	if err != nil {
-		return // 应答已在内部发出（取消/解码失败）
+		return // 应答已在内部发出（取消/解码失败/行超限 500 5.5.6）
 	}
-	if err = ss.srv.verifier.VerifyCredentials(context.Background(), strings.ToLower(user), pass); err != nil {
+	// F3②/B-S10（提交端点对齐批）：SASLprep 身份准备（rfc4954 §4 L261-268——
+	// 授权身份 SHOULD use SASLprep；准备失败或结果空串 MUST fail the
+	// authentication；沿 POP3 cmdAuth F-P7 先例——auth.SASLprep 承载）。
+	prepared, serr := auth.SASLprep(user)
+	if serr != nil || prepared == "" {
+		ss.reply(535, "authentication failed") // MUST fail 承载（防枚举统一口径）
+		return
+	}
+	user = strings.ToLower(prepared)
+	// F3①/B-S10：AUTH 失败限流——LoginAttemptRepo 联动（工程防线沿 web 登录限流
+	// 同源同参；421 临时语义保留对端重试协商；nil=渐进态关闭）。
+	subjectKey := "submission:" + user // 命名空间前缀沿 web recordFail 键形态
+	if locked := ss.authLocked(subjectKey); locked {
+		ss.reply(421, "4.7.0 too many failed attempts, try again later")
+		return
+	}
+	// F6/B-F10：改传 ss.ctx（会话 LogID 链闭环——NFR-016；原 context.Background 断链修正）。
+	if err = ss.srv.verifier.VerifyCredentials(ss.ctx, user, pass); err != nil {
+		ss.recordAuthFail(subjectKey)
 		ss.reply(535, "authentication failed") // rfc4954 4：535（防枚举统一口径归 U2）
 		return
 	}
-	ss.authUser = strings.ToLower(user)
+	ss.clearAuthFails(subjectKey)
+	ss.authUser = user
 	ss.reply(235, "authenticated") // rfc4954 4：235
+}
+
+// authLocked AUTH 失败限流判定（F3①/B-S10①——提交端点对齐批）。
+// 参数：subjectKey 计数键（"submission:"+地址）。返回：锁定判定（仓储未注入/
+// 查询故障一律 false 放行——限流为防线非通路，故障不阻断认证主链）。
+func (ss *submitSession) authLocked(subjectKey string) bool {
+	if ss.srv.cfg.Attempts == nil {
+		return false
+	}
+	window, threshold := ss.authLimitConf()
+	fails, err := ss.srv.cfg.Attempts.CountRecentFails(ss.ctx, subjectKey, time.Now().UTC().Add(-window))
+	if err != nil {
+		return false // 查询故障放行（尽力语义——沿 web locked 母版精神反向容错）
+	}
+	return fails >= threshold
+}
+
+// authLimitConf 限流参数快照（nil=15min/5 次兜底档——沿 web limitConf 形态）。
+func (ss *submitSession) authLimitConf() (window time.Duration, threshold int64) {
+	if ss.srv.cfg.AttemptLimit != nil {
+		if w, t := ss.srv.cfg.AttemptLimit(); w > 0 && t > 0 {
+			return w, t
+		}
+	}
+	return 15 * time.Minute, 5
+}
+
+// recordAuthFail 记录一次 AUTH 失败（尽力语义——记录故障不改变拒绝应答）。
+func (ss *submitSession) recordAuthFail(subjectKey string) {
+	if ss.srv.cfg.Attempts == nil {
+		return
+	}
+	ip := ""
+	if ss.remoteIP() != nil {
+		ip = ss.remoteIP().String()
+	}
+	_ = ss.srv.cfg.Attempts.RecordAttempt(ss.ctx, subjectKey, ip, false, time.Now().UTC())
+}
+
+// clearAuthFails 认证成功清零（尽力语义）。
+func (ss *submitSession) clearAuthFails(subjectKey string) {
+	if ss.srv.cfg.Attempts == nil {
+		return
+	}
+	_ = ss.srv.cfg.Attempts.ClearSubject(ss.ctx, subjectKey)
 }
 
 // authPLAIN PLAIN 机制（initial-response 或 334 追问；解码 authzid\0authcid\0passwd）。
 func (ss *submitSession) authPLAIN(initial string) (user, pass string, err error) {
 	resp := initial
 	if resp == "" {
-		ss.reply(334, "") // 空挑战
-		resp, err = ss.readLine()
+		ss.reply(334, "")             // 空挑战
+		resp, err = ss.readAuthLine() // F3③：AUTH 交换行读（12288 上限——rfc4954 §4 L246-259）
 		if err != nil {
 			return
 		}
@@ -388,7 +513,7 @@ func (ss *submitSession) authLOGIN(initial string) (user, pass string, err error
 	user = initial
 	if user == "" {
 		ss.reply(334, base64.StdEncoding.EncodeToString([]byte("Username:")))
-		user, err = ss.readLine()
+		user, err = ss.readAuthLine() // F3③：AUTH 交换行读（rfc4954 §4 L246-259）
 		if err != nil {
 			return
 		}
@@ -401,7 +526,7 @@ func (ss *submitSession) authLOGIN(initial string) (user, pass string, err error
 		user = string(raw)
 	}
 	ss.reply(334, base64.StdEncoding.EncodeToString([]byte("Password:")))
-	pass, err = ss.readLine()
+	pass, err = ss.readAuthLine() // F3③：AUTH 交换行读（rfc4954 §4 L246-259）
 	if err != nil {
 		return
 	}
@@ -482,7 +607,7 @@ func (ss *submitSession) mail(arg string) {
 	ss.reply(250, "ok")
 }
 
-// rcpt RCPT TO（DSN NOTIFY/ORCPT 参数透传；上限）。
+// rcpt RCPT TO（DSN NOTIFY/ORCPT 参数校验与透传；上限常量化）。
 func (ss *submitSession) rcpt(arg string) {
 	if !ss.inTx {
 		ss.reply(503, "need MAIL first")
@@ -493,70 +618,149 @@ func (ss *submitSession) rcpt(arg string) {
 		ss.reply(501, "syntax error in address")
 		return
 	}
-	if len(ss.rcpts) >= 100 {
-		ss.reply(452, "too many recipients") // rfc5321bis 4.5.3.1.8
+	if len(ss.rcpts) >= rcptMaxRecipients {
+		// F4/B-F8：上限常量化（rfc5321bis §4.5.3.1.8 L3771-3773 MUST ≥100——本值即
+		// MUST 最小值；应答 452 §4.5.3.1.10 L3833-3835——原有口径保持，行为零变化）。
+		ss.reply(452, "too many recipients")
 		return
 	}
+	rcptKey := strings.ToLower(to)
 	for _, p := range strings.Fields(paramsStr) {
 		kv := strings.SplitN(p, "=", 2)
-		switch strings.ToUpper(kv[0]) {
+		key := strings.ToUpper(kv[0])
+		switch key {
 		case "NOTIFY", "ORCPT":
-			if len(kv) == 2 {
-				ss.dsnParams = append(ss.dsnParams, mail.DSNParam{Keyword: strings.ToUpper(kv[0]), Value: kv[1], Rcpt: strings.ToLower(to)})
+			// F5/B-F9（提交端点对齐批）：重复检查——同 RCPT 内同参数 MUST NOT 超一次，
+			// 超过 SHOULD 501（rfc3461 §4.5 L533-536；对齐 RET/ENVID 既有 mail() 形态）。
+			for _, exist := range ss.dsnParams {
+				if exist.Keyword == key && exist.Rcpt == rcptKey {
+					ss.reply(501, "5.5.4 duplicate parameter")
+					return
+				}
 			}
+			if len(kv) != 2 || kv[1] == "" {
+				ss.reply(501, "5.5.4 parameter value required")
+				return
+			}
+			if key == "NOTIFY" && !validNotifyValue(kv[1]) {
+				// rfc3461 §4.1 L355-363：NEVER 独占或 SUCCESS/FAILURE/DELAY 逗号列表（大小写任意）。
+				ss.reply(501, "5.5.4 NOTIFY 参数非法（NEVER 或 SUCCESS,FAILURE,DELAY 列表）")
+				return
+			}
+			if key == "ORCPT" && !validOrcptValue(kv[1]) {
+				// rfc3461 §4.2 L412-422：addr-type;xtext 形态，整参 ≤500 字符。
+				ss.reply(501, "5.5.4 ORCPT 参数非法（addr-type;xtext ≤500 octets）")
+				return
+			}
+			ss.dsnParams = append(ss.dsnParams, mail.DSNParam{Keyword: key, Value: kv[1], Rcpt: rcptKey})
 		default:
 			ss.reply(555, "unsupported parameter")
 			return
 		}
 	}
-	ss.rcpts = append(ss.rcpts, strings.ToLower(to))
+	ss.rcpts = append(ss.rcpts, rcptKey)
 	ss.reply(250, "ok")
 }
 
-// data DATA 收流（<CRLF>.<CRLF> 终止；dot 还原；Submit→250/451/550 映射）。
+// validNotifyValue NOTIFY 参数值域校验（F5——rfc3461 §4.1 L355-363）：
+// "NEVER" 独占（不得与列表混用）或 SUCCESS/FAILURE/DELAY 逗号列表（至少一项）；
+// 关键字大小写任意（L365-366）。
+func validNotifyValue(v string) bool {
+	u := strings.ToUpper(v)
+	if u == "NEVER" {
+		return true
+	}
+	seen := false
+	for _, el := range strings.Split(u, ",") {
+		switch el {
+		case "SUCCESS", "FAILURE", "DELAY":
+			seen = true
+		default:
+			return false // 含 NEVER 混用/未知元素/空元素均拒
+		}
+	}
+	return seen
+}
+
+// validOrcptValue ORCPT 参数值域校验（F5——rfc3461 §4.2 L412-422）：
+// addr-type";"xtext 形态——恰一个分号且两侧非空（addr-type=atom 非空；xtext 非空），
+// 整参 ≤500 字符（L421-422）。
+func validOrcptValue(v string) bool {
+	if len(v) > 500 {
+		return false
+	}
+	return strings.Count(v, ";") == 1 && !strings.HasPrefix(v, ";") && !strings.HasSuffix(v, ";")
+}
+
+// data DATA 收流（<CRLF>.<CRLF> 终止；大小终判；dot 还原；Submit→250/451/550 映射）。
+// F2/A-12（提交端点对齐批）：终止检测改复用 25 端点共享辅助 indexDataTerminator
+// （位置 0 前缀特判——空消息首包 ".\r\n" 的前导 CRLF 由 354 应答行充当，
+// rfc5321bis §4.1.1.4 L2206-2207；跨块回退扫描对齐 readData 母版——原
+// bytesHasTerminator 尾缀匹配 len<5 恒假致空消息挂死缺陷修正）；
+// F1/A-11：DATA 面大小终判（tooBig 标记+继续消费至终止序列保持协议同步+552
+// ——rfc1870 §6.1 L231-233；SIZE 参数不用于判定内容结束 L201-202，终止检测
+// 独立承载；实际大于声明未超上限仍接受——L235-238 permitted 宽容保持）。
 func (ss *submitSession) data() {
 	if !ss.inTx || len(ss.rcpts) == 0 {
 		ss.reply(503, "need RCPT first")
 		return
 	}
 	ss.reply(354, "End data with <CR><LF>.<CR><LF>")
+	limit := ss.srv.cfg.MaxMessageSize()
 	var raw []byte
-	buf := make([]byte, 4096)
-	lineStart := true
+	scanned := 0 // 已扫描偏移（终止序列跨块边界回退重扫——母版形态）
+	tooBig := false
 	for {
-		n, err := ss.rw.Reader.Read(buf)
+		_ = ss.conn.SetReadDeadline(time.Now().Add(dataIdleTimeout)) // F4：数据块 3min 逐块（rfc5321bis §4.5.3.2.5）
+		chunk := make([]byte, readChunk)
+		n, err := ss.rw.Reader.Read(chunk)
+		if n > 0 {
+			raw = append(raw, chunk[:n]...)
+			// 自上次扫描点-3 回退扫描（终止序列最长跨块 4 字节——readData 母版同款）
+			start := scanned - len(dataTerminator) + 1
+			if start < 0 {
+				start = 0
+			}
+			if idx := indexDataTerminator(raw, start); idx >= 0 {
+				body := unstuffDots(raw[:idx])
+				if tooBig || int64(len(body)) > limit {
+					// F1：实际长度终判（超限标记或超限事实——552 rfc1870 §6.1 L231-233）
+					ss.reply(552, "5.3.4 message size exceeds fixed maximum")
+					ss.resetTx()
+					return
+				}
+				// F6/B-F10：改传 ss.ctx（会话 LogID 链闭环——NFR-016）。
+				res := ss.srv.pipeline.Submit(ss.ctx, &mail.Submission{
+					// F-9：RemoteIP+TLSCipher 承载（MSA 接收 trace 头构造输入——rfc8314 §7.4）
+					Envelope:   auth.Envelope{MailFrom: ss.mailFrom, Helo: "submission", RemoteIP: ss.remoteIP()},
+					AuthUser:   ss.authUser,
+					Recipients: ss.rcpts,
+					DSNParams:  ss.dsnParams,
+					TLSCipher:  ss.tlsCipherName(),
+				}, body)
+				// U15：插件拒绝识别（提交客户端可见——计划偏离裁决 A；纯增量 case）
+				var pluginRej *mail.PluginRejectError
+				switch {
+				case res == nil:
+					ss.reply(250, "ok: queued as accepted") // 已接受非已投递（流程设计 3.1）
+				case errors.As(res, &pluginRej):
+					ss.reply(pluginRej.Code, pluginRej.Message) // 插件给定码（4xx/5xx）
+				case errors.Is(res, mail.ErrUnauthorized):
+					ss.reply(550, "5.7.1 sender not authorized") // rfc6409 6.1/FR-002
+				default:
+					ss.reply(451, "temporary failure, try again") // ErrRetryable（CON-004 提交侧）
+				}
+				ss.resetTx()
+				return
+			}
+			scanned = len(raw)
+			if !tooBig && int64(len(raw)) > limit {
+				tooBig = true // 标记后继续消费至终止序列（协议同步——母版语义）
+			}
+		}
 		if err != nil {
 			return
 		}
-		raw = append(raw, buf[:n]...)
-		// 终止序列检测：尾部 ".\r\n" 且其前为行首（简化扫描——数据完整性由终止点判定）
-		if n > 0 && bytesHasTerminator(raw) {
-			body := stripTerminator(raw)
-			body = unstuffDots(body)
-			res := ss.srv.pipeline.Submit(context.Background(), &mail.Submission{
-				// F-9：RemoteIP+TLSCipher 承载（MSA 接收 trace 头构造输入——rfc8314 §7.4）
-				Envelope:   auth.Envelope{MailFrom: ss.mailFrom, Helo: "submission", RemoteIP: ss.remoteIP()},
-				AuthUser:   ss.authUser,
-				Recipients: ss.rcpts,
-				DSNParams:  ss.dsnParams,
-				TLSCipher:  ss.tlsCipherName(),
-			}, body)
-			// U15：插件拒绝识别（提交客户端可见——计划偏离裁决 A；纯增量 case）
-			var pluginRej *mail.PluginRejectError
-			switch {
-			case res == nil:
-				ss.reply(250, "ok: queued as accepted") // 已接受非已投递（流程设计 3.1）
-			case errors.As(res, &pluginRej):
-				ss.reply(pluginRej.Code, pluginRej.Message) // 插件给定码（4xx/5xx）
-			case errors.Is(res, mail.ErrUnauthorized):
-				ss.reply(550, "5.7.1 sender not authorized") // rfc6409 6.1/FR-002
-			default:
-				ss.reply(451, "temporary failure, try again") // ErrRetryable（CON-004 提交侧）
-			}
-			ss.resetTx()
-			return
-		}
-		_ = lineStart
 	}
 }
 
@@ -576,6 +780,30 @@ func (ss *submitSession) readLine() (string, error) {
 		return "", err
 	}
 	ss.debugFrame("C", line) // U23 协议 debug（开启时输出——命令面）
+	if len(line) > cmdLineLimit {
+		// F4/B-F8（提交端点对齐批）：命令行超长哨兵（rfc5321bis §4.5.3.1.4/.9——
+		// 行已整读保持流同步，调用方 500 后会话继续；cmdLineLimit=4096 同包常量）。
+		return "", errLineTooLong
+	}
+	return strings.TrimRight(line, "\r\n"), nil
+}
+
+// readAuthLine AUTH 交换行读取（F3③/B-S10③——提交端点对齐批）。
+// BASE64 挑战响应可远超命令行限（rfc4954 §4 L246-254——12288 octets 规范参考
+// 上限 authLineLimit）；超限即 500+5.5.6（L255-259「fails the AUTH command with
+// the 500 reply」+§6 L607-612「Authentication Exchange line is too long」），
+// 哨兵由上层终止本次 AUTH。
+// 参数：无（读一行）。返回：剥 CRLF 后的行；超限返回 errAuthLineTooLong（500 已发）。
+func (ss *submitSession) readAuthLine() (string, error) {
+	line, err := ss.rw.Reader.ReadString('\n')
+	if err != nil {
+		return "", err
+	}
+	ss.debugFrame("C", line) // U23 协议 debug（开启时输出——AUTH 交换面）
+	if len(line) > authLineLimit {
+		ss.reply(500, "5.5.6 Authentication Exchange line is too long")
+		return "", errAuthLineTooLong
+	}
 	return strings.TrimRight(line, "\r\n"), nil
 }
 
@@ -611,17 +839,6 @@ func splitVerb(line string) (verb, arg string) {
 	return strings.ToUpper(line[:i]), line[i+1:]
 }
 
-// （parsePathArg/unstuffDots 复用 session.go U4 既有辅助，不重复定义）
-
-// bytesHasTerminator 数据尾部 <CRLF>.<CRLF> 检测。
-func bytesHasTerminator(raw []byte) bool {
-	if len(raw) < 5 {
-		return false
-	}
-	return strings.HasSuffix(string(raw), "\r\n.\r\n")
-}
-
-// stripTerminator 剥除尾部终止序列。
-func stripTerminator(raw []byte) []byte {
-	return raw[:len(raw)-5]
-}
+// （parsePathArg/unstuffDots/indexDataTerminator 复用 session.go U4 既有共享辅助，
+// 不重复定义——F2/A-12 提交端点对齐批：终止检测并入单点共享，原
+// bytesHasTerminator/stripTerminator 尾缀匹配实现随缺陷修正废除。）

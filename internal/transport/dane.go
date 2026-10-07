@@ -11,6 +11,10 @@
 // 修改历史：
 //
 //	2026-09-23 08:30:00 | 新建 | U13 传输安全全量（计划书步骤 5/6）
+//	2026-10-07 15:35:00 | 修正 | 传输安全合规批 F9（B-S11）：verifyTA 增
+//	Intermediates 中间证书池（rfc6698 §2.1.1 PKIX 路径构建——TA(2) 跨中间链场景）
+//	+异常 RCODE 全族视为查询错误（rfc7672 §2.1.2 L610-624 etc. 涵盖 NOTIMP/REFUSED
+//	——原仅 SERVFAIL 判错误、其余降级 insecure 的偏离收口）；G2 批准 2026-10-07 15:13:06
 package transport
 
 import (
@@ -104,11 +108,26 @@ func NewProdDNSSECExchange() (dnssecExchange, error) {
 		if err != nil {
 			return nil, err
 		}
-		if resp.Rcode == dns.RcodeServerFailure {
-			return nil, errors.New("SERVFAIL") // bogus 语义（rfc7672 §2.1.1）
+		// F9②（B-S11）：异常 RCODE 全族视为查询失败（dnsRcodeIsQueryError 纯函数承载
+		// ——语义与测试锚见函数注释）。
+		if dnsRcodeIsQueryError(resp.Rcode) {
+			return nil, fmt.Errorf("DNS 异常应答 RCODE=%d（查询失败——rfc7672 §2.1.2）", resp.Rcode)
 		}
 		return resp, nil
 	}, nil
+}
+
+// dnsRcodeIsQueryError DNS 应答 RCODE 查询失败判定（F9②/B-S11——纯函数：NFR-015
+// 表驱动离线锚）。语义：rfc7672 §2.1.2 L610-624「If any DNS queries used to locate
+// TLSA records fail (due to bogus or indeterminate records, timeouts, malformed
+// replies, SERVFAIL responses, etc.), then the SMTP client MUST treat that server
+// as unreachable and MUST NOT deliver」——etc. 涵盖 NOTIMP/REFUSED（§2.2.2 L876-877
+// 明确点名 NOTIMP——问题域名服务器对 TLSA 查询回 NOTIMP 场景）；NOERROR=成功与
+// NXDOMAIN=否定不存在（§2.1.1「nonexistence is determined ... is not an error」）
+// 非错误保持；其余 RCODE 全族（SERVFAIL/FORMERR/REFUSED/NOTIMP/NOTAUTH...）=错误
+// （MX 不可达——调用方 deferred 转移，禁止降级投递）。
+func dnsRcodeIsQueryError(rcode int) bool {
+	return rcode != dns.RcodeSuccess && rcode != dns.RcodeNameError
 }
 
 // ───────────────────────── 域服务 ─────────────────────────
@@ -360,12 +379,20 @@ func verifyTA(r TLSARecord, refNames []string, leaf *x509.Certificate, chain []*
 		return false
 	}
 	now := time.Now()
+	// F9①（B-S11）：服务端链中间证书池（rfc6698 §2.1.1 PKIX 路径构建——leaf→TA
+	// 跨中间证书场景原仅 Roots 单锚构建失败收口；发布者义务 MUST 携带 TA 于链中
+	// 既有，池内为链中全部非叶证书）。
+	intermediates := x509.NewCertPool()
+	for _, crt := range chain[1:] {
+		intermediates.AddCert(crt)
+	}
 	for _, name := range refNames { // 任一参考标识通过即可（§3.2.2 参考标识集）
 		if _, err := leaf.Verify(x509.VerifyOptions{
-			Roots:       roots,
-			DNSName:     name,
-			KeyUsages:   []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-			CurrentTime: now,
+			Roots:         roots,
+			Intermediates: intermediates, // F9①
+			DNSName:       name,
+			KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+			CurrentTime:   now,
 		}); err == nil {
 			return true
 		}
