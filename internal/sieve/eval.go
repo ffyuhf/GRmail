@@ -11,28 +11,45 @@
 //
 //	2026-09-21 00:54:00 | 新建 | U12 Sieve 过滤与 ManageSieve（计划书步骤 6/7）
 //	2026-09-29 17:17:00 | 修正 | RFC候选修正批次 RF-F：F-S1 header/address/envelope 双列表求值+fileinto :flags 参数序+decode 链超范围错误上抛（F-S21）
+//	2026-10-08 10:20:00 | 优化 | 性能批 F5（B-P4，G2 批准 2026-10-08 10:13:49）：编译缓存
+//	  ——脚本内容 SHA-256 键→AST（原每封来信全流程 Parse 重复编译消除；内容变更
+//	  天然失效；条目上限随机淘汰防无界增长；求值纯函数语义零变化——rfc5228 §2.10.6
+//	  错误即停行为保持）
 package sieve
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	stdmail "net/mail"
 	"strings"
+	"sync"
 
 	grmail "GRmail/internal/mail"
 	"GRmail/internal/storage"
 )
 
+// sieveCacheMax 编译缓存条目上限（性能批 F5——超限随机淘汰一项：map 迭代序随机，
+// 简单淘汰不追求 LRU 精度；条目为 AST 指针轻量，单管理员自托管场景远达不到上限）。
+const sieveCacheMax = 256
+
 // Runner Sieve 执行器（grmail.SieveRunner 实现——管道经 SetSieveRunner 注入）。
 type Runner struct {
 	scripts storage.SieveScriptRepo
+
+	// astCache 编译缓存（F5/B-P4）：脚本内容 SHA-256 → 解析产物。同一邮箱激活脚本
+	// 固定，原每封来信重新 Parse（词法+递归下降）重复编译；缓存后内容变更天然失效
+	// （哈希键不同即新条目——PUTSCRIPT/DELETE 零联动成本）。AST 为只读消费
+	// （evalScript 纯函数零改写），并发共享安全。
+	cacheMu  sync.Mutex
+	astCache map[[sha256.Size]byte]*Script
 }
 
 // NewRunner 构造执行器。
 // 参数：scripts Sieve 脚本仓储（GetActiveScript 逐收件人查询）。
 func NewRunner(scripts storage.SieveScriptRepo) *Runner {
-	return &Runner{scripts: scripts}
+	return &Runner{scripts: scripts, astCache: make(map[[sha256.Size]byte]*Script)}
 }
 
 // 编译期断言：契约 v1.8.0 2.3 接口实现锁定。
@@ -48,12 +65,40 @@ func (r *Runner) RunForMailbox(ctx context.Context, mailboxID int64, evalCtx *gr
 		}
 		return nil, fmt.Errorf("查询激活脚本: %w", err)
 	}
-	ast, err := Parse(script.Content)
+	ast, err := r.parseCached(script.Content)
 	if err != nil {
 		// 运行期出现编译期错误（保存校验遗漏/并发改写窗口）——按运行时错误同径兜底
 		return nil, fmt.Errorf("激活脚本解析失败: %w", err)
 	}
 	return evalScript(ast, evalCtx)
+}
+
+// parseCached 带缓存的脚本解析（F5/B-P4）。
+// 语义：同内容命中缓存直接返回 AST 指针（解析零开销）；未命中执行全流程 Parse 后
+// 入缓存；解析失败不入缓存（每次重试——错误即停语义保持，rfc5228 §2.10.6）。
+// 参数：content 脚本源文本。返回：解析产物（缓存共享只读）；解析失败原因。
+func (r *Runner) parseCached(content string) (*Script, error) {
+	sum := sha256.Sum256([]byte(content))
+	r.cacheMu.Lock()
+	ast, ok := r.astCache[sum]
+	r.cacheMu.Unlock()
+	if ok {
+		return ast, nil
+	}
+	ast, err := Parse(content)
+	if err != nil {
+		return nil, err
+	}
+	r.cacheMu.Lock()
+	if len(r.astCache) >= sieveCacheMax {
+		for k := range r.astCache { // 随机淘汰一项（map 迭代序随机）
+			delete(r.astCache, k)
+			break
+		}
+	}
+	r.astCache[sum] = ast
+	r.cacheMu.Unlock()
+	return ast, nil
 }
 
 // evalState 求值状态（implicit keep 状态机载体）。

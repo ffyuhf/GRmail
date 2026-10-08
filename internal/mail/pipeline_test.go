@@ -7,10 +7,13 @@
 package mail
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
+	"os"
 	"strings"
 	"testing"
 
@@ -44,6 +47,22 @@ func (m *memBlobs) Write(_ context.Context, key string, data []byte) error {
 }
 func (m *memBlobs) Read(_ context.Context, key string) ([]byte, error) { return m.data[key], nil }
 func (m *memBlobs) Delete(_ context.Context, key string) error         { delete(m.data, key); return nil }
+
+// memSeekCloser 内存流式句柄（性能批 F7 stub 适配——bytes.Reader 的 Close 空实现
+// 包装，满足 io.ReadSeekCloser）。
+type memSeekCloser struct{ *bytes.Reader }
+
+func (memSeekCloser) Close() error { return nil }
+
+// Open 性能批 F7 扩展（接口 v1.36.0 增量适配——内存 bytes.Reader 包装形态对齐
+// io.ReadSeekCloser 契约；数据缺失返回 os.ErrNotExist 与 FS 实现语义一致）。
+func (m *memBlobs) Open(_ context.Context, key string) (io.ReadSeekCloser, error) {
+	data, ok := m.data[key]
+	if !ok {
+		return nil, os.ErrNotExist
+	}
+	return memSeekCloser{bytes.NewReader(data)}, nil
+}
 
 // List F7 扩展（接口 v1.32.0 增量适配——测试 stub 形态对齐 FS 实现）。
 func (m *memBlobs) List(_ context.Context) ([]string, error) {

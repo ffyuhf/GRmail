@@ -10,6 +10,11 @@
 //	（-p CLI 覆盖向导监听端口——":80" 硬编码①消除；缺省兜底由调用方 main 0.6 段
 //	统一完成，入参恒为有效值；依据：HTTP端口参数化计划书 v1.0.0 1.2-WA 组，G2
 //	批准 2026-10-04 11:32:10；SRS FR-015 无 80 权限设备向导可达性）
+//	2026-10-08 18-30-00 | 修正 | B-FUNC功能缺陷修复批 F5（B-F3）：三仓储按
+//	Database.Driver 分派（storage 三库 For 工厂——完成态 main 7.7 同源；原硬编码
+//	SQLite 构造器致既有 MySQL/PG 部署置回引导态时向导步 2 限流/判重查询在
+//	SQLite 方言构造器上对非 SQLite 连接执行〔方言错配向导不可用〕。G2 批准
+//	2026-10-08 18:26:50 候选 3.3-A；SRS FR-015/FR-014 三库一致）
 package main
 
 import (
@@ -32,9 +37,12 @@ import (
 // httpPort 向导监听端口（-p CLI 覆盖值/缺省 80——调用方已兜底，恒为 1~65535）。
 func runSetupMode(ctx context.Context, logger *slog.Logger, watcher *config.Watcher,
 	saveConfig func(modify func(*config.Config)) error, db *sql.DB, httpPort int) {
-	sessions := storage.NewSQLiteSessionRepo(db)
-	users := storage.NewSQLiteUserRepo(db)
-	attempts := storage.NewSQLiteLoginAttemptRepo(db)
+	// F5（B-F3 修复）：仓储按 Database.Driver 分派（三库 For 工厂——完成态 main 7.7
+	// 同源；db 已由调用方按 config.Open 打开，分派仅对齐构造器方言）。
+	driver := watcher.Current().Database.Driver
+	sessions := storage.NewSessionRepoFor(driver, db)
+	users := storage.NewUserRepoFor(driver, db)
+	attempts := storage.NewLoginAttemptRepoFor(driver, db)
 
 	setupServer := web.NewServer(web.ServerConfig{
 		Domain: watcher.Current().Server.Domain,

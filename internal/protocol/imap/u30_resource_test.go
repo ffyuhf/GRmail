@@ -80,7 +80,8 @@ func TestTranslateCriteriaUIDIntersect(t *testing.T) {
 	us.AddRange(1, 4294967295)
 	criteria := &imap.SearchCriteria{UID: []imap.UIDSet{us}}
 	start := time.Now()
-	f, err := translateCriteria(criteria, []int64{3, 9})
+	// B-FUNC 批 F2 适配：translateCriteria 增第二返回值（unsupported 空集标记）
+	f, _, err := translateCriteria(criteria, []int64{3, 9})
 	if err != nil {
 		t.Fatalf("翻译: %v", err)
 	}

@@ -508,5 +508,20 @@ func selfSignedTLSConfig(t *testing.T) *tls.Config {
 	}
 }
 
+// TestPOP3AuthEqualsZeroLength F3（B-F7 修复锚）：AUTH PLAIN "=" 零长
+// initial-response（rfc5034 §4 L245-247 MUST——响应已存在但零数据；§5 ABNF
+// initial-response = base64 / "="）——非省略形态：不发 challenge 轮（无 "+ "
+// 应答直达终态），零长串直入 PLAIN 三段校验拒绝（-ERR invalid PLAIN credentials
+// ——替代原 base64 解码失败误拒路径 "-ERR invalid base64"）。SRS FR-007 伴随。
+func TestPOP3AuthEqualsZeroLength(t *testing.T) {
+	env := newTestEnv(t)
+	c := dialPOP3(t, env.addr)
+	got := c.cmd("AUTH PLAIN =")
+	if got != "-ERR invalid PLAIN credentials" {
+		t.Fatalf("零长 initial-response 应经 PLAIN 三段校验拒绝（F3）: %q", got)
+	}
+	_ = c.cmd("QUIT")
+}
+
 // 编译期防未用导入（fmt 保留给断言扩展）。
 var _ = fmt.Sprintf

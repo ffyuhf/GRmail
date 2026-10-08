@@ -1,13 +1,14 @@
 // auth 来信验证器：SPF/DKIM/ARC（raven）+ DMARC（自研包）四项编排、
 // Authentication-Results 头组装（rfc8601）与认证栈开关热加载订阅（TC-009）。
 // 依据：SRS FR-008（四项验证+A-R 头）/FR-009（开关热加载，订阅侧）/NFR-004/NFR-005；
-// 模块接口契约 v1.0.0 2.2 节（Verifier/VerifyResults 签名逐字落地，compile-time 断言锁定）；
+// 模块接口契约 v1.37.0 2.2 节（Verifier/VerifyResults 签名逐字落地，compile-time 断言锁定）；
 // 关键流程设计 v1.0.0 第一章（验证在 DATA 后、落库前，A-R 注入）；
 // rfc8601 2.2（authres-header-field ABNF）/2.7.1（dkim=header.d）/2.7.2（spf=smtp.mailfrom）；
 // 架构总览 v1.0.0 5.2（组件禁止缓存旧配置指针——开关经 RWMutex 快照读取）。
 // 修改历史：
 //
 //	2026-09-17 02:40:00 | 新建 | U3 auth 基础（计划书步骤 6）
+//	2026-10-08 13:10:00 | 修正 | 文档治理批 C1：头注契约版本引用刷新 v1.0.0→v1.37.0（注释漂移收口；纯注释零行为变更）
 package auth
 
 import (

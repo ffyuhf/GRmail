@@ -9,8 +9,8 @@
 package imap
 
 import (
-	"bytes"
 	"context"
+	"io"
 
 	"github.com/emersion/go-imap/v2"
 	"github.com/emersion/go-imap/v2/imapserver"
@@ -21,11 +21,14 @@ import (
 
 // Fetch 拉取消息数据项（numSet 序号/UID 类型判定语义；逐消息写响应）。
 // 参数：w FETCH 响应写入器；numSet 消息集；options 请求项。返回：处理错误。
+// F4（B-P3③，G2 批准 2026-10-08 10:13:49）：detailsForUIDs 批量定位（原逐封
+// detailForUID 双查询 N+1 消除）；应答顺序按 uids 序既有保持（逐字节等价锚）。
 func (s *Session) Fetch(w *imapserver.FetchWriter, numSet imap.NumSet, options *imap.FetchOptions) error {
 	ctx := context.Background()
 	uids, _ := s.resolveNumSet(numSet)
+	details := s.detailsForUIDs(ctx, uids)
 	for _, uid := range uids {
-		detail := s.detailForUID(ctx, uid)
+		detail := details[uid]
 		if detail == nil {
 			continue // 已 EXPUNGE 行跳过（rfc9051 6.4.8 宽容语义）
 		}
@@ -40,8 +43,11 @@ func (s *Session) Fetch(w *imapserver.FetchWriter, numSet imap.NumSet, options *
 	return nil
 }
 
-// writeFetchItem 单消息数据项写入（缓存列项免解析；原文项惰性读取一次复用）。
+// writeFetchItem 单消息数据项写入（缓存列项免解析；原文项流式读取一次复用）。
 // 参数：fw 单消息写入器；uid 消息 UID；detail 元数据；options 请求项。返回：写入错误。
+// F7（D11）：流式句柄替代整封 []byte——blobs.Open 后库级 Extract* 直传（io.Reader
+// 签名天然兼容）；每用途前 Seek(0) 重绕（Envelope/BodyStructure/多 BodySection
+// 复用同一句柄）；单请求内存峰值从「整封字节」降为「提取缓冲」。
 func (s *Session) writeFetchItem(ctx context.Context, fw *imapserver.FetchResponseWriter,
 	uid int64, detail *storage.Detail, options *imap.FetchOptions) error {
 	if options.UID {
@@ -69,29 +75,40 @@ func (s *Session) writeFetchItem(ctx context.Context, fw *imapserver.FetchRespon
 	if !needRaw {
 		return fw.Close()
 	}
-	raw, err := s.server.blobs.Read(ctx, detail.BlobKey)
+	rc, err := s.server.blobs.Open(ctx, detail.BlobKey)
 	if err != nil {
 		return err
 	}
+	defer func() { _ = rc.Close() }()
 	if options.Envelope {
-		if err = s.writeEnvelope(fw, raw); err != nil {
+		if _, err = rc.Seek(0, io.SeekStart); err != nil {
+			return err
+		}
+		if err = s.writeEnvelope(fw, rc); err != nil {
 			return err
 		}
 	}
 	if options.BodyStructure != nil {
-		fw.WriteBodyStructure(imapserver.ExtractBodyStructure(bytes.NewReader(raw)))
+		if _, err = rc.Seek(0, io.SeekStart); err != nil {
+			return err
+		}
+		fw.WriteBodyStructure(imapserver.ExtractBodyStructure(rc))
 	}
 	for _, item := range options.BodySection {
-		if err = s.writeBodySection(fw, raw, item); err != nil {
+		if _, err = rc.Seek(0, io.SeekStart); err != nil {
+			return err
+		}
+		if err = s.writeBodySection(fw, rc, item); err != nil {
 			return err
 		}
 	}
 	return fw.Close()
 }
 
-// writeEnvelope 信封写入（原文头解析→库级 ExtractEnvelope——地址解码/主题解码由库承载）。
-func (s *Session) writeEnvelope(fw *imapserver.FetchResponseWriter, raw []byte) error {
-	entity, err := message.Read(bytes.NewReader(raw))
+// writeEnvelope 信封写入（流式头解析→库级 ExtractEnvelope——地址解码/主题解码由库承载；
+// F7：io.Reader 直传——bytes.NewReader 形态废止）。
+func (s *Session) writeEnvelope(fw *imapserver.FetchResponseWriter, r io.Reader) error {
+	entity, err := message.Read(r)
 	if err != nil {
 		// 畸形消息容错：空信封呈现（FETCH 不因单封畸形失败——NFR-011 客户端兼容口径）
 		fw.WriteEnvelope(&imap.Envelope{})
@@ -103,9 +120,9 @@ func (s *Session) writeEnvelope(fw *imapserver.FetchResponseWriter, raw []byte) 
 }
 
 // writeBodySection BODY[] 分节写入（库级 ExtractBodySection——含 Part/Specifier/
-// HeaderFields/Partial 全语义；size 前置声明后流式写）。
-func (s *Session) writeBodySection(fw *imapserver.FetchResponseWriter, raw []byte, item *imap.FetchItemBodySection) error {
-	data := imapserver.ExtractBodySection(bytes.NewReader(raw), item)
+// HeaderFields/Partial 全语义；size 前置声明后流式写；F7：io.Reader 直传）。
+func (s *Session) writeBodySection(fw *imapserver.FetchResponseWriter, r io.Reader, item *imap.FetchItemBodySection) error {
+	data := imapserver.ExtractBodySection(r, item)
 	wc := fw.WriteBodySection(item, int64(len(data)))
 	if _, err := wc.Write(data); err != nil {
 		return err

@@ -1,8 +1,8 @@
 // Package pop3 实现 POP3 服务端自研（FR-007/IR-003：995 隐式 TLS + rfc1939 命令集 +
 // SASL 认证 rfc5034 + 明文连接拒绝认证）。
-// 架构依据：系统架构总览 v1.0.1 选型 #4（POP3 自研，Q4 裁决 2026-09-15 11:01:24）、
+// 架构依据：系统架构总览 v1.2.2 选型 #4（POP3 自研，Q4 裁决 2026-09-15 11:01:24）、
 // 第四章依赖规则（protocol/pop3 → {account,storage,observability}，transport TLS 注入）；
-// 契约 v1.3.1 2.4 预登记注入形态（account.Service+MessageRepo+FolderRepo+BlobStore）。
+// 契约 v1.37.0 2.4 注记（account.Service+MessageRepo+FolderRepo+BlobStore 注入形态；v1.33.0 资源限制注记同章承载）。
 // 规范依据（RFC 标准库索引 v1.3.0 02 类）：rfc1939（STD 53 全文回读：§3 命令/响应语法
 // 与多行响应 byte-stuffing/三态状态机、§4 超时≥10min、§5-§8 命令集、§11 octet 计数口径）、
 // rfc2449（§3 ABNF 命令≤255 八位组、§4 能力行≤512、§5 CAPA 双态、§6.1/6.8/6.6 TOP/UIDL/PIPELINING）、
@@ -17,6 +17,7 @@
 //	2026-09-19 04:09:01 | 新建 | U7 POP3 自研（计划书 v1.0.0 步骤 2，G2 批准）
 //	2026-09-27 06:20:00 | 扩展 | U21 可观测性增强：ProtocolDebug 注入位+快照方法
 //	（来源：G2 批准 2026-09-27 06:13:36，U21 计划书 v1.0.0 步骤 4）
+//	2026-10-08 13:10:00 | 修正 | 文档治理批 C1：头注版本引用刷新（架构 v1.0.1→v1.2.2/契约 v1.3.1→v1.37.0——注释漂移收口；纯注释零行为变更）
 package pop3
 
 import (

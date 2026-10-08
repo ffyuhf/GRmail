@@ -47,8 +47,12 @@ func TestRotateWriterClosedRejectsWrite(t *testing.T) {
 
 // TestRotateWriterBackupsPrunesOldest backups 落实（F3③——原死参数收口）：
 // 当日大小轮转序号超过保留份数时清理最旧序号文件。
+// 性能批验证轮实测修正（2026-10-08 11:50）：t.TempDir 改 manualTempDir——Close 路径
+// archiveDay 裸协程（rotate.go:174，不归 wg 登记）与 TempDir 清理钩子竞态致偶发
+// "directory not empty"（连跑实证 5/6 失败率）；沿本文件 CrossDay 用例批 6 适配
+// 先例——清理容忍承载，语义断言零删减。
 func TestRotateWriterBackupsPrunesOldest(t *testing.T) {
-	dir := t.TempDir()
+	dir := manualTempDir(t)
 	// maxMB=1 但写入远小于 1MB——用直接调用 rotateSizeLocked 的方式不可行（私有），
 	// 改经构造参数驱动：maxMB 最小 1MB，写入 1MB+ 触发轮转三次，backups=2 保留最近 2 序号。
 	w := NewDailyRotateWriter(filepath.Join(dir, "app.log"), 1, 2, 0)

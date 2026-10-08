@@ -7,6 +7,10 @@
 // 修改历史：
 //
 //	2026-09-19 10:36:00 | 新建 | U9 Webmail 核心（计划书步骤 7，G2 批准 2026-09-19 10:00:41）
+//	2026-10-08 18-30-00 | 修正 | B-FUNC功能缺陷修复批 F1（B-F1）：批量移动目标
+//	自本批起读 PostForm("target")——模板目标下拉 <select name="target"> 为唯一移动
+//	目标载体（原读隐藏域 "folder" 值恒为当前 ActiveFolder 致移动恒为原地无效操作；
+//	模板隐藏域同批删除。G2 批准 2026-10-08 18:26:50 候选 3.1-A；SRS FR-013 判定项⑬）
 package web
 
 import (
@@ -68,7 +72,9 @@ func (s *Server) mailsBatchPOST(c *gin.Context) {
 			}
 		}
 	case batchMove:
-		folderID, ferr := strconv.ParseInt(c.PostForm("folder"), 10, 64)
+		// F1（B-F1 修复）：移动目标读 "target"——与模板目标下拉 select name="target"
+		// 对齐（原读隐藏域 "folder" 恒为当前文件夹，移动恒无效；SRS FR-013 判定项⑬）。
+		folderID, ferr := strconv.ParseInt(c.PostForm("target"), 10, 64)
 		if ferr != nil || folderID <= 0 {
 			c.Status(http.StatusBadRequest)
 			return

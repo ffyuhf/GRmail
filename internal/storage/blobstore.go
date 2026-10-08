@@ -3,10 +3,14 @@
 // 写入语义：临时文件 + fsync + rename（崩溃安全）；幂等（已存在直接成功）。
 // F7（队列防丢信收口批/D2）：List 枚举接口——对账 cron（流程设计第四章第 2 条
 // 「遍历 data/blobs/** 与 messages.blob_key 比对」既有承诺的兑现承载；契约 v1.32.0）。
+// 性能批 F7（D11）：Open 流式读取接口——Read 返回整封 []byte 的单请求全量驻留消除
+// （IMAP FETCH 大响应/附件下载改流式消费；契约 v1.36.0）。
 // 修改历史：
 //
 //	2026-09-16 04:36:00 | 新建 | U1 工程骨架（依据：数据库表结构 v1.0.0 第一章 1.2/1.3）
 //	2026-10-07 08:55:00 | 扩展 | 队列防丢信收口批 F7：List 枚举（G2 批准 2026-10-07 08:41:07）
+//	2026-10-08 10:20:00 | 扩展 | 性能批 F7（D11）：Open 流式句柄（G2 批准 2026-10-08
+//	  10:13:49）——io.ReadSeekCloser 形态，os.File 直返零拷贝构造
 package storage
 
 import (
@@ -14,13 +18,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
-// BlobStore 原始字节存取抽象（接口契约见模块接口契约 v1.32.0；预留 S3Store/DBStore 扩展位）
+// BlobStore 原始字节存取抽象（接口契约见模块接口契约 v1.36.0；预留 S3Store/DBStore 扩展位）
 type BlobStore interface {
 	Write(ctx context.Context, key string, data []byte) error // 内容寻址写入（幂等）
 	Read(ctx context.Context, key string) ([]byte, error)     // 读原始字节
@@ -29,6 +34,11 @@ type BlobStore interface {
 	// List 枚举全部现存 blob key（F7/D2：对账 cron 孤儿判定的文件侧数据源；
 	// 返回 64 位 hex key 集——布局两极目录由实现展开）。
 	List(ctx context.Context) ([]string, error)
+	// Open 打开 blob 的流式读取句柄（性能批 F7/D11：Read 整封 []byte 的单请求
+	// 全量驻留消除——FETCH 大响应/附件下载流式消费）。io.ReadSeekCloser 形态：
+	// os.File 天然支持，Seek 能力供库级 Extract* 重复读与 HTTP Range 扩展。
+	// 调用方负责 Close。
+	Open(ctx context.Context, key string) (io.ReadSeekCloser, error)
 }
 
 // FileSystemBlobStore 本地文件系统实现
@@ -132,6 +142,20 @@ func (s *FileSystemBlobStore) Exists(_ context.Context, key string) (bool, error
 		return false, err
 	}
 	return fileExists(s.blobPath(key))
+}
+
+// Open 打开 blob 的流式读取句柄（性能批 F7/D11——os.File 直返；key 校验复用
+// validateKey 路径穿越防线；不存在时返回包装的 os.ErrNotExist 语义错误与 Read 一致）。
+// 参数：ctx 上下文（保留接口一致性）；key SHA-256 hex。返回：读取句柄（调用方 Close）。
+func (s *FileSystemBlobStore) Open(_ context.Context, key string) (io.ReadSeekCloser, error) {
+	if err := validateKey(key); err != nil {
+		return nil, err
+	}
+	f, err := os.Open(s.blobPath(key))
+	if err != nil {
+		return nil, fmt.Errorf("打开 blob: %w", err)
+	}
+	return f, nil
 }
 
 // List 枚举全部现存 blob key（F7/D2：WalkDir 遍历 <root>/ab/cd/<key> 两极布局；

@@ -177,11 +177,16 @@ func (s *Server) attachmentGET(c *gin.Context) {
 		c.Status(http.StatusInternalServerError)
 		return
 	}
-	raw, err := s.blobs.Read(ctx, msg.BlobKey)
-	if err != nil {
+	// 性能批 F7（D11，G2 批准 2026-10-08 10:13:49）：流式句柄替代整封 []byte 驻留——
+	// BlobStore.Open 后单 part 按需读入（驻留=单附件大小，登记可接受；原整封读取
+	// 消除——大附件邮件下载的内存峰值随附件总量降低）。
+	rc, rerr := s.blobs.Open(ctx, msg.BlobKey)
+	if rerr != nil {
+		sessLogger(c).Error("原始字节打开失败", "error", rerr)
 		c.Status(http.StatusInternalServerError)
 		return
 	}
+	defer func() { _ = rc.Close() }()
 
 	var filename, contentType string
 	var data []byte
@@ -192,9 +197,9 @@ func (s *Server) attachmentGET(c *gin.Context) {
 			c.Status(http.StatusBadRequest)
 			return
 		}
-		filename, contentType, data, err = mail.LoadAttachmentPart(raw, part)
+		filename, contentType, data, err = mail.LoadAttachmentPart(rc, part)
 	case c.Query("cid") != "":
-		filename, contentType, data, err = mail.LoadAttachmentPartByCID(raw, c.Query("cid"))
+		filename, contentType, data, err = mail.LoadAttachmentPartByCID(rc, c.Query("cid"))
 	default:
 		c.Status(http.StatusBadRequest)
 		return

@@ -658,3 +658,74 @@ func (r *MySQLMessageRepo) FillBodyCache(ctx context.Context, id int64, body str
 	}
 	return nil
 }
+
+// ───────────────────────── 性能批 F2/F4（评审修复批次 7——契约 v1.36.0） ─────────────────────────
+
+// FolderStatusCounts STATUS 聚合计数（F2——MySQL 形态；CAST AS SIGNED 生成物 int64 直扫）。
+func (r *MySQLMessageRepo) FolderStatusCounts(ctx context.Context, mailboxID, folderID int64) (*FolderCounts, error) {
+	row, err := r.q.FolderStatusCounts(ctx, dbgen.FolderStatusCountsParams{
+		MailboxID: mailboxID, FolderID: folderID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("聚合计数 STATUS: %w", err)
+	}
+	return &FolderCounts{
+		Total:   row.Total,
+		Unread:  int64OfAny(row.Unread),
+		Deleted: int64OfAny(row.Deleted),
+	}, nil
+}
+
+// SumFolderRawSize STATUS SIZE 聚合（F2——MySQL 形态）。
+func (r *MySQLMessageRepo) SumFolderRawSize(ctx context.Context, mailboxID, folderID int64) (int64, error) {
+	v, err := r.q.SumFolderRawSize(ctx, dbgen.SumFolderRawSizeParams{
+		MailboxID: mailboxID, FolderID: folderID,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("聚合 SIZE: %w", err)
+	}
+	return int64OfAny(v), nil
+}
+
+// ListDetailsByIDs 批量详情（F4——MySQL 形态；NullTime/直赋时间列，GetDetail 同构映射）。
+func (r *MySQLMessageRepo) ListDetailsByIDs(ctx context.Context, mailboxID int64, ids []int64) ([]*Detail, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	rows, err := r.q.ListDetailsByIDs(ctx, dbgen.ListDetailsByIDsParams{
+		MailboxID: mailboxID, Ids: ids,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("批量查询邮件详情: %w", err)
+	}
+	kws := keywordsByIDsMySQL(ctx, r.q, ids)
+	out := make([]*Detail, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, &Detail{
+			ID: row.MmID, UID: row.MmUid, MailboxID: row.MmMailboxID, FolderID: row.MmFolderID,
+			MessagePK: row.MmMessagePk, BlobKey: row.MBlobKey,
+			Subject: row.MSubject.String, FromAddr: row.MFromAddr.String,
+			ToAddrs: row.MToAddrs.String, CcAddrs: row.MCcAddrs.String,
+			SentAt: zeroTimeIfInvalid(row.MSentAt), RawSize: row.MRawSize,
+			IsRead: row.MmIsRead, IsFlagged: row.MmIsFlagged, IsAnswered: row.MmIsAnswered, IsDraft: row.MmIsDraft,
+			Deleted:      row.MmStatus == "deleted",
+			CreatedAt:    row.MmCreatedAt,
+			InternalDate: internalDateOfNullTime(row.MmInternalDate), // F-I4/F-I5
+			Keywords:     kws[row.MmID],                              // F4：批量 keyword 填充
+		})
+	}
+	return out, nil
+}
+
+// keywordsByIDsMySQL 批量 keyword 读回（F4——单查询；nil 兜底安全）。
+func keywordsByIDsMySQL(ctx context.Context, q *dbgen.Queries, ids []int64) map[int64][]string {
+	rows, err := q.ListKeywordsByMessageIDs(ctx, ids)
+	if err != nil || len(rows) == 0 {
+		return nil
+	}
+	out := make(map[int64][]string, len(rows))
+	for _, r := range rows {
+		out[r.MailboxMessageID] = append(out[r.MailboxMessageID], r.Keyword)
+	}
+	return out
+}

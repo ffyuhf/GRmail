@@ -1,7 +1,7 @@
 // Package managesieve ManageSieve 协议服务端（rfc5804——R1-A 全自研，U12）。
 // 依据：rfc5804 §1.7（能力三项 MUST：IMPLEMENTATION/SIEVE/VERSION；STARTTLS MUST 实现；
 // SASL 通告规则——SASL 空当且仅当通告 STARTTLS）、§1.8（TCP 4190）、§2（命令族全集）；
-// 契约 v1.8.0 2.4 注记（accounts+scripts+语法校验+TLSConfig 快照注入形态）；
+// 契约 v1.37.0 2.4 注记（accounts+scripts+语法校验+TLSConfig 快照注入形态；v1.19.0 能力串/v1.33.0 资源限制注记同章承载）；
 // SRS IR-004/FR-011（TC-011 判定②）；NFR-006（明文连接 AUTHENTICATE 一律 NO）。
 // 裁决来源：Q1-R1 全自研（2026-09-21 00:30:59）；G2 批准 2026-09-21 00:36:18。
 // U23 增量（可观测性扩展——U21 登记项②收口，H5 等价）：ServerConfig 增 ProtocolDebug
@@ -11,6 +11,7 @@
 //	2026-09-21 00:58:00 | 新建 | U12 Sieve 过滤与 ManageSieve（计划书步骤 8）
 //	2026-09-27 13:40:00 | 扩展 | U23 可观测性扩展：ProtocolDebug 注入位+快照方法
 //	（来源：G2 批准 2026-09-27 13:20:53，U23 计划书 v1.0.0 步骤 5/1.5⑤）
+//	2026-10-08 13:10:00 | 修正 | 文档治理批 C1：头注契约版本引用刷新 v1.8.0→v1.37.0（注释漂移收口；纯注释零行为变更）
 package managesieve
 
 import (

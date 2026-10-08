@@ -15,6 +15,10 @@
 //   2026-09-24 16:58:00 | 扩展 | U16 Webmail 体验收尾（计划书步骤 4/5，G2 批准 2026-09-24 11:51:57）
 //   2026-10-02 13:45:00 | 扩展 | Webmail视觉重构批次阶段3/4（G2 批准 2026-10-02 13:20:06）
 //   2026-10-02 17:55:00 | 重构 | Webmail设计系统重构批次阶段B（G2 批准 2026-10-02 17:34:40）
+//   2026-10-08 18-30-00 | 修正 | B-FUNC功能缺陷修复批 F1（B-F1）：删除批量表单
+//     隐藏域 name="folder"（值恒为当前文件夹——误导性死字段：handler 移动分支自
+//     本批起读目标下拉 name="target"，隐藏域为原缺陷根源；G2 批准 2026-10-08
+//     18:26:50 候选 3.1-A；SRS FR-013 判定项⑬「批量移动目标文件夹选择」收口）
 package templates
 
 import (
@@ -151,7 +155,6 @@ templ MailListFragment(d *MailListData) {
 			<span class="sel-count" data-fmt={ Tr(lang, "mail.selectedFmt") }>0</span>
 			<form hx-post="/mails/batch" hx-target="#mail-list" id="batch-form">
 				<input type="hidden" name="csrf_token" value={ d.CSRF }/>
-				<input type="hidden" name="folder" value={ fmt.Sprintf("%d", d.ActiveFolder) }/>
 				<label class="inline"><input type="checkbox" name="all" onclick="document.querySelectorAll('.mail-id').forEach(e=>e.checked=this.checked)"/>{ Tr(lang, "mail.selectAll") }</label>
 				<select name="action" class="btn-sm">
 					<option value="mark-read">{ Tr(lang, "mail.markRead") }</option>

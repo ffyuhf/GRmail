@@ -17,6 +17,13 @@
 //	2026-09-27 06:20:00 | 扩展 | U21 可观测性增强：命令响应面协议 debug 条件输出
 //	（readLine/writeLine 两埋点+debugFrame 辅助——H5 等价）
 //	（来源：G2 批准 2026-09-27 06:13:36，U21 计划书 v1.0.0 步骤 4/1.5⑤）
+//	2026-10-08 18-30-00 | 修正 | B-FUNC功能缺陷修复批 F3（B-F7）：AUTH 零长
+//	initial-response "=" 归一——rfc5034 §4 L245-247「If the client needs to send
+//	a zero-length initial response, it MUST transmit the response as a single
+//	equals sign ("=")」（§5 ABNF initial-response = base64 / "="）——响应已存在
+//	但零数据，非省略形态：不发 challenge 轮，空串直入解码/PLAIN 三段校验链
+//	（零长载荷经既有拒绝路径 -ERR invalid PLAIN credentials——替代原 base64
+//	解码失败误拒。G2 批准 2026-10-08 18:26:50；SRS FR-007 伴随）
 package pop3
 
 import (
@@ -166,7 +173,14 @@ func (ss *session) cmdAuth(arg string) {
 		return
 	}
 	resp := ir
-	if resp == "" { // 无 initial-response：challenge 一轮（"+ "，rfc5034 §4 continue-req）
+	// F3（B-F7 修复）：零长 initial-response "="（rfc5034 §4 L245-247 MUST）——
+	// 响应已存在但零数据（非省略形态）：不发 challenge 轮，空串直入解码链；
+	// 零长载荷经 parsePlain 三段校验拒绝（合法 -ERR 路径）。
+	zeroLengthIR := resp == "="
+	if zeroLengthIR {
+		resp = ""
+	}
+	if resp == "" && !zeroLengthIR { // 省略形态：challenge 一轮（"+ "，rfc5034 §4 continue-req）
 		ss.writeLine("+ ")
 		line, err := ss.readLine()
 		if err != nil {

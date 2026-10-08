@@ -6,6 +6,11 @@
 // 修改历史：
 //
 //	2026-09-19 10:22:00 | 新建 | U9 Webmail 核心（计划书步骤 4，G2 批准 2026-09-19 10:00:41）
+//	2026-10-08 18-30-00 | 修正 | B-FUNC功能缺陷修复批 F6（M12）：段级 ".." 检测
+//	替换子串检测（原 Contains(name,"..") 误拒合法双点名 foo..bar.js）+path.Clean
+//	前置于读取（原校验对象为清洗前串而读取用清洗后串——校验/读取不一致；段级
+//	检测保守语义：静态资源名不含 ".." 路径段，越界意图即拒。G2 批准 2026-10-08
+//	18:26:50；NFR-016 防御纵深伴随）
 package web
 
 import (
@@ -33,14 +38,27 @@ func staticSubtree() fs.FS {
 
 // staticHandler 静态资源端点（GET /static/*filepath）：
 // embed 读取 + 扩展名 MIME + 私有缓存头（覆写入口中间件的 no-store）。
-// 目录穿越防线：拒绝空名与.. 段（embed.FS 本身也拒绝越界）。
+// 目录穿越防线（F6/M12 修复 2026-10-08）：段级 ".." 检测先行（拒绝任何 ".." 路径段
+// ——保守语义：静态资源名不含该形态；子串检测误拒合法双点名 foo..bar.js 已废止）+
+// path.Clean 规范化后读取（校验与读取同对象；embed.FS 越界拒绝为纵深第二道）。
 func (s *Server) staticHandler(c *gin.Context) {
 	name := strings.TrimPrefix(c.Param("filepath"), "/")
-	if name == "" || strings.Contains(name, "..") {
+	if name == "" {
 		c.Status(http.StatusNotFound)
 		return
 	}
-	data, err := fs.ReadFile(staticFiles, path.Clean(name))
+	for _, seg := range strings.Split(name, "/") { // 段级检测（F6——原子串误拒）
+		if seg == ".." {
+			c.Status(http.StatusNotFound)
+			return
+		}
+	}
+	clean := path.Clean(name)
+	if clean == "." || clean == "" {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	data, err := fs.ReadFile(staticFiles, clean)
 	if err != nil {
 		c.Status(http.StatusNotFound)
 		return

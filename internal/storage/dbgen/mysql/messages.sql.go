@@ -117,6 +117,38 @@ func (q *Queries) FillBodyCache(ctx context.Context, arg FillBodyCacheParams) (i
 	return result.RowsAffected()
 }
 
+const folderStatusCounts = `-- name: FolderStatusCounts :one
+
+SELECT
+    COUNT(*) AS total,
+    COALESCE(CAST(SUM(CASE WHEN is_read = false THEN 1 ELSE 0 END) AS SIGNED), 0) AS unread,
+    COALESCE(CAST(SUM(CASE WHEN status = 'deleted' THEN 1 ELSE 0 END) AS SIGNED), 0) AS deleted
+FROM mailbox_messages
+WHERE mailbox_id = ? AND folder_id = ?
+`
+
+type FolderStatusCountsParams struct {
+	MailboxID int64
+	FolderID  int64
+}
+
+type FolderStatusCountsRow struct {
+	Total   int64
+	Unread  interface{}
+	Deleted interface{}
+}
+
+// Performance batch F2 (B-P3-1): aggregate STATUS counts in one query -
+// replaces full-folder row loading via PageList Limit 1<<30 (rfc9051 6.3.11
+// MESSAGES/UNSEEN/DELETED semantics unchanged; zero row load).
+// MySQL: SUM(int) returns DECIMAL - CAST AS SIGNED keeps int64 scan.
+func (q *Queries) FolderStatusCounts(ctx context.Context, arg FolderStatusCountsParams) (FolderStatusCountsRow, error) {
+	row := q.db.QueryRowContext(ctx, folderStatusCounts, arg.MailboxID, arg.FolderID)
+	var i FolderStatusCountsRow
+	err := row.Scan(&i.Total, &i.Unread, &i.Deleted)
+	return i, err
+}
+
 const getMailboxMessageDetail = `-- name: GetMailboxMessageDetail :one
 SELECT
     mm.id AS mm_id,
@@ -485,6 +517,115 @@ func (q *Queries) ListBodyCachePending(ctx context.Context, limit int32) ([]List
 	return items, nil
 }
 
+const listDetailsByIDs = `-- name: ListDetailsByIDs :many
+SELECT
+    mm.id AS mm_id,
+    mm.uid AS mm_uid,
+    mm.mailbox_id AS mm_mailbox_id,
+    mm.folder_id AS mm_folder_id,
+    mm.message_id AS mm_message_pk,
+    mm.is_read AS mm_is_read,
+    mm.is_flagged AS mm_is_flagged,
+    mm.is_answered AS mm_is_answered,
+    mm.is_draft AS mm_is_draft,
+    mm.status AS mm_status,
+    mm.internal_date AS mm_internal_date,
+    mm.created_at AS mm_created_at,
+    m.blob_key AS m_blob_key,
+    m.subject AS m_subject,
+    m.from_addr AS m_from_addr,
+    m.to_addrs AS m_to_addrs,
+    m.cc_addrs AS m_cc_addrs,
+    m.sent_at AS m_sent_at,
+    m.raw_size AS m_raw_size
+FROM mailbox_messages mm
+JOIN messages m ON m.id = mm.message_id
+WHERE mm.mailbox_id = ? AND mm.id IN (/*SLICE:ids*/?)
+`
+
+type ListDetailsByIDsParams struct {
+	MailboxID int64
+	Ids       []int64
+}
+
+type ListDetailsByIDsRow struct {
+	MmID           int64
+	MmUid          int64
+	MmMailboxID    int64
+	MmFolderID     int64
+	MmMessagePk    int64
+	MmIsRead       bool
+	MmIsFlagged    bool
+	MmIsAnswered   bool
+	MmIsDraft      bool
+	MmStatus       string
+	MmInternalDate sql.NullTime
+	MmCreatedAt    time.Time
+	MBlobKey       string
+	MSubject       sql.NullString
+	MFromAddr      sql.NullString
+	MToAddrs       sql.NullString
+	MCcAddrs       sql.NullString
+	MSentAt        sql.NullTime
+	MRawSize       int64
+}
+
+// Performance batch F4 (B-P3-3): batched detail fetch (mailbox-scoped) -
+// replaces per-message IMAPSearch+GetDetail N+1 in FETCH/STORE/Copy paths.
+func (q *Queries) ListDetailsByIDs(ctx context.Context, arg ListDetailsByIDsParams) ([]ListDetailsByIDsRow, error) {
+	query := listDetailsByIDs
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.MailboxID)
+	if len(arg.Ids) > 0 {
+		for _, v := range arg.Ids {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:ids*/?", strings.Repeat(",?", len(arg.Ids))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListDetailsByIDsRow{}
+	for rows.Next() {
+		var i ListDetailsByIDsRow
+		if err := rows.Scan(
+			&i.MmID,
+			&i.MmUid,
+			&i.MmMailboxID,
+			&i.MmFolderID,
+			&i.MmMessagePk,
+			&i.MmIsRead,
+			&i.MmIsFlagged,
+			&i.MmIsAnswered,
+			&i.MmIsDraft,
+			&i.MmStatus,
+			&i.MmInternalDate,
+			&i.MmCreatedAt,
+			&i.MBlobKey,
+			&i.MSubject,
+			&i.MFromAddr,
+			&i.MToAddrs,
+			&i.MCcAddrs,
+			&i.MSentAt,
+			&i.MRawSize,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listFolderUIDsASC = `-- name: ListFolderUIDsASC :many
 SELECT uid FROM mailbox_messages
 WHERE mailbox_id = ? AND folder_id = ?
@@ -509,6 +650,51 @@ func (q *Queries) ListFolderUIDsASC(ctx context.Context, arg ListFolderUIDsASCPa
 			return nil, err
 		}
 		items = append(items, uid)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listKeywordsByMessageIDs = `-- name: ListKeywordsByMessageIDs :many
+SELECT mailbox_message_id, keyword
+FROM mailbox_keywords
+WHERE mailbox_message_id IN (/*SLICE:ids*/?)
+`
+
+type ListKeywordsByMessageIDsRow struct {
+	MailboxMessageID int64
+	Keyword          string
+}
+
+// Performance batch F4: batched keyword rows for detail assembly.
+func (q *Queries) ListKeywordsByMessageIDs(ctx context.Context, ids []int64) ([]ListKeywordsByMessageIDsRow, error) {
+	query := listKeywordsByMessageIDs
+	var queryParams []interface{}
+	if len(ids) > 0 {
+		for _, v := range ids {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:ids*/?", strings.Repeat(",?", len(ids))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListKeywordsByMessageIDsRow{}
+	for rows.Next() {
+		var i ListKeywordsByMessageIDsRow
+		if err := rows.Scan(&i.MailboxMessageID, &i.Keyword); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -749,6 +935,27 @@ func (q *Queries) SelectIDsByMessageIDs(ctx context.Context, messageids []int64)
 		return nil, err
 	}
 	return items, nil
+}
+
+const sumFolderRawSize = `-- name: SumFolderRawSize :one
+SELECT COALESCE(CAST(SUM(m.raw_size) AS SIGNED), 0)
+FROM mailbox_messages mm
+JOIN messages m ON m.id = mm.message_id
+WHERE mm.mailbox_id = ? AND mm.folder_id = ?
+`
+
+type SumFolderRawSizeParams struct {
+	MailboxID int64
+	FolderID  int64
+}
+
+// Performance batch F2 (B-P3-1): aggregate SIZE for STATUS (rfc9051 6.3.11 -
+// sum of RFC822.SIZE values, lower-bound guarantee preserved).
+func (q *Queries) SumFolderRawSize(ctx context.Context, arg SumFolderRawSizeParams) (interface{}, error) {
+	row := q.db.QueryRowContext(ctx, sumFolderRawSize, arg.MailboxID, arg.FolderID)
+	var coalesce interface{}
+	err := row.Scan(&coalesce)
+	return coalesce, err
 }
 
 const updateMailboxMessageFlags = `-- name: UpdateMailboxMessageFlags :execrows

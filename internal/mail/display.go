@@ -129,16 +129,18 @@ func (d *Display) appendAttachmentOf(part int, filename, contentType string, siz
 }
 
 // LoadAttachmentPart 按 NextPart 序号读取附件 part 字节（下载端点寻址）。
-// 参数：raw 原始字节；part part 序号。返回：文件名、Content-Type、字节。
-func LoadAttachmentPart(raw []byte, part int) (filename, contentType string, data []byte, err error) {
-	r, rerr := gomail.CreateReader(bytes.NewReader(raw))
+// 参数：r 原始字节读取源（性能批 F7/D11：io.Reader 形态——附件下载经 BlobStore.Open
+// 流式句柄直传，整封 []byte 驻留消除；bytes.Reader 调用方零适配）；part part 序号。
+// 返回：文件名、Content-Type、字节（单 part 提取——驻留=单附件大小，登记可接受）。
+func LoadAttachmentPart(r io.Reader, part int) (filename, contentType string, data []byte, err error) {
+	rd, rerr := gomail.CreateReader(r)
 	if rerr != nil {
 		return "", "", nil, fmt.Errorf("消息不可解析: %w", rerr)
 	}
-	defer func() { _ = r.Close() }()
+	defer func() { _ = rd.Close() }()
 	partIdx := -1
 	for {
-		p, perr := r.NextPart()
+		p, perr := rd.NextPart()
 		if errors.Is(perr, io.EOF) {
 			return "", "", nil, ErrPartNotFound
 		}
@@ -168,9 +170,9 @@ func LoadAttachmentPart(raw []byte, part int) (filename, contentType string, dat
 }
 
 // LoadAttachmentPartByCID 按 Content-ID 定位附件 part（HTML 正文 cid: 内联资源寻址；
-// CID 规范化：补尖括号比对 Content-Id 头原文）。
-// 参数：raw 原始字节；cid Content-ID（可缺尖括号）。返回同 LoadAttachmentPart。
-func LoadAttachmentPartByCID(raw []byte, cid string) (filename, contentType string, data []byte, err error) {
+// CID 规范化：补尖括号比对 Content-Id 头原文；F7：io.Reader 形态——同 LoadAttachmentPart）。
+// 参数：r 原始字节读取源；cid Content-ID（可缺尖括号）。返回同 LoadAttachmentPart。
+func LoadAttachmentPartByCID(r io.Reader, cid string) (filename, contentType string, data []byte, err error) {
 	want := cid
 	if !strings.HasPrefix(want, "<") {
 		want = "<" + want
@@ -178,14 +180,14 @@ func LoadAttachmentPartByCID(raw []byte, cid string) (filename, contentType stri
 	if !strings.HasSuffix(want, ">") {
 		want = want + ">"
 	}
-	r, rerr := gomail.CreateReader(bytes.NewReader(raw))
+	rd, rerr := gomail.CreateReader(r)
 	if rerr != nil {
 		return "", "", nil, fmt.Errorf("消息不可解析: %w", rerr)
 	}
-	defer func() { _ = r.Close() }()
+	defer func() { _ = rd.Close() }()
 	partIdx := -1
 	for {
-		p, perr := r.NextPart()
+		p, perr := rd.NextPart()
 		if errors.Is(perr, io.EOF) {
 			return "", "", nil, ErrPartNotFound
 		}

@@ -549,3 +549,54 @@ func TestU6RFCCopyMoveAtomicNFC(t *testing.T) {
 		t.Fatalf("MOVE 后目标应 2 封（COPY 1+MOVE 1）: %d", sel.NumMessages)
 	}
 }
+
+// TestU6SearchSentinelAndSeqNum F2（B-F6 修复锚）：①不支持头键与已支持键混合时
+// 哨兵防覆盖——空集断言（原哨兵可被后续 FROM/TO/SUBJECT 赋值覆盖致混合键条件
+// 静默丢失→假阳性）；②SeqNum 序号条件承载（原忽略）——集内序号命中/集外序号
+// 空集（rfc9051 §6.4.4 AND 交集：消息不在序号集内即不匹配）；③UID 集全越界
+// 空集（§2.3.1.2 不存在 UID 视为不在集中——消息不在集内即不匹配；原空列表落入
+// 无约束分支假阳性全匹配，同根修正）。SRS FR-006 承载。
+func TestU6SearchSentinelAndSeqNum(t *testing.T) {
+	env := newTestEnv(t)
+	c := dialTestClient(t, env)
+	if err := c.Login("u@t.io", "pw123456").Wait(); err != nil {
+		t.Fatalf("登录: %v", err)
+	}
+	if _, err := c.Select("INBOX", nil).Wait(); err != nil {
+		t.Fatalf("SELECT: %v", err)
+	}
+	// ①混合键：不支持头键在前+SUBJECT 在后——哨兵置位即终止（防覆盖），整体空集
+	if data, err := c.Search(&imap.SearchCriteria{Header: []imap.SearchCriteriaHeaderField{
+		{Key: "X-Custom", Value: "any"}, {Key: "SUBJECT", Value: "季度报告"},
+	}}, nil).Wait(); err != nil {
+		t.Fatalf("SEARCH 混合键: %v", err)
+	} else if data.All.String() != "" {
+		t.Fatalf("混合键应空集（哨兵防覆盖——F2①）: %q", data.All.String())
+	}
+	// ①对称序：SUBJECT 在前+不支持键在后——同样空集（哨兵覆盖已收集条件）
+	if data, err := c.Search(&imap.SearchCriteria{Header: []imap.SearchCriteriaHeaderField{
+		{Key: "SUBJECT", Value: "季度报告"}, {Key: "X-Custom", Value: "any"},
+	}}, nil).Wait(); err != nil {
+		t.Fatalf("SEARCH 混合键（对称序）: %v", err)
+	} else if data.All.String() != "" {
+		t.Fatalf("混合键对称序应空集（F2①）: %q", data.All.String())
+	}
+	// ②SeqNum 命中：序号 1（唯一邮件）
+	if data, err := c.Search(&imap.SearchCriteria{SeqNum: []imap.SeqSet{imap.SeqSetNum(1)}}, nil).Wait(); err != nil {
+		t.Fatalf("SEARCH SeqNum 1: %v", err)
+	} else if data.All.String() != "1" {
+		t.Fatalf("SeqNum 1 应命中第 1 封（F2②）: %q", data.All.String())
+	}
+	// ②SeqNum 集外：序号 2（不存在）空集（序号集语义——集外序号不匹配）
+	if data, err := c.Search(&imap.SearchCriteria{SeqNum: []imap.SeqSet{imap.SeqSetNum(2)}}, nil).Wait(); err != nil {
+		t.Fatalf("SEARCH SeqNum 2: %v", err)
+	} else if data.All.String() != "" {
+		t.Fatalf("SeqNum 2 应空集（F2②）: %q", data.All.String())
+	}
+	// ③UID 集全越界：空集（§2.3.1.2——消息不在集内即不匹配）
+	if data, err := c.Search(&imap.SearchCriteria{UID: []imap.UIDSet{imap.UIDSetNum(99)}}, nil).Wait(); err != nil {
+		t.Fatalf("SEARCH UID 99: %v", err)
+	} else if data.All.String() != "" {
+		t.Fatalf("UID 全越界应空集（F2③）: %q", data.All.String())
+	}
+}

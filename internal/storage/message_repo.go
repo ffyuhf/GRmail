@@ -289,6 +289,17 @@ type MessageRepo interface {
 	// 追加 mailbox_messages 行——同 message_id 复用 messages 主体与 blob〔CAS 零字节
 	// 重复〕；UID 事务内分配；标志初值未读未标——管理员视角"新出现"）。
 	CopyToAggregateFolder(ctx context.Context, mailboxID, messageID int64) error
+
+	// ── 性能批增量（评审修复批次 7——契约 v1.36.0；G2 批准 2026-10-08 10:13:49）──
+
+	// FolderStatusCounts STATUS 聚合计数（F2/B-P3①——MESSAGES/UNSEEN/DELETED 单查询
+	// 零行载入，替代 PageList(Limit 1<<30) 全量行载入逐行计数；rfc9051 §6.3.11 语义不变）。
+	FolderStatusCounts(ctx context.Context, mailboxID, folderID int64) (*FolderCounts, error)
+	// SumFolderRawSize STATUS SIZE 聚合（F2——SUM(raw_size) 替代逐封 detailForUID 双查询）。
+	SumFolderRawSize(ctx context.Context, mailboxID, folderID int64) (int64, error)
+	// ListDetailsByIDs 批量详情（F4/B-P3③——FETCH/STORE/Copy 逐封 IMAPSearch+GetDetail
+	// 双查询 N+1 消除；keyword 伴随批量填充；mailbox 双重限定隔离 FR-001）。
+	ListDetailsByIDs(ctx context.Context, mailboxID int64, ids []int64) ([]*Detail, error)
 }
 
 // BodyCacheBackfill 回填任务批查行（契约 v1.12.0 2.1——id+blob_key 两字段回填数据源）。
@@ -1144,4 +1155,109 @@ func (r *SQLiteMessageRepo) FillBodyCache(ctx context.Context, id int64, body st
 		return fmt.Errorf("回填正文缓存 %d: %w", id, err)
 	}
 	return nil
+}
+
+// ───────────────────────── 性能批 F2/F4（评审修复批次 7——契约 v1.36.0） ─────────────────────────
+
+// FolderCounts STATUS 聚合计数（F2/B-P3①——语义等价锚：Total=含 \Deleted 全量行计数
+// 与 PageList 全量 len 等价、Unread=is_read 假值计数、Deleted=status='deleted' 计数）。
+type FolderCounts struct {
+	Total   int64
+	Unread  int64
+	Deleted int64
+}
+
+// int64OfAny 聚合列 interface{} → int64（三库 SUM/COALESCE 产物形态兜底：SQLite
+// INTEGER 与 MySQL CAST AS SIGNED、PG CAST AS BIGINT 均归 int64；[]byte/float64
+// 为驱动边缘形态防御归零）。
+func int64OfAny(v any) int64 {
+	switch n := v.(type) {
+	case int64:
+		return n
+	case int:
+		return int64(n)
+	case float64:
+		return int64(n)
+	case []byte:
+		var out int64
+		for _, b := range n {
+			if b < '0' || b > '9' {
+				return 0
+			}
+			out = out*10 + int64(b-'0')
+		}
+		return out
+	default:
+		return 0
+	}
+}
+
+// FolderStatusCounts STATUS 聚合计数（F2——SQLite 形态）。
+func (r *SQLiteMessageRepo) FolderStatusCounts(ctx context.Context, mailboxID, folderID int64) (*FolderCounts, error) {
+	row, err := r.q.FolderStatusCounts(ctx, dbgen.FolderStatusCountsParams{
+		MailboxID: mailboxID, FolderID: folderID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("聚合计数 STATUS: %w", err)
+	}
+	return &FolderCounts{
+		Total:   row.Total,
+		Unread:  int64OfAny(row.Unread),
+		Deleted: int64OfAny(row.Deleted),
+	}, nil
+}
+
+// SumFolderRawSize STATUS SIZE 聚合（F2——SQLite 形态）。
+func (r *SQLiteMessageRepo) SumFolderRawSize(ctx context.Context, mailboxID, folderID int64) (int64, error) {
+	v, err := r.q.SumFolderRawSize(ctx, dbgen.SumFolderRawSizeParams{
+		MailboxID: mailboxID, FolderID: folderID,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("聚合 SIZE: %w", err)
+	}
+	return int64OfAny(v), nil
+}
+
+// ListDetailsByIDs 批量详情（F4——SQLite 形态；列集与 GetMailboxMessageDetail 同构，
+// keyword 经 ListKeywordsByMessageIDs 单查询伴随填充；返回序为数据库自然序）。
+func (r *SQLiteMessageRepo) ListDetailsByIDs(ctx context.Context, mailboxID int64, ids []int64) ([]*Detail, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	rows, err := r.q.ListDetailsByIDs(ctx, dbgen.ListDetailsByIDsParams{
+		MailboxID: mailboxID, Ids: ids,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("批量查询邮件详情: %w", err)
+	}
+	kws := keywordsByIDsSQLite(ctx, r.q, ids)
+	out := make([]*Detail, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, &Detail{
+			ID: row.MmID, UID: row.MmUid, MailboxID: row.MmMailboxID, FolderID: row.MmFolderID,
+			MessagePK: row.MmMessagePk, BlobKey: row.MBlobKey,
+			Subject: row.MSubject.String, FromAddr: row.MFromAddr.String,
+			ToAddrs: row.MToAddrs.String, CcAddrs: row.MCcAddrs.String,
+			SentAt: parseTimestampOrZero(row.MSentAt), RawSize: row.MRawSize,
+			IsRead: row.MmIsRead, IsFlagged: row.MmIsFlagged, IsAnswered: row.MmIsAnswered, IsDraft: row.MmIsDraft,
+			Deleted:      row.MmStatus == "deleted",
+			CreatedAt:    parseTimestampOrZero(sql.NullString{String: row.MmCreatedAt, Valid: row.MmCreatedAt != ""}),
+			InternalDate: internalDateOf(row.MmInternalDate), // F-I4/F-I5 指定态读回
+			Keywords:     kws[row.MmID],                      // F4：批量 keyword 填充
+		})
+	}
+	return out, nil
+}
+
+// keywordsByIDsSQLite 批量 keyword 读回（F4——单查询；查询失败/无行兜底 nil 安全）。
+func keywordsByIDsSQLite(ctx context.Context, q *dbgen.Queries, ids []int64) map[int64][]string {
+	rows, err := q.ListKeywordsByMessageIDs(ctx, ids)
+	if err != nil || len(rows) == 0 {
+		return nil
+	}
+	out := make(map[int64][]string, len(rows))
+	for _, r := range rows {
+		out[r.MailboxMessageID] = append(out[r.MailboxMessageID], r.Keyword)
+	}
+	return out
 }

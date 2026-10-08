@@ -175,3 +175,56 @@ WHERE message_id IN (sqlc.slice('messageIDs'));
 -- name: GetMailboxMessageIDByUID :one
 SELECT id FROM mailbox_messages
 WHERE mailbox_id = ? AND uid = ?;
+
+-- Performance batch F2 (B-P3-1): aggregate STATUS counts in one query -
+-- replaces full-folder row loading via PageList Limit 1<<30 (rfc9051 6.3.11
+-- MESSAGES/UNSEEN/DELETED semantics unchanged; zero row load).
+
+-- name: FolderStatusCounts :one
+SELECT
+    COUNT(*) AS total,
+    COALESCE(SUM(CASE WHEN is_read = false THEN 1 ELSE 0 END), 0) AS unread,
+    COALESCE(SUM(CASE WHEN status = 'deleted' THEN 1 ELSE 0 END), 0) AS deleted
+FROM mailbox_messages
+WHERE mailbox_id = ? AND folder_id = ?;
+
+-- name: SumFolderRawSize :one
+-- Performance batch F2 (B-P3-1): aggregate SIZE for STATUS (rfc9051 6.3.11 -
+-- sum of RFC822.SIZE values, lower-bound guarantee preserved).
+SELECT COALESCE(SUM(m.raw_size), 0)
+FROM mailbox_messages mm
+JOIN messages m ON m.id = mm.message_id
+WHERE mm.mailbox_id = ? AND mm.folder_id = ?;
+
+-- name: ListDetailsByIDs :many
+-- Performance batch F4 (B-P3-3): batched detail fetch (mailbox-scoped) -
+-- replaces per-message IMAPSearch+GetDetail N+1 in FETCH/STORE/Copy paths.
+SELECT
+    mm.id AS mm_id,
+    mm.uid AS mm_uid,
+    mm.mailbox_id AS mm_mailbox_id,
+    mm.folder_id AS mm_folder_id,
+    mm.message_id AS mm_message_pk,
+    mm.is_read AS mm_is_read,
+    mm.is_flagged AS mm_is_flagged,
+    mm.is_answered AS mm_is_answered,
+    mm.is_draft AS mm_is_draft,
+    mm.status AS mm_status,
+    mm.internal_date AS mm_internal_date,
+    mm.created_at AS mm_created_at,
+    m.blob_key AS m_blob_key,
+    m.subject AS m_subject,
+    m.from_addr AS m_from_addr,
+    m.to_addrs AS m_to_addrs,
+    m.cc_addrs AS m_cc_addrs,
+    m.sent_at AS m_sent_at,
+    m.raw_size AS m_raw_size
+FROM mailbox_messages mm
+JOIN messages m ON m.id = mm.message_id
+WHERE mm.mailbox_id = ? AND mm.id IN (sqlc.slice('ids'));
+
+-- name: ListKeywordsByMessageIDs :many
+-- Performance batch F4: batched keyword rows for detail assembly.
+SELECT mailbox_message_id, keyword
+FROM mailbox_keywords
+WHERE mailbox_message_id IN (sqlc.slice('ids'));

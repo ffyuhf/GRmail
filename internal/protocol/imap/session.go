@@ -20,6 +20,18 @@
 //	中该面未兑现，契约 v1.16.0 2.4 收口；rfc9051 §2.3.2 定义+§6.3.2 SELECT
 //	示例形态）②appendDetail 死代码删除（F-I13 改造后零调用者——复扫实证）
 //	（依据：G3审计收尾计划书 v1.0.0 步骤 2，G2 批准 2026-09-30 11:20:40）
+//	2026-10-08 10:25:00 | 优化 | 性能批（评审修复批次 7，G2 批准 2026-10-08
+//	  10:13:49）：F2 Status 聚合计数化（FolderStatusCounts/SumFolderRawSize 单
+//	  查询零行载入——原 Limit 1<<30 全量行+逐封双查询）+F3 uidIdx map 索引
+//	  （O(n²) 消除）+F4 detailsForUIDs 批量定位（FETCH/STORE/Copy N+1 消除；
+//	  detailForUID 单封路径保留）
+//	2026-10-08 18-30-00 | 修正 | B-FUNC功能缺陷修复批 F2（B-F6）：
+//	  translateCriteria 不支持头键哨兵防覆盖（置位即 break 终止 Header 键收集
+//	  ——原哨兵写入 f.Subject 后可被后续 FROM/TO/SUBJECT 赋值覆盖致混合键条件
+//	  静默丢失〔假阳性〕；AND 交集下任一不可求值键即整体不可匹配）+SeqNum
+//	  序号条件承载（原忽略——序号集经 effectiveUIDs 下标映射为 UID 集并与
+//	  UID 条件求交，rfc9051 §6.4.4 多键 AND 语义；go-imap v2 SearchCriteria
+//	  .SeqNum 字段实证承载位。G2 批准 2026-10-08 18:26:50 候选 3.2-A；SRS FR-006）
 package imap
 
 import (
@@ -54,6 +66,7 @@ type Session struct {
 	mbox    *storage.Mailbox // 登录后（VerifyCredentials 产物）
 	folder  *storage.Folder  // SELECT/EXAMINE 后
 	uids    []int64          // 选中文件夹 UID 升序缓存（序号=下标+1，rfc9051 2.3.1.2）
+	uidIdx  map[int64]uint32 // 性能批 F3（B-P3②）：UID→序号索引（O(1) 查找——原线性扫描逐封调用 O(n²) 消除；与 uids 同步构建）
 	lastNum uint32           // 上次已通知消息数（Poll/Idle 增量判定）
 	cancel  func()           // IDLE 订阅注销（Idle 返回时执行）
 }
@@ -240,7 +253,13 @@ func matchAnyPattern(name, ref string, patterns []string) bool {
 	return false
 }
 
-// Status 文件夹状态（MESSAGES/UIDNEXT/UIDVALIDITY/UNSEEN/DELETED——bool 请求项）。
+// Status 文件夹状态（MESSAGES/UIDNEXT/UIDVALIDITY/UNSEEN/DELETED/SIZE——bool 请求项）。
+// 性能批 F2（B-P3①，G2 批准 2026-10-08 10:13:49）：聚合计数化——原 MESSAGES/UNSEEN
+// 经 PageList(Limit 1<<30) 全量行载入逐行计数、DELETED 经 IMAPSearch 全量行、SIZE 经
+// folderUIDsASC+detailForUID 逐封双查询（十万封级=全量行驻留+20 万次查询）；现全部
+// SQL 聚合单查询零行载入。语义等价锚（rfc9051 §6.3.11 各项不变——F-I7 SIZE 实装
+// 语义保持）：Total 含 \Deleted 全量、Unread 为 is_read 假值计数、Deleted 为
+// status='deleted' 计数、SIZE 为 SUM(raw_size) 下限保证。
 func (s *Session) Status(name string, options *imap.StatusOptions) (*imap.StatusData, error) {
 	ctx := context.Background()
 	f, err := s.findFolder(ctx, name)
@@ -248,26 +267,22 @@ func (s *Session) Status(name string, options *imap.StatusOptions) (*imap.Status
 		return nil, err
 	}
 	data := &imap.StatusData{Mailbox: name, UIDValidity: uidValidity}
-	needList := options.NumMessages || options.NumUnseen
-	if needList {
-		items, _, terr := s.server.messages.PageList(ctx, storage.ListQuery{
-			MailboxID: s.mbox.ID, FolderID: f.ID, Limit: 1 << 30,
-		})
+	if options.NumMessages || options.NumUnseen || options.NumDeleted {
+		counts, terr := s.server.messages.FolderStatusCounts(ctx, s.mbox.ID, f.ID)
 		if terr != nil {
 			return nil, terr
 		}
 		if options.NumMessages {
-			n := uint32(len(items))
+			n := uint32(counts.Total)
 			data.NumMessages = &n
 		}
 		if options.NumUnseen {
-			var n uint32
-			for _, it := range items {
-				if !it.IsRead {
-					n++
-				}
-			}
+			n := uint32(counts.Unread)
 			data.NumUnseen = &n
+		}
+		if options.NumDeleted {
+			n := uint32(counts.Deleted)
+			data.NumDeleted = &n
 		}
 	}
 	if options.UIDNext {
@@ -277,25 +292,10 @@ func (s *Session) Status(name string, options *imap.StatusOptions) (*imap.Status
 		}
 		data.UIDNext = imap.UID(next)
 	}
-	if options.NumDeleted {
-		n, terr := s.statusDeletedCount(ctx, f.ID)
+	if options.Size {
+		total, terr := s.server.messages.SumFolderRawSize(ctx, s.mbox.ID, f.ID)
 		if terr != nil {
 			return nil, terr
-		}
-		data.NumDeleted = &n
-	}
-	if options.Size {
-		// F-I7（RFC规范修正 RF-C，G2 批准 2026-09-28 22:16:57）：SIZE 实装——逐行
-		// Detail.RawSize 累加（沿 Store 逐 UID detailForUID 先例；rfc9051 §6.3.11
-		// L3394-3398「MUST be equal to or greater than the sum of the values of
-		// the RFC822.SIZE FETCH message data items」——原恒 0 违反非空邮箱下限）
-		var total int64
-		if uids, uerr := s.folderUIDsASC(ctx, f.ID); uerr == nil {
-			for _, uid := range uids {
-				if d := s.detailForUID(ctx, uid); d != nil {
-					total += d.RawSize
-				}
-			}
 		}
 		data.Size = &total
 	}
@@ -317,18 +317,8 @@ func errTryCreate(err error) error {
 	}
 }
 
-// statusDeletedCount 精确 \Deleted 计数（IMAPSearch FlagDeleted 路径）。
-func (s *Session) statusDeletedCount(ctx context.Context, folderID int64) (uint32, error) {
-	del := true
-	items, err := s.server.messages.IMAPSearch(ctx, storage.IMAPSearchQuery{
-		MailboxID: s.mbox.ID, FolderID: folderID,
-		Filter: storage.SearchFilter{FlagDeleted: &del},
-	})
-	if err != nil {
-		return 0, err
-	}
-	return uint32(len(items)), nil
-}
+// statusDeletedCount 已由 FolderStatusCounts 聚合承载（F2——原 IMAPSearch 全量行
+// 计数路径废止；本函数移除）。
 
 // ───────────────────────── 消息命令 ─────────────────────────
 
@@ -339,7 +329,18 @@ func (s *Session) refreshUIDs(ctx context.Context) error {
 		return err
 	}
 	s.uids = uids
+	s.rebuildUIDIndex() // F3：索引同步构建
 	return nil
+}
+
+// rebuildUIDIndex 构建 UID→序号索引（F3/B-P3②——refreshUIDs/writeNumMessagesIfChanged
+// 同步调用；十万封级 map 约 4MB〔int64→uint32 映射〕，NFR-002 512MB 预算内可承受——登记）。
+func (s *Session) rebuildUIDIndex() {
+	m := make(map[int64]uint32, len(s.uids))
+	for i, u := range s.uids {
+		m[u] = uint32(i + 1)
+	}
+	s.uidIdx = m
 }
 
 // resolveNumSet 序号集/UID 集 → UID 列表（类型判定 UID 语义；越界序号忽略）。
@@ -378,8 +379,16 @@ func (s *Session) resolveNumSet(numSet imap.NumSet) ([]int64, bool) {
 	return out, byUID
 }
 
-// uidToSeq UID → 序号（0=未找到——已 EXPUNGE 防御）。
+// uidToSeq UID → 序号（0=未找到——已 EXPUNGE 防御）。F3（B-P3②）：map O(1) 查找
+// （原线性扫描逐封调用 FETCH/STORE/EXPUNGE/Search 致 O(n²) 放大——消除）；
+// map 未构建的防御态回退线性扫描。
 func (s *Session) uidToSeq(uid int64) uint32 {
+	if s.uidIdx != nil {
+		if seq, ok := s.uidIdx[uid]; ok {
+			return seq
+		}
+		return 0
+	}
 	for i, u := range s.uids {
 		if u == uid {
 			return uint32(i + 1)
@@ -388,7 +397,44 @@ func (s *Session) uidToSeq(uid int64) uint32 {
 	return 0
 }
 
-// detailForUID UID → Detail（IMAPSearch 定位行 id→GetDetail；nil=已删）。
+// detailsForUIDs 批量详情定位（F4/B-P3③——原 detailForUID 逐封 IMAPSearch+GetDetail
+// 双查询的 N+1 消除：一次 IMAPSearch〔Filter.UIDs 集合 IN 匹配既有〕+一次
+// ListDetailsByIDs 批量取详情〔keyword 伴随填充〕；返回 uid→Detail 映射，已删/
+// 缺失行不出现——调用方 nil 跳过语义与 detailForUID 一致；查询失败整体 nil 兜底）。
+func (s *Session) detailsForUIDs(ctx context.Context, uids []int64) map[int64]*storage.Detail {
+	if len(uids) == 0 {
+		return nil
+	}
+	items, err := s.server.messages.IMAPSearch(ctx, storage.IMAPSearchQuery{
+		MailboxID: s.mbox.ID, FolderID: s.folder.ID,
+		Filter: storage.SearchFilter{UIDs: uids},
+	})
+	if err != nil || len(items) == 0 {
+		return nil
+	}
+	ids := make([]int64, len(items))
+	for i, it := range items {
+		ids[i] = it.ID
+	}
+	details, derr := s.server.messages.ListDetailsByIDs(ctx, s.mbox.ID, ids)
+	if derr != nil {
+		return nil
+	}
+	uidByID := make(map[int64]int64, len(items))
+	for _, it := range items {
+		uidByID[it.ID] = it.UID
+	}
+	out := make(map[int64]*storage.Detail, len(details))
+	for _, d := range details {
+		if uid, ok := uidByID[d.ID]; ok {
+			out[uid] = d
+		}
+	}
+	return out
+}
+
+// detailForUID UID → Detail（单封路径——IMAPSearch 定位行 id→GetDetail；nil=已删；
+// F4 后生产批量路径走 detailsForUIDs，本函数保留供单封调用与测试）。
 func (s *Session) detailForUID(ctx context.Context, uid int64) *storage.Detail {
 	items, err := s.server.messages.IMAPSearch(ctx, storage.IMAPSearchQuery{
 		MailboxID: s.mbox.ID, FolderID: s.folder.ID,
@@ -408,6 +454,7 @@ func (s *Session) detailForUID(ctx context.Context, uid int64) *storage.Detail {
 func (s *Session) Unselect() error {
 	s.folder = nil
 	s.uids = nil
+	s.uidIdx = nil // F3：索引同步清空
 	return nil
 }
 
@@ -452,9 +499,19 @@ func (s *Session) Search(kind imapserver.NumKind, criteria *imap.SearchCriteria,
 	if err := s.refreshUIDs(ctx); err != nil {
 		return nil, err
 	}
-	filter, err := translateCriteria(criteria, s.uids)
+	filter, unsupported, err := translateCriteria(criteria, s.uids)
 	if err != nil {
 		return nil, err
+	}
+	if unsupported {
+		// F2（B-F6）：不支持头键——保守空集应答（AND 交集下任一不可求值键即整体
+		// 不可匹配；原哨兵子串经 SQLite NUL 截断为空串恒全匹配——根因双缺陷收口）。
+		// All 须为空但非 nil 的 NumSet（复刻既有空集路径形态——imapserver 旧式
+		// * SEARCH 序列化对 nil All 异常，客户端报 unsupported response type）。
+		if kind == imapserver.NumKindUID {
+			return &imap.SearchData{All: imap.UIDSet{}}, nil
+		}
+		return &imap.SearchData{All: imap.SeqSet{}}, nil
 	}
 	items, err := s.server.messages.IMAPSearch(ctx, storage.IMAPSearchQuery{
 		MailboxID: s.mbox.ID, FolderID: s.folder.ID, Filter: filter,
@@ -499,17 +556,45 @@ func (s *Session) folderUIDsASC(ctx context.Context, folderID int64) ([]int64, e
 // F2（A-13②）：增 effectiveUIDs 参数——UID 集与当前有效 UID 集求交（原逐 UID
 // 枚举至 Stop 的无界展开根治；语义=忽略不存在者，rfc9051 §2.3.1.2，IN 匹配结果
 // 与原全枚举等价）。
-func translateCriteria(criteria *imap.SearchCriteria, effectiveUIDs []int64) (storage.SearchFilter, error) {
+// B-FUNC 批 F2（B-F6 修复 2026-10-08）：①不支持头键改显式空集标记（第二返回值
+// true=整体空集）——原哨兵子串 "\x00unsupported-header\x00" 双重缺陷：其一写入
+// f.Subject 后可被后续 FROM/TO/SUBJECT 赋值覆盖（混合键条件静默丢失→假阳性），
+// 其二 NUL 字节经 SQLite 文本截断为空串→LIKE '%%' 恒全匹配（哨兵机制在 SQLite
+// 从未真正生效——历轮未测 unsupported 键故未暴露；调用方据标记直接返回空
+// SearchData）。②SeqNum 序号条件承载（原忽略）——序号集经 effectiveUIDs 下标
+// （序号=下标+1，rfc9051 §2.3.1.2）映射为 UID 集并与 UID 条件求交（两集并入单一
+// IN 匹配列表须取交集——并集将放宽条件违反 AND 语义）。
+func translateCriteria(criteria *imap.SearchCriteria, effectiveUIDs []int64) (storage.SearchFilter, bool, error) {
 	f := storage.SearchFilter{}
+	var uidConds []int64
 	for _, us := range criteria.UID {
 		for _, rng := range us {
 			lo, hi := int64(rng.Start), int64(rng.Stop)
 			for _, u := range effectiveUIDs {
 				if u >= lo && u <= hi {
-					f.UIDs = append(f.UIDs, u)
+					uidConds = append(uidConds, u)
 				}
 			}
 		}
+	}
+	var seqNumConds []int64
+	for _, ss := range criteria.SeqNum { // F2（B-F6）：序号条件承载（原忽略）
+		for _, rng := range ss {
+			for i, u := range effectiveUIDs {
+				if seq := uint32(i + 1); seq >= rng.Start && seq <= rng.Stop {
+					seqNumConds = append(seqNumConds, u)
+				}
+			}
+		}
+	}
+	f.UIDs = intersectUIDs(uidConds, seqNumConds)
+	if (len(criteria.UID) > 0 && len(uidConds) == 0) ||
+		(len(criteria.SeqNum) > 0 && len(seqNumConds) == 0) {
+		// F2 同根语义修正：任一集合条件存在但映射空集=集内无任何消息——
+		// 消息不在集内即不匹配（UID 集 §2.3.1.2 不存在 UID 视为不在集中；
+		// 序号集同理）——置不可能 id（0 非有效主键）强制空结果。原实现空
+		// 列表落入 storage 无约束分支→假阳性全匹配。
+		f.UIDs = []int64{0}
 	}
 	if !criteria.Since.IsZero() {
 		t := criteria.Since
@@ -536,7 +621,10 @@ func translateCriteria(criteria *imap.SearchCriteria, effectiveUIDs []int64) (st
 		case "SUBJECT":
 			f.Subject = hf.Value
 		default:
-			f.Subject = "\x00unsupported-header\x00" // 无缓存列承载——空集语义
+			// 无缓存列承载——显式空集标记（F2/B-F6 根因双缺陷收口：原哨兵
+			// 子串其一可被后续键赋值覆盖、其二 NUL 经 SQLite 截断为空串恒全
+			// 匹配——调用方据标记直接返回空 SearchData）
+			return storage.SearchFilter{}, true, nil
 		}
 	}
 	f.Body = strings.Join(criteria.Body, " ")
@@ -567,24 +655,57 @@ func translateCriteria(criteria *imap.SearchCriteria, effectiveUIDs []int64) (st
 		}
 	}
 	if len(criteria.Not) > 0 {
-		inner, err := translateCriteria(&criteria.Not[0], effectiveUIDs)
+		inner, uns, err := translateCriteria(&criteria.Not[0], effectiveUIDs)
 		if err != nil {
-			return f, err
+			return f, false, err
+		}
+		if uns {
+			// 内层不可求值（NOT 空集=全集的构造性判定复杂）——保守整体空集
+			return storage.SearchFilter{}, true, nil
 		}
 		f.Not = &inner
 	}
 	for _, pair := range criteria.Or {
-		left, err := translateCriteria(&pair[0], effectiveUIDs)
+		left, luns, err := translateCriteria(&pair[0], effectiveUIDs)
 		if err != nil {
-			return f, err
+			return f, false, err
 		}
-		right, err := translateCriteria(&pair[1], effectiveUIDs)
+		if luns {
+			return storage.SearchFilter{}, true, nil // 同上保守口径
+		}
+		right, runs, err := translateCriteria(&pair[1], effectiveUIDs)
 		if err != nil {
-			return f, err
+			return f, false, err
+		}
+		if runs {
+			return storage.SearchFilter{}, true, nil
 		}
 		f.Or = append(f.Or, [2]storage.SearchFilter{left, right})
 	}
-	return f, nil
+	return f, false, nil
+}
+
+// intersectUIDs 两 UID 条件集求交（B-FUNC 批 F2——UID 条件与 SeqNum 映射集的 AND
+// 交集：单侧空=该侧无条件约束（恒真），取另一侧原样；双侧非空取共有元素——并集将
+// 放宽条件，违反 rfc9051 §6.4.4 多键 AND 语义）。
+func intersectUIDs(a, b []int64) []int64 {
+	if len(a) == 0 {
+		return b
+	}
+	if len(b) == 0 {
+		return a
+	}
+	set := make(map[int64]bool, len(b))
+	for _, v := range b {
+		set[v] = true
+	}
+	out := make([]int64, 0, len(a))
+	for _, v := range a {
+		if set[v] {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 // applyFlagCond 标志条件落入对应维度。
@@ -605,11 +726,14 @@ func applyFlagCond(f *storage.SearchFilter, flag imap.Flag, v *bool) {
 
 // Store 标志变更（五系统标志映射契约 v1.16.0 2.4——F-I16 RFC 化；
 // UID 语义按 numSet 类型判定——beta.8 StoreOptions 无 UID 字段）。
+// F4（B-P3③）：detailsForUIDs 批量定位（原逐封 detailForUID 双查询 N+1 消除；
+// 写操作 SetFlags/SetKeywords 保持逐封——原子性语义不变）。
 func (s *Session) Store(w *imapserver.FetchWriter, numSet imap.NumSet, flags *imap.StoreFlags, _ *imap.StoreOptions) error {
 	ctx := context.Background()
 	uids, byUID := s.resolveNumSet(numSet)
+	details := s.detailsForUIDs(ctx, uids)
 	for _, uid := range uids {
-		detail := s.detailForUID(ctx, uid)
+		detail := details[uid]
 		if detail == nil {
 			continue // 已 EXPUNGE 行跳过（rfc9051 6.4.8 宽容语义）
 		}
@@ -814,13 +938,14 @@ func (s *Session) Copy(numSet imap.NumSet, dest string) (*imap.CopyData, error) 
 }
 
 // collectCopyMetas 序号集→批量复制输入（metas 与源 UID/源行 ID 对齐收集；
-// Copy/Move 共用——F-I13 批量事务前置）。
+// Copy/Move 共用——F-I13 批量事务前置；F4：detailsForUIDs 批量定位）。
 func (s *Session) collectCopyMetas(ctx context.Context, numSet imap.NumSet) ([]*storage.AppendMeta, []int64, []int64, error) {
 	var metas []*storage.AppendMeta
 	var srcUIDs, srcIDs []int64
 	uids, _ := s.resolveNumSet(numSet)
+	details := s.detailsForUIDs(ctx, uids)
 	for _, uid := range uids {
-		detail := s.detailForUID(ctx, uid)
+		detail := details[uid]
 		if detail == nil {
 			continue
 		}
@@ -976,6 +1101,7 @@ func (s *Session) writeNumMessagesIfChanged(ctx context.Context, w *imapserver.U
 		}
 		s.lastNum = n
 		s.uids = uids
+		s.rebuildUIDIndex() // F3：索引同步构建
 	}
 	return nil
 }

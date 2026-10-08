@@ -9,6 +9,9 @@
 // 修改历史：
 //
 //	2026-09-24 16:40:00 | 新建 | U16 Webmail 体验收尾（计划书步骤 3，G2 批准 2026-09-24 11:51:57）
+//	2026-10-08 10:20:00 | 优化 | 性能批 F1（B-P2，G2 批准 2026-10-08 10:13:49）：HTML-only
+//	  邮件派生兜底——BodyText 空且 BodyHTML 非空时经 htmlToPlain 派生纯文本
+//	  （正文搜索覆盖面收口；存量 NULL 行由回填任务经本函数同源补齐）
 package mail
 
 // bodyCacheMaxBytes 正文缓存截断上限（64KB——计划书 1.5③ 工程常量）。
@@ -23,6 +26,13 @@ func BodyCacheOf(raw []byte) string {
 		return ""
 	}
 	body := display.BodyText
+	if body == "" && display.BodyHTML != "" {
+		// 性能批 F1（B-P2）：HTML-only 邮件派生兜底——BodyText 为空且 BodyHTML 非空时
+		// 经 htmlToPlain 派生纯文本（U17 写信 alternative plain part 派生同源实现——
+		// INV-06 复用优先；rfc2046 §5.1.4 递增序下 plain 为最朴素呈现形态）。原恒空
+		// 导致此类邮件正文搜索（body_cache LIKE）永不命中+列表无摘要——覆盖面收口。
+		body = htmlToPlain(display.BodyHTML)
+	}
 	if len(body) > bodyCacheMaxBytes {
 		body = body[:bodyCacheMaxBytes]
 	}

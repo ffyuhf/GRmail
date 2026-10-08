@@ -388,8 +388,10 @@ func TestU9BatchActionsAndTwoStageDelete(t *testing.T) {
 			archiveID = f.ID
 		}
 	}
+	// B-FUNC 批 F1 适配：表单字段名对齐真实模板（目标下拉 select name="target"
+	// ——原用例与 handler 共错同发 "folder" 故全绿而模板路径恒失效；断言面不变）
 	res = env.postForm(t, "/mails/batch", cookie, "csrf-4", map[string][]string{
-		"action": {"move"}, "ids": {fmt.Sprint(id2)}, "folder": {fmt.Sprint(archiveID)},
+		"action": {"move"}, "ids": {fmt.Sprint(id2)}, "target": {fmt.Sprint(archiveID)},
 	})
 	_ = bodyOf(t, res)
 	if d, _ := env.db.GetDetail(context.Background(), env.mailbox.ID, id2); d.FolderID != archiveID {
@@ -741,4 +743,67 @@ func p95(samples []time.Duration) time.Duration {
 		idx = len(samples) - 1
 	}
 	return samples[idx]
+}
+
+// TestU9BatchMoveTargetField F1（B-F1 修复锚）：移动目标读 "target"——目标≠当前
+// 文件夹的移动真实生效（原 handler 读隐藏域 "folder" 恒为当前文件夹致移动恒无效；
+// 目标缺失 400 防线断言）。SRS FR-013 判定项⑬。
+func TestU9BatchMoveTargetField(t *testing.T) {
+	env := newU9Env(t)
+	cookie := env.u9Session(t, storage.SubjectTypeMailbox, env.mailbox.ID, "csrf-mv")
+	id := env.seedMail(t, env.mailbox.ID, "移动验证", "m@x.io")
+	if err := env.fds.CreateCustom(context.Background(), env.mailbox.ID, "目标夹"); err != nil {
+		t.Fatalf("建目标夹: %v", err)
+	}
+	var targetID int64
+	for _, f := range mustFolders(t, env, env.mailbox.ID) {
+		if f.Name == "目标夹" {
+			targetID = f.ID
+		}
+	}
+	if targetID == 0 || targetID == env.inboxID(t, env.mailbox.ID) {
+		t.Fatalf("目标夹定位异常: %d", targetID)
+	}
+	res := env.postForm(t, "/mails/batch", cookie, "csrf-mv", map[string][]string{
+		"action": {"move"}, "ids": {fmt.Sprint(id)}, "target": {fmt.Sprint(targetID)},
+	})
+	_ = bodyOf(t, res)
+	if d, _ := env.db.GetDetail(context.Background(), env.mailbox.ID, id); d.FolderID != targetID {
+		t.Fatalf("F1：移动应落入目标夹（target≠当前文件夹——原恒为当前）: folder=%d want=%d", d.FolderID, targetID)
+	}
+	// 目标缺失（模板下拉被移除的畸形提交）→400
+	res = env.postForm(t, "/mails/batch", cookie, "csrf-mv", map[string][]string{
+		"action": {"move"}, "ids": {fmt.Sprint(id)},
+	})
+	if res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("target 缺失应 400: %d", res.StatusCode)
+	}
+	_ = bodyOf(t, res)
+}
+
+// TestU9StaticTraversalSegments F6（M12 修复锚）：段级 ".." 检测——含 ".." 路径段
+// 拒绝（段在中间同样拦截——保守语义：静态资源名不含该形态）；合法双点名（foo..bar.js）
+// 不再被子串检测误拒（不存在→404 与误拒可区分语义由段级检测承载）。
+func TestU9StaticTraversalSegments(t *testing.T) {
+	env := newU9Env(t)
+	if res := env.get(t, "/static/app.css/../app.css", ""); res.StatusCode != http.StatusNotFound {
+		t.Fatalf("含 .. 段应 404（F6 段级检测）: %d", res.StatusCode)
+	}
+	if res := env.get(t, "/static/foo..bar.js", ""); res.StatusCode != http.StatusNotFound {
+		t.Fatalf("不存在资源应 404（F6——双点名不误拒，404 源自不存在）: %d", res.StatusCode)
+	}
+	// 既有资源回归（检测变更零影响）
+	if res := env.get(t, "/static/htmx.min.js", ""); res.StatusCode != http.StatusOK {
+		t.Fatalf("合法资源应 200: %d", res.StatusCode)
+	}
+}
+
+// mustFolders 文件夹列举（测试辅助——失败即 Fatal）。
+func mustFolders(t *testing.T, env *u9Env, mbID int64) []*storage.Folder {
+	t.Helper()
+	folders, err := env.fds.List(context.Background(), mbID)
+	if err != nil {
+		t.Fatalf("列文件夹: %v", err)
+	}
+	return folders
 }

@@ -1,12 +1,12 @@
 // Package imap 实现 IMAP4rev2 服务端（FR-006）：emersion/go-imap v2 封装（架构总览
 // 选型 #5，Q4 裁决）——993 隐式 TLS 端点（Q1-A 2026-09-18 00:00:04，rfc8314 §1/§3.2
 // 推荐 Implicit TLS 优先；无明文端口即无 STARTTLS/LOGINDISABLED 义务链，rfc9051 §5）、
-// v2 Session 体系映射 account/storage（契约 v1.3.0 2.4 术语修正——v1 Backend 为 v1 术语）、
+// v2 Session 体系映射 account/storage（契约 v1.37.0 2.4——U6 以来历版注记承载）、
 // IDLE 事件驱动推送（Q2-A 2026-09-18 00:01:30，rfc2177 §3）。
 // 能力集：IMAP4rev2/IDLE/LITERAL+(rfc7888)/UTF8=ACCEPT(rfc6855)/MOVE(rfc6851)/NAMESPACE；
 // CONDSTORE(rfc7162)/QUOTA(rfc9208) 非 FR-006 判定必需不实现（计划书 1.2 不改清单，阶段二）。
-// FLAGS 三标志映射（契约 v1.3.0 2.4，rfc9051 2.3.2）：\Seen↔is_read、\Flagged↔is_flagged、
-// \Deleted↔status=deleted；\Answered/\Draft 不持久化（登记 U6+ 数据模型演进裁决项）。
+// FLAGS 五系统标志映射（契约 v1.16.0 2.4 终态——Q2-A 2026-09-29 五标志 RFC 化，v1.3.0 三标志口径废止）：\Seen↔is_read、\Flagged↔is_flagged、
+// \Deleted↔status=deleted、\Answered↔is_answered、\Draft↔is_draft（五标志全部持久化）。
 // UIDVALIDITY 固定值 1（Q4-A 2026-09-18 00:07:22：uid 经 DB 持久+mailbox 域全局 MAX+1
 // 不复用，rfc9051 2.3.1.1 递增义务不触发；§9 示例值 1 合法）。
 // 修改历史：
@@ -16,6 +16,8 @@
 //	（H5 等价——快照控制开闭热生效；ServerConfig 增 ProtocolDebug 注入位）
 //	（来源：G2 批准 2026-09-27 06:13:36，U21 计划书 v1.0.0 步骤 4/1.5①⑤；双源核对：
 //	go-imap v2 imapserver.Options 原生 DebugWriter io.Writer 字段——go doc 实录）
+//	2026-10-08 13:10:00 | 修正 | 文档治理批 C1：头注契约版本引用刷新 v1.3.0→v1.37.0+FLAGS
+//	口径按 v1.16.0 五标志终态改写（原三标志口径已废止——裁决索引覆盖链 2；纯注释零行为变更）
 package imap
 
 import (
