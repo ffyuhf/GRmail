@@ -77,7 +77,7 @@ templ SetupView(data SetupData) {
 							<label>{ Tr(lang, "setup.dsnDBName") } <input type="text" name="dbName" value={ data.DSNDBName } maxlength="128"/></label>
 						</div>
 						<div class="dsn-advanced">
-							<label>{ Tr(lang, "setup.dsn") } <input type="text" name="dsn" value={ data.DSN }/></label>
+							<label>{ Tr(lang, "setup.dsn") } <input type="password" name="dsn" placeholder={ Tr(lang, "setup.dsnKeepPh") } autocomplete="new-password"/></label>
 						</div>
 					</div>
 					<label class="sqlite-only">{ Tr(lang, "setup.dsn") } <input type="text" name="sqlitePath" value={ data.DSN }/></label>

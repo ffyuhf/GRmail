@@ -132,7 +132,7 @@ func ComposeView(d *ComposeData) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "\"><form method=\"post\" action=\"/compose\" enctype=\"multipart/form-data\" onsubmit=\"return grmailComposeSync();\"><input type=\"hidden\" name=\"csrf_token\" value=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "\"><form method=\"post\" action=\"/compose\" enctype=\"multipart/form-data\" id=\"compose-form\"><input type=\"hidden\" name=\"csrf_token\" value=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -330,14 +330,14 @@ func ComposeView(d *ComposeData) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "</option></select> <button class=\"secondary\" type=\"button\" onclick=\"grmailCsvImport()\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "</option></select> <button class=\"secondary\" type=\"button\" id=\"csv-parse-btn\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var20 string
 			templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "compose.csvParse"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 60, Col: 105}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 60, Col: 96}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
 			if templ_7745c5c3_Err != nil {
@@ -457,14 +457,14 @@ func ComposeView(d *ComposeData) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "</span> <span class=\"tool-spacer\"></span> <button class=\"secondary btn-sm\" type=\"button\" id=\"fullscreen-btn\" onclick=\"grmailComposeFullscreen()\" data-enter=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "</span> <span class=\"tool-spacer\"></span> <button class=\"secondary btn-sm\" type=\"button\" id=\"fullscreen-btn\" data-enter=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var29 string
 			templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.fullscreen"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 77, Col: 50}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 77, Col: 51}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var29)
 			if templ_7745c5c3_Err != nil {
@@ -477,7 +477,7 @@ func ComposeView(d *ComposeData) templ.Component {
 			var templ_7745c5c3_Var30 string
 			templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "compose.exitFullscreen"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 78, Col: 53}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 78, Col: 54}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var30)
 			if templ_7745c5c3_Err != nil {
@@ -490,7 +490,7 @@ func ComposeView(d *ComposeData) templ.Component {
 			var templ_7745c5c3_Var31 string
 			templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "compose.fullscreen"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 78, Col: 88}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/compose.templ`, Line: 78, Col: 89}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var31))
 			if templ_7745c5c3_Err != nil {
@@ -1016,7 +1016,7 @@ func ComposeView(d *ComposeData) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 75, "</a></div></form><link rel=\"stylesheet\" href=\"/static/quill.snow.css\"><script src=\"/static/quill.js\"></script><script>\n\t\t\t\t// ── U17 富文本编辑器（G3/G4/G9——零框架内联 JS，沿 CSV 先例）──\n\t\t\t\t// 初始化：snow 主题+自定义 toolbar 容器（模板渲染双语 title）；\n\t\t\t\t// 初始内容经隐藏 textarea 携带（HTML 源文本）——dangerouslyPasteHTML\n\t\t\t\t// 注入（自产内容：草稿回填/回信预填，接收侧 iframe sandbox 既有防线）。\n\t\t\t\tlet grmailEditor = null;\n\t\t\t\t// U22 图片压缩工程常量（计划书 1.5③——实现级常量非 config 承载：\n\t\t\t\t// 最长边重采样上限/JPEG 质量档——D8#11：config 注入（compose-page\n\t\t\t\t// data-* 承载——改 config.json 热加载后下次渲染生效；缺省兜底 1920/0.85）\n\t\t\t\tconst GRMAIL_IMG_MAX_EDGE = parseInt(document.getElementById('compose-page').dataset.imgMaxEdge) || 1920;\n\t\t\t\tconst GRMAIL_JPEG_QUALITY = parseFloat(document.getElementById('compose-page').dataset.jpegQuality) || 0.85;\n\t\t\t\tfunction grmailEditorInit() {\n\t\t\t\t\tif (typeof Quill === 'undefined') { return; }\n\t\t\t\t\tgrmailEditor = new Quill('#editor-container', {\n\t\t\t\t\t\ttheme: 'snow',\n\t\t\t\t\t\tmodules: {\n\t\t\t\t\t\t\ttoolbar: {\n\t\t\t\t\t\t\t\t\tcontainer: '#compose-toolbar',\n\t\t\t\t\t\t\t\t\thandlers: {\n\t\t\t\t\t\t\t\t\t\t// U22：undo/redo 无 toolbar 内置按钮（源码核对\n\t\t\t\t\t\t\t\t\t\t// 零 ql-undo/ql-redo 注册）——经 history 模块\n\t\t\t\t\t\t\t\t\t\t// （内置）两行桥接\n\t\t\t\t\t\t\t\t\t\tundo: function() { this.quill.history.undo(); },\n\t\t\t\t\t\t\t\t\t\tredo: function() { this.quill.history.redo(); },\n\t\t\t\t\t\t\t\t\t\t// E-B（D8#13）：表格插入——Quill 2.0.3 内置 table\n\t\t\t\t\t\t\t\t\t\t// 模块（insertTable/行操作 API——vendor 源码实证）\n\t\t\t\t\t\t\t\t\t\t// 工具栏化激活：固定 2×2 起步（计划书 2.3-2 候选 A\n\t\t\t\t\t\t\t\t\t\t// 最小面自决；单元格编辑经 contenteditable 既有承载）\n\t\t\t\t\t\t\t\t\t\ttable: function() { this.quill.getModule('table').insertTable(2, 2); }\n\t\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t\t},\n\t\t\t\t\t\t\t\t// E-B：table 模块显式启用（snow 主题下幂等——注册形态\n\t\t\t\t\t\t\t\t// 与 vendor 内置一致，显式声明消除主题默认差异）\n\t\t\t\t\t\t\t\ttable: true,\n\t\t\t\t\t\t\t// U22 图片统一压缩接线（源码核对：工具栏选择/粘贴 files/\n\t\t\t\t\t\t\t// 拖放三路径全部汇聚 uploader.upload→options.handler——\n\t\t\t\t\t\t\t// 一处覆盖全入口；mimetypes 扩展 png/jpeg/gif/webp 与\n\t\t\t\t\t\t\t// image/* 等价，svg 排除——data: 内联脚本面收敛）\n\t\t\t\t\t\t\tuploader: {\n\t\t\t\t\t\t\t\tmimetypes: ['image/png', 'image/jpeg', 'image/gif', 'image/webp'],\n\t\t\t\t\t\t\t\thandler: grmailUploaderHandler\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}\n\t\t\t\t\t});\n\t\t\t\t\tconst initial = document.getElementById('editor-initial').value;\n\t\t\t\t\tif (initial && initial.trim() !== '') {\n\t\t\t\t\t\tgrmailEditor.clipboard.dangerouslyPasteHTML(initial);\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\t// Blob/File → data: URL（FileReader 原语——压缩输出与原样兜底共用）。\n\t\t\t\tfunction grmailReadAsDataURL(blob) {\n\t\t\t\t\treturn new Promise(resolve => {\n\t\t\t\t\t\tconst reader = new FileReader();\n\t\t\t\t\t\treader.onload = () => resolve(reader.result);\n\t\t\t\t\t\treader.onerror = () => resolve('');\n\t\t\t\t\t\treader.readAsDataURL(blob);\n\t\t\t\t\t});\n\t\t\t\t}\n\t\t\t\t// U22 图片压缩纯函数（Canvas 最长边重采样——缓解 base64 膨胀收口 U19\n\t\t\t\t// 登记项③）：①非 image/* 或解码失败：原样返回（尽力语义）；②最长边\n\t\t\t\t// ≤1920：原样零重采样（G9 小图保真）；③最长边 >1920：等比缩放至 1920\n\t\t\t\t// ——PNG 输入保 PNG（透明通道无损口径），其余输出 JPEG quality 0.85。\n\t\t\t\tasync function grmailCompressImage(file) {\n\t\t\t\t\tif (!file.type || !file.type.startsWith('image/')) { return grmailReadAsDataURL(file); }\n\t\t\t\t\t// D8#14：gif 跳过压缩——Canvas 重采样会静默丢失动画（单帧化），\n\t\t\t\t\t// 原样内联保真（U22 登记项收口：动图保动画）\n\t\t\t\t\tif (file.type === 'image/gif') { return grmailReadAsDataURL(file); }\n\t\t\t\t\tlet bmp = null;\n\t\t\t\t\ttry { bmp = await createImageBitmap(file); } catch (e) { bmp = null; }\n\t\t\t\t\tif (bmp && Math.max(bmp.width, bmp.height) > GRMAIL_IMG_MAX_EDGE) {\n\t\t\t\t\t\tconst scale = GRMAIL_IMG_MAX_EDGE / Math.max(bmp.width, bmp.height);\n\t\t\t\t\t\tconst w = Math.max(1, Math.round(bmp.width * scale));\n\t\t\t\t\t\tconst h = Math.max(1, Math.round(bmp.height * scale));\n\t\t\t\t\t\tconst canvas = document.createElement('canvas');\n\t\t\t\t\t\tcanvas.width = w;\n\t\t\t\t\t\tcanvas.height = h;\n\t\t\t\t\t\tcanvas.getContext('2d').drawImage(bmp, 0, 0, w, h);\n\t\t\t\t\t\tconst type = file.type === 'image/png' ? 'image/png' : 'image/jpeg';\n\t\t\t\t\t\tconst out = await new Promise(r => canvas.toBlob(r, type, GRMAIL_JPEG_QUALITY));\n\t\t\t\t\t\tif (bmp.close) { bmp.close(); }\n\t\t\t\t\t\tif (out) { return grmailReadAsDataURL(out); }\n\t\t\t\t\t}\n\t\t\t\t\tif (bmp && bmp.close) { bmp.close(); }\n\t\t\t\t\treturn grmailReadAsDataURL(file);\n\t\t\t\t}\n\t\t\t\t// U22 uploader 模块自定义 handler——默认 readAsDataURL 直插语义的压缩版\n\t\t\t\t// 复刻（逐图压缩→顺序 insertEmbed→光标后移；G9 data: 内联形态不变）。\n\t\t\t\tfunction grmailUploaderHandler(range, files) {\n\t\t\t\t\tconst uploads = Array.from(files).map(f => grmailCompressImage(f));\n\t\t\t\t\tPromise.all(uploads).then(urls => {\n\t\t\t\t\t\turls.forEach(u => {\n\t\t\t\t\t\t\tif (u) { grmailEditor.insertEmbed(range.index, 'image', u); }\n\t\t\t\t\t\t});\n\t\t\t\t\t\tgrmailEditor.setSelection(range.index + urls.length);\n\t\t\t\t\t});\n\t\t\t\t}\n\t\t\t\t// 提交桥接：编辑器容器非表单原生控件——submit 前将 root.innerHTML\n\t\t\t\t// 写入隐藏 input body（随表单 POST——端点形态零变更）。\n\t\t\t\tfunction grmailComposeSync() {\n\t\t\t\t\tif (grmailEditor) {\n\t\t\t\t\t\tdocument.getElementById('f-body').value = grmailEditor.root.innerHTML;\n\t\t\t\t\t}\n\t\t\t\t\treturn true;\n\t\t\t\t}\n\t\t\t\t// G4 写信页全屏覆写：整页容器（含收件人/主题/附件区）requestFullscreen\n\t\t\t\t// /exitFullscreen 切换（Fullscreen API 原生——纯 JS 零库；ESC 系统默认退出）。\n\t\t\t\tfunction grmailComposeFullscreen() {\n\t\t\t\t\tconst page = document.getElementById('compose-page');\n\t\t\t\t\tconst btn = document.getElementById('fullscreen-btn');\n\t\t\t\t\tif (!document.fullscreenElement) {\n\t\t\t\t\t\tpage.requestFullscreen().then(() => {\n\t\t\t\t\t\t\tbtn.textContent = btn.getAttribute('data-exit');\n\t\t\t\t\t\t}).catch(() => {});\n\t\t\t\t\t} else {\n\t\t\t\t\t\tdocument.exitFullscreen().then(() => {\n\t\t\t\t\t\t\tbtn.textContent = btn.getAttribute('data-enter');\n\t\t\t\t\t\t}).catch(() => {});\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\t// E-A（D8#10）：macOS 平台快捷键提示 ⌘ 记法自适应——U19「统一 Ctrl 记法\n\t\t\t\t// 不分支」口径的平台面收口（Quill shortKey 内部已平台自适应——本函数仅\n\t\t\t\t// 提示文案层；服务端渲染 title 保持 Ctrl 记法初值〔u17/u22 断言锚零触碰〕，\n\t\t\t\t// Mac 客户端加载后改写为 ⌘ 记法；navigator.platform 与 Quill 源码同源口径）。\n\t\t\t\tfunction grmailAdaptShortcutTitles() {\n\t\t\t\t\tif (!/Mac|iPhone|iPad/.test(navigator.platform || '')) { return; }\n\t\t\t\t\tdocument.querySelectorAll('#compose-toolbar button[title*=\"(Ctrl+\"]').forEach(function (btn) {\n\t\t\t\t\t\tbtn.title = btn.title.replace(/\\(Ctrl\\+([A-Z])\\)/g, '(⌘$1)');\n\t\t\t\t\t});\n\t\t\t\t}\n\t\t\t\tgrmailEditorInit();\n\t\t\t\tgrmailAdaptShortcutTitles();\n\t\t\t\t// ── CSV 候选合入（U16 Q5-A 既有——勾选行地址合并进所选 to/cc/bcc 输入框）──\n\t\t\t\tfunction grmailCsvImport() {\n\t\t\t\t\tconst f = document.getElementById('csv-file').files[0];\n\t\t\t\t\tif (!f) { return; }\n\t\t\t\t\tconst fd = new FormData();\n\t\t\t\t\tfd.append('csrf_token', document.querySelector('input[name=csrf_token]').value);\n\t\t\t\t\tfd.append('file', f);\n\t\t\t\t\tfetch('/compose/csv-import', { method: 'POST', body: fd })\n\t\t\t\t\t\t.then(r => r.ok ? r.text() : Promise.reject(r.status))\n\t\t\t\t\t\t.then(html => {\n\t\t\t\t\t\t\tdocument.getElementById('csv-result').innerHTML = html;\n\t\t\t\t\t\t})\n\t\t\t\t\t\t.catch(() => {\n\t\t\t\t\t\t\tvar pageEl = document.getElementById('compose-page');\n\t\t\t\t\t\t\tvar csvErr = pageEl && pageEl.dataset ? pageEl.dataset.csvErr : '';\n\t\t\t\t\t\t\tdocument.getElementById('csv-result').innerHTML = '<p class=\"error\">' + (csvErr || 'CSV parse failed') + '</p>';\n\t\t\t\t\t\t});\n\t\t\t\t}\n\t\t\t\tfunction grmailCsvMerge() {\n\t\t\t\t\tconst target = document.getElementById('csv-target').value;\n\t\t\t\t\tconst boxes = document.querySelectorAll('#csv-result input.csv-addr:checked');\n\t\t\t\t\tconst addrs = Array.from(boxes).map(b => b.value);\n\t\t\t\t\tif (addrs.length === 0) { return; }\n\t\t\t\t\tconst el = document.getElementById(target);\n\t\t\t\t\tconst cur = el.value.trim();\n\t\t\t\t\tconst merged = cur ? cur + ', ' + addrs.join(', ') : addrs.join(', ');\n\t\t\t\t\tel.value = merged;\n\t\t\t\t}\n\t\t\t</script></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 75, "</a></div></form><link rel=\"stylesheet\" href=\"/static/quill.snow.css\"><script src=\"/static/quill.js\"></script><script src=\"/static/compose.js\"></script></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

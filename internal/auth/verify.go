@@ -117,6 +117,7 @@ func (v *VerifierService) Verify(ctx context.Context, msg *IncomingMail) (*Verif
 	// 空反向路径（HELO 判定）时 A-R 域取 verify 返回的实际判定域。
 	var spfPass bool
 	var spfDomain string
+	spfProp := "smtp.mailfrom" // B-S批 F5：A-R SPF 属性名（空反向路径场景改 smtp.helo——下方分支）
 	if stack.SPFEnabled {
 		args := spfArgs(msg, v.authserv)
 		recvd, checkedDomain, _, _, _ := ravenspf.Verify(ctx, asSPFResolver(v.resolver), args)
@@ -126,6 +127,12 @@ func (v *VerifierService) Verify(ctx context.Context, msg *IncomingMail) (*Verif
 			spfDomain = checkedDomain
 		} else {
 			spfDomain = args.MailFromDomain
+		}
+		// B-S批 F5：空反向路径（MAIL FROM <>）时 SPF 以 HELO 身份判定（checkedDomain
+		// 即 HELO 判定域）——A-R 属性名须 smtp.helo（rfc8601 §2.7.2 L1051-1054
+		// 「the property is either "mailfrom" or "helo"」——空路径场景 mailfrom 无值可引用）
+		if args.MailFromDomain == "" {
+			spfProp = "smtp.helo"
 		}
 	}
 
@@ -158,7 +165,10 @@ func (v *VerifierService) Verify(ctx context.Context, msg *IncomingMail) (*Verif
 			res.DMARC = "permerror" // From 缺失/畸形（ErrMissingFrom 定档）
 		} else {
 			fromDomain = fd
-			dmResult, _, _ := dmarc.Evaluate(ctx, txtResolverAdapter{r: v.resolver},
+			// B-S批 F6（裁决 B 2026-10-09 13:34——仅缓存无总预算）：Tree Walk 请求级
+			// 缓存——Verify 单次调用内构造 cachedTXT，Discover 与 OrganizationalDomain
+			// 共享同一实例，重复 _dmarc TXT 查询复用；跨调用零共享零污染
+			dmResult, _, _ := dmarc.Evaluate(ctx, &cachedTXT{inner: txtResolverAdapter{r: v.resolver}},
 				fromDomain, dkimSigs, spfPass, spfDomain)
 			res.DMARC = string(dmResult)
 		}
@@ -179,7 +189,7 @@ func (v *VerifierService) Verify(ctx context.Context, msg *IncomingMail) (*Verif
 	}
 
 	res.AuthResultsHeader = buildAuthResultsHeader(v.authserv, stack, res,
-		spfDomain, dkimReportDomain, fromDomain, arcOldestPass)
+		spfDomain, spfProp, dkimReportDomain, fromDomain, arcOldestPass)
 	return res, nil
 }
 
@@ -213,7 +223,17 @@ func aggregateDKIM(results []ravendkim.Result) (conclusion, reportDomain string)
 	}
 	for _, r := range results {
 		if r.Status == ravendkim.StatusTemperror {
-			return "temperror", ""
+			// B-S批 F5：temperror 报告域取首个含签名结果的 d=（DKIM 验证故障对
+			// 消费者可见——原空串致 buildAuthResultsHeader 判空丢弃整条 resinfo）；
+			// 无签名上下文维持空（调用方按现状不呈现该条）
+			dom := ""
+			for _, r2 := range results {
+				if r2.Signature != nil {
+					dom = r2.Signature.Domain
+					break
+				}
+			}
+			return "temperror", dom
 		}
 	}
 	for _, r := range results {
@@ -246,10 +266,11 @@ func FromDomain(raw []byte) (string, error) {
 // buildAuthResultsHeader 组装 Authentication-Results 头（rfc8601 2.2 ABNF：
 // "Authentication-Results:" authserv-id 1*resinfo；resinfo = ";" method "=" result
 // [propspec]）。仅开启项出现（TC-009：关闭项结论不出现在头中）。
-// 属性形态：spf→smtp.mailfrom（2.7.2）；dkim→header.d（2.7.1）；
-// dmarc→header.from；arc→arc.oldest-pass（rfc8617 注册属性，oldest-pass>0 时附注）。
+// 属性形态：spf→smtp.mailfrom（2.7.2；空反向路径场景 smtp.helo——B-S批 F5，
+// spfProp 参数承载）；dkim→header.d（2.7.1）；dmarc→header.from；
+// arc→arc.oldest-pass（rfc8617 注册属性，oldest-pass>0 时附注）。
 func buildAuthResultsHeader(authservID string, stack config.AuthStack, res *VerifyResults,
-	spfDomain, dkimDomain, fromDomain string, arcOldestPass int) string {
+	spfDomain, spfProp, dkimDomain, fromDomain string, arcOldestPass int) string {
 	var b strings.Builder
 	b.WriteString("Authentication-Results: ")
 	b.WriteString(authservID)
@@ -257,7 +278,7 @@ func buildAuthResultsHeader(authservID string, stack config.AuthStack, res *Veri
 	// 折叠（rfc8601 §2.2 L577-581——authres-payload 以 CRLF 终结、CFWS 引 rfc5322
 	// §2.2.3 折叠语义；原裸 "\n\t" 致头体含独立 LF，存储态非合规形态）
 	if stack.SPFEnabled && spfDomain != "" {
-		fmt.Fprintf(&b, ";\r\n\tspf=%s smtp.mailfrom=%s", res.SPF, spfDomain)
+		fmt.Fprintf(&b, ";\r\n\tspf=%s %s=%s", res.SPF, spfProp, spfDomain)
 	}
 	if stack.DKIMEnabled && dkimDomain != "" {
 		fmt.Fprintf(&b, ";\r\n\tdkim=%s header.d=%s", res.DKIM, dkimDomain)
@@ -273,4 +294,50 @@ func buildAuthResultsHeader(authservID string, stack config.AuthStack, res *Veri
 		}
 	}
 	return b.String()
+}
+
+// ───────────────────────── B-S批 F6：DMARC Tree Walk 请求级缓存 ─────────────────────────
+//
+// 规范原文锚（rfc9989 §4.10 L1211-1233 泛型步骤——步骤 1「Query the DNS for a TXT
+// record ... at the starting point for the Tree Walk. A possibly empty set of
+// records is returned」：查询为按域纯函数〔同域同结果集，含空集〕，按 domain 记忆化
+// 与逐次独立查询语义一致；§4.10.2 L1351-1352「It may be necessary to perform
+// multiple DNS Tree Walks to determine if an Authenticated Identifier and an
+// Author Domain are in alignment」：对齐判定与组织域选择构成同域重复查询面——
+// 正是本缓存覆盖对象。缓存条目含错误形态原样记忆（ErrTemporary/ErrNoRecord），
+// 不改变 walk 停走与记录筛选语义〔步骤 2 的筛选在 queryLevel 逐次执行〕）。
+
+// cachedTXTEntry 缓存条目（txts/err 原样记忆——含错误形态，同域重复查询语义
+// 与无缓存一致）。
+type cachedTXTEntry struct {
+	txts []string
+	err  error
+}
+
+// cachedTXT DMARC Tree Walk 请求级缓存解析器（B-S批 F6——干系人裁决 B〔2026-10-09
+// 13:34〕：仅缓存无总预算）：Verify 单次调用内构造，Discover 与 OrganizationalDomain
+// 共享同一实例——对齐判定与组织域选择的重复 _dmarc TXT 查询复用（复核场景查询计数
+// 减半）；生命周期=单次验证（跨调用零共享零污染——失败判定第 7 条守卫）。
+type cachedTXT struct {
+	inner dmarc.TXTResolver
+	mu    sync.Mutex
+	m     map[string]cachedTXTEntry
+}
+
+// LookupTXT 按 domain 记忆化查询（首次穿透 inner，后续命中缓存）。
+func (c *cachedTXT) LookupTXT(ctx context.Context, domain string) ([]string, error) {
+	c.mu.Lock()
+	if c.m == nil {
+		c.m = make(map[string]cachedTXTEntry)
+	}
+	if e, ok := c.m[domain]; ok {
+		c.mu.Unlock()
+		return e.txts, e.err
+	}
+	c.mu.Unlock()
+	txts, err := c.inner.LookupTXT(ctx, domain)
+	c.mu.Lock()
+	c.m[domain] = cachedTXTEntry{txts: txts, err: err}
+	c.mu.Unlock()
+	return txts, err
 }

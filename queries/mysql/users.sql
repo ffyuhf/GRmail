@@ -7,6 +7,11 @@ SELECT id, username, password_hash, is_admin, created_at, updated_at
 FROM users
 WHERE username = ?;
 
+-- name: GetUserByID :one
+SELECT id, username, password_hash, is_admin, created_at, updated_at
+FROM users
+WHERE id = ?;
+
 -- name: UpdateUserPassword :exec
 UPDATE users
 SET password_hash = ?, updated_at = ?

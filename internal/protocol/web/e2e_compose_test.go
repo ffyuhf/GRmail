@@ -38,11 +38,13 @@ func TestE2EComposeRichTextFlow(t *testing.T) {
 	page := bodyOf(t, res)
 	for _, want := range []string{
 		`id="compose-toolbar"`,
-		"ql-code-block",             // 既有（#13 代码块半面——U22 已承载实证锚）
-		`class="ql-table"`,          // E-B：表格按钮（D8#13 新增半面）
-		"插入表格 (2×2)",                // E-B：表格 title（zh）
-		"grmailAdaptShortcutTitles", // E-A：⌘ 记法自适应函数（D8#10）
-		"加粗 (Ctrl+B)",               // E-A：title Ctrl 初值锚（服务端渲染断言锚零触碰）
+		"ql-code-block",    // 既有（#13 代码块半面——U22 已承载实证锚）
+		`class="ql-table"`, // E-B：表格按钮（D8#13 新增半面）
+		"插入表格 (2×2)",       // E-B：表格 title（zh）
+		// B-S批 F2 断言形态适配：E-A ⌘ 记法自适应函数随内联脚本外迁 compose.js
+		// （D8#10 锚语义保持——页面锚改外链脚本引用；Ctrl 初值锚零触碰）
+		`src="/static/compose.js"`, // E-A：⌘ 记法自适应承载（compose.js 外链）
+		"加粗 (Ctrl+B)",              // E-A：title Ctrl 初值锚（服务端渲染断言锚零触碰）
 	} {
 		if !strings.Contains(page, want) {
 			t.Fatalf("渲染缺少要素: %q", want)

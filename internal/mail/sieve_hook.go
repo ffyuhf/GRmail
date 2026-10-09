@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"GRmail/internal/auth"
 	"GRmail/internal/storage"
@@ -168,10 +169,13 @@ func (s *InboundPipelineService) enqueueRedirect(ctx context.Context, meta *stor
 	return s.redirects.StoreSubmission(ctx, &storage.SubmissionMeta{
 		Message: meta.Message,
 		Items: []*storage.QueueItem{{
-			EnvelopeFrom:  from,
-			RcptTo:        rcpt,
-			Status:        storage.QueuePending,
-			NextAttemptAt: meta.Message.SentAt, // Enqueue 侧统一调度初始化（StoreSubmission 默认档）
+			EnvelopeFrom: from,
+			RcptTo:       rcpt,
+			Status:       storage.QueuePending,
+			// B-S批 F1（计划书 v2.0.0 2026-10-09 13:36）：调度取投递入队时刻（队列
+			// 语义「尽快投递」）——原取原信 SentAt（Date 头时刻）致未来 Date 邮件的
+			// redirect 被推迟至 Date 时刻投递；SentAt 保留为元数据非调度依据
+			NextAttemptAt: time.Now().UTC(),
 		}},
 	})
 }

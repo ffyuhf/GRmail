@@ -169,13 +169,39 @@ func NewServer(cfg ServerConfig, sessions storage.SessionRepo, users storage.Use
 	// 不变，反代形态需运维自行评估后另行配置）。
 	_ = s.engine.SetTrustedProxies(nil)
 	// U23：HTTP 请求摘要 debug 中间件（entryMiddleware 后——logid ctx 已建可取；Q2-A 摘要口径）
-	s.engine.Use(s.entryMiddleware(), s.httpDebugMiddleware(), gin.Recovery(), s.sessionMiddleware(), csrfProtect(), s.setupGate())
+	// B-S批 F2（裁决 A 2026-10-09 13:34）：securityHeadersMiddleware 次位注入——
+	// 四安全头全域生效（详情见函数注）
+	s.engine.Use(s.entryMiddleware(), s.securityHeadersMiddleware(), s.httpDebugMiddleware(), gin.Recovery(), s.sessionMiddleware(), csrfProtect(), s.setupGate())
 	s.mountRoutes()
 	s.httpSrv = &http.Server{
 		Handler:           s.engine,
 		ReadHeaderTimeout: 10 * time.Second, // 慢速头攻击防护基线
 	}
 	return s
+}
+
+// securityHeadersMiddleware 安全响应头中间件（B-S批 F2——干系人裁决 A〔2026-10-09
+// 13:34〕：四头全域注入）：
+//   - X-Content-Type-Options: nosniff——MIME 嗅探防护；
+//   - X-Frame-Options: DENY——点击劫持嵌入防护（与 CSP frame-ancestors 双保险）；
+//   - Referrer-Policy: strict-origin-when-cross-origin——跨站来源泄漏收口；
+//   - CSP default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'
+//     data:; frame-ancestors 'none'——脚本/样式仅同源外链（配套内联代码外迁：compose/
+//     admin 模板脚本迁外链 compose.js/grmail.js，onclick/onchange/oninput/onsubmit
+//     内联事件全部改事件绑定——本批 9 处外迁清单见 CHANGE5 第一章）；img data: 承载
+//     FR-013 ⑨ base64 内联图片；正文 iframe sandbox 渲染通道不受影响。
+//
+// 静态资源（htmx/quill/grmail.js/app.css）均为外链 src 形态——CSP 兼容实证。
+func (s *Server) securityHeadersMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		h := c.Writer.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		h.Set("Content-Security-Policy",
+			"default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; frame-ancestors 'none'")
+		c.Next()
+	}
 }
 
 // mountRoutes 路由挂载（契约 v1.5.0 3.1 登录族 + 3.2 Webmail 核心与文件夹管理 +

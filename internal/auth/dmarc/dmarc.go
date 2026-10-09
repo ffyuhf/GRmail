@@ -94,13 +94,28 @@ func ParseRecord(txt string) (*Record, error) {
 		case "np":
 			rec.NoPolicy = strings.ToLower(val)
 		case "adkim":
-			rec.ADKIM = strings.ToLower(val)
+			// B-S批 F12：值域 s|r（非法值返回解析错误——调用方 queryLevel 按
+			// 语法坏丢弃该记录；原 ToLower 原样接受致 fail-open 静默按缺省 r 用）
+			v := strings.ToLower(val)
+			if v != "s" && v != "r" {
+				return nil, fmt.Errorf("dmarc: adkim 非法 %q（s|r）", val)
+			}
+			rec.ADKIM = v
 		case "aspf":
-			rec.ASPF = strings.ToLower(val)
+			// B-S批 F12：值域 s|r（同 adkim——非法值按语法坏丢弃）
+			v := strings.ToLower(val)
+			if v != "s" && v != "r" {
+				return nil, fmt.Errorf("dmarc: aspf 非法 %q（s|r）", val)
+			}
+			rec.ASPF = v
 		case "pct":
 			n, err := strconv.Atoi(val)
 			if err != nil {
 				return nil, fmt.Errorf("dmarc: pct 非法 %q", val)
+			}
+			// B-S批 F12：值域 0-100（负数/>100 越界按语法坏丢弃）
+			if n < 0 || n > 100 {
+				return nil, fmt.Errorf("dmarc: pct 越界 %d（0-100）", n)
 			}
 			rec.Pct = &n
 		case "rua":

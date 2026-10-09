@@ -388,6 +388,7 @@ var messages = map[string][2]string{
 	"setup.s1Ref":         {"需求条目 FR-014", "Requirement FR-014"},
 	"setup.sqlite":        {"SQLite（内置默认，零配置）", "SQLite (built-in default, zero config)"},
 	"setup.dsn":           {"连接串 DSN（SQLite 留空=默认 data/grmail.db；MySQL/PostgreSQL 必填）", "DSN (blank = default SQLite file; required for MySQL/PostgreSQL)"},
+	"setup.dsnKeepPh":     {"已配置——留空保持不变", "Configured — leave blank to keep"},
 	"setup.s1Hint":        {"切换数据库在重启后生效；连接将即时探活校验。", "Database switch applies after restart; connection probed on save."},
 	"setup.next":          {"下一步", "Next"},
 	"setup.s2Legend":      {"管理员账户（本系统设一名管理员，管理全部邮箱）", "Admin account (this system has one admin managing all mailboxes)"},

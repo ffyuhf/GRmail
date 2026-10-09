@@ -61,6 +61,9 @@ type session struct {
 	mboxID   int64  // 已认证邮箱 ID
 	mboxAdr  string // 已认证邮箱地址（OWNER 能力）
 	quitting bool
+	// B-S批 F4（裁决 A 2026-10-09 13:34）：challenge 轮应答帧掩码标志——
+	// cmdAuthenticate 发空 challenge 后置位，下一 readLine 为 base64 凭据应答
+	authRedact bool
 }
 
 // newSession 构造会话。
@@ -234,7 +237,10 @@ func (s *session) cmdAuthenticate(line string) {
 		_, _ = s.bw.WriteString("\"\"\r\n")
 		_ = s.bw.Flush()
 		var err error
-		if ir, err = s.readLine(); err != nil {
+		s.authRedact = true // B-S批 F4：下一 readLine 为 challenge 应答（base64 凭据）
+		ir, err = s.readLine()
+		s.authRedact = false
+		if err != nil {
 			s.quitting = true
 			return
 		}
@@ -254,14 +260,67 @@ func (s *session) cmdAuthenticate(line string) {
 		s.writeNO("PLAIN 凭据格式错误（三段 NUL 分隔）")
 		return
 	}
+	// B-S批 F3（裁决 2026-10-09 13:34）：认证失败限流——窗口内连续失败超阈值拒绝
+	// （沿 smtp 提交端点对齐批 F3① 形态；nil=限流关闭渐进态；成功清零）
+	subjectKey := "managesieve:" + parts[1]
+	if s.authLocked(subjectKey) {
+		s.writeNO("认证失败次数过多（稍后再试）")
+		return
+	}
 	m, verr := s.cfg.Accounts.VerifyCredentials(s.ctx, parts[1], parts[2])
 	if verr != nil || m == nil {
+		s.recordAuthFail(subjectKey)
 		s.writeNO("认证失败（凭据无效）") // 统一文本防枚举（U2 口径）
 		return
 	}
+	s.clearAuthFails(subjectKey)
 	s.authed, s.mboxID, s.mboxAdr = true, m.ID, m.Address
 	s.writeCapabilities()
 	s.writeOK("认证成功")
+}
+
+// authLocked 认证失败限流判定（B-S批 F3——沿提交端点对齐批先例；nil 注入=关闭；
+// 计数故障放行——可用性优先，与提交端点同口径）。
+func (s *session) authLocked(subjectKey string) bool {
+	if s.cfg.Attempts == nil {
+		return false
+	}
+	window, threshold := s.authLimitConf()
+	fails, err := s.cfg.Attempts.CountRecentFails(s.ctx, subjectKey, time.Now().UTC().Add(-window))
+	if err != nil {
+		return false
+	}
+	return fails >= threshold
+}
+
+// authLimitConf 限流参数快照（nil 注入=兜底档 15min/5 次——沿 web limitConf 形态）。
+func (s *session) authLimitConf() (time.Duration, int64) {
+	if s.cfg.AttemptLimit != nil {
+		if w, t := s.cfg.AttemptLimit(); w > 0 && t > 0 {
+			return w, t
+		}
+	}
+	return 15 * time.Minute, 5
+}
+
+// recordAuthFail 认证失败计数（尽力语义）。
+func (s *session) recordAuthFail(subjectKey string) {
+	if s.cfg.Attempts == nil {
+		return
+	}
+	ip := ""
+	if ra := s.conn.RemoteAddr(); ra != nil {
+		ip = ra.String()
+	}
+	_ = s.cfg.Attempts.RecordAttempt(s.ctx, subjectKey, ip, false, time.Now().UTC())
+}
+
+// clearAuthFails 认证成功清零计数（尽力语义）。
+func (s *session) clearAuthFails(subjectKey string) {
+	if s.cfg.Attempts == nil {
+		return
+	}
+	_ = s.cfg.Attempts.ClearSubject(s.ctx, subjectKey)
 }
 
 // ───────────────────────── 脚本管理命令族（§2） ─────────────────────────
@@ -278,6 +337,12 @@ func (s *session) cmdPutScript(line string) {
 		s.writeNO("PUTSCRIPT 须脚本名+字面量内容")
 		return
 	}
+	// B-S批 F3：脚本名校验（长度 ≤128+无控制符——rfc5804 §1.6 name 文法防御；
+	// 原 parseNameThenLiteral 原样透传任意串）
+	if verr := validScriptName(name); verr != nil {
+		s.writeNO("%v", verr)
+		return
+	}
 	if msg, ok := s.checkLiteralCount(n); !ok {
 		s.writeNO("%s", msg)
 		return
@@ -285,6 +350,11 @@ func (s *session) cmdPutScript(line string) {
 	content, err := s.readLiteralBytes(n)
 	if err != nil {
 		s.writeNO("字面量读取失败: %v", err)
+		return
+	}
+	// B-S批 F3：零长脚本拒绝（空脚本无过滤语义——PUTSCRIPT 语义防御）
+	if len(content) == 0 {
+		s.writeNO("脚本内容为空（零长脚本不可保存）")
 		return
 	}
 	quota := s.quota()
@@ -633,6 +703,24 @@ func (s *session) writeNOCode(code, format string, args ...any) {
 	_ = s.bw.Flush()
 }
 
+// validScriptName 脚本名防御校验（B-S批 F3）：非空+长度 ≤128+无控制字符
+// （rfc5804 §1.6 name 文法——ASCII 可打印形态；路径分隔符等由 URL 承载层既有
+// validSieveScriptName 防御，协议侧本函数承载存储前最小面）。
+func validScriptName(name string) error {
+	if name == "" {
+		return errors.New("脚本名为空")
+	}
+	if len(name) > 128 {
+		return fmt.Errorf("脚本名超长（%d > 128）", len(name))
+	}
+	for _, r := range name {
+		if r < 0x20 || r == 0x7f {
+			return fmt.Errorf("脚本名含控制字符")
+		}
+	}
+	return nil
+}
+
 // validate 语法校验透传。
 func (s *session) validate(src string) error {
 	if s.cfg.Validate == nil {
@@ -672,9 +760,33 @@ func (s *session) readLine() (string, error) {
 		return "", errLineTooLong
 	}
 	line := string(buf)
-	s.debugFrame("C", line) // U23 协议 debug（开启时输出——命令面；字面量体经 readLiteralBytes 不经此处）
+	// B-S批 F4（裁决 A 2026-10-09 13:34）：认证帧凭据掩码——AUTHENTICATE 命令行
+	// initial-response 参数与 challenge 轮应答帧（authRedact 置位时整行）替换
+	// [REDACTED]（ProtocolDebug 开启时明文口令不落 30 天日志文件；非认证帧原样；
+	// 非 debug 模式零输出零行为变化）
+	if s.authRedact {
+		s.debugFrame("C", "[REDACTED]")
+	} else {
+		s.debugFrame("C", redactAuthLine(line))
+	}
 	_ = s.bw.Flush()
 	return line, nil
+}
+
+// redactAuthLine AUTHENTICATE 命令行凭据掩码（B-S批 F4）：`AUTHENTICATE "PLAIN" <b64>`
+// 形态的第三个 token（initial-response，宽容无引号形态同掩）替换 [REDACTED]（保留
+// 命令+机制名——排障可见认证交互结构）；无 initial-response 形态原样（凭据走
+// challenge 轮，由 authRedact 标志承载）。
+func redactAuthLine(line string) string {
+	trimmed := strings.TrimRight(line, "\r\n")
+	if !strings.HasPrefix(strings.ToUpper(trimmed), "AUTHENTICATE ") {
+		return line // 非认证命令——原样
+	}
+	fields := strings.Fields(trimmed)
+	if len(fields) >= 3 {
+		return fields[0] + " " + fields[1] + " [REDACTED]\r\n"
+	}
+	return line
 }
 
 // writeOK 应答 OK。

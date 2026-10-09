@@ -761,14 +761,14 @@ func MailListFragment(d *MailListData) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 60, "\"> <label class=\"inline\"><input type=\"checkbox\" name=\"all\" onclick=\"document.querySelectorAll('.mail-id').forEach(e=>e.checked=this.checked)\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 60, "\"> <label class=\"inline\"><input type=\"checkbox\" name=\"all\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var41 string
 		templ_7745c5c3_Var41, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "mail.selectAll"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 158, Col: 172}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 158, Col: 89}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var41))
 		if templ_7745c5c3_Err != nil {

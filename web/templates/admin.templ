@@ -69,15 +69,14 @@ templ AdminMailboxesView(lang Lang, rows []*AdminMailboxRow, errText string, csr
 			</nav>
 			<div class="page-head">
 				<h2>{ Tr(lang, "admin.h2") }（{ fmt.Sprintf("%d", len(rows)) }）</h2>
-				<select id="admin-status-filter" class="filter-input" onchange="grAdminStatusFilter(this.value)">
+				<select id="admin-status-filter" class="filter-input">
 					<option value="">{ Tr(lang, "mail.colStatus") }：{ Tr(lang, "admin.filterAll") }</option>
 					<option value="active">{ Tr(lang, "admin.statusActive") }</option>
 					<option value="shadow">{ Tr(lang, "admin.statusShadow") }</option>
 					<option value="disabled">{ Tr(lang, "admin.statusDisabled") }</option>
 				</select>
 				<input type="search" id="admin-filter" class="filter-input"
-					placeholder={ Tr(lang, "admin.searchPh") } autocomplete="off"
-					oninput="grAdminFilter(this.value)"/>
+					placeholder={ Tr(lang, "admin.searchPh") } autocomplete="off"/>
 			</div>
 			if errText != "" {
 				<p class="error" role="alert">{ errText }</p>
@@ -134,27 +133,6 @@ templ AdminMailboxesView(lang Lang, rows []*AdminMailboxRow, errText string, csr
 					</tbody>
 				</table>
 			</div>
-			<script>
-				// grAdminFilter 地址即时过滤（G4——纯前端子串匹配；单管理员规模零后端增量）。
-				// 管理员主体增强批次 G7（D3）：复合状态过滤（地址+状态双条件与）。
-				function grAdminStatusFilter(status) {
-					var q = (document.getElementById('admin-filter') || {}).value || '';
-					grAdminApplyFilter(q.toLowerCase(), status);
-				}
-				function grAdminFilter(q) {
-					q = q.toLowerCase();
-					var sel = document.getElementById('admin-status-filter');
-					var status = sel ? sel.value : '';
-					grAdminApplyFilter(q, status);
-				}
-				function grAdminApplyFilter(q, status) {
-					document.querySelectorAll('#admin-rows tr[data-addr]').forEach(function (r) {
-						var addrOk = r.getAttribute('data-addr').indexOf(q) >= 0;
-						var statusOk = !status || r.getAttribute('data-status') === status;
-						r.style.display = (addrOk && statusOk) ? '' : 'none';
-					});
-				}
-			</script>
 			<h3>{ Tr(lang, "admin.createMailbox") }</h3>
 			<form method="post" action="/admin/mailboxes" class="actions">
 				<input type="hidden" name="csrf_token" value={ csrf }/>

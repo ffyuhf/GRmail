@@ -152,4 +152,41 @@
 			if (!window.confirm(msg)) { e.preventDefault(); }
 		}
 	}, true);
+
+	/* ── ⑤ B-S批 F2（裁决 A 2026-10-09 13:34）：内联事件外迁承载（CSP
+	 *     script-src 'self' 配套——原模板 onclick/onchange/oninput 清除） ── */
+
+	/* ⑤a admin 邮箱管理页复合过滤（迁自 admin.templ 内联脚本——G4/D3
+	 *     地址+状态双条件与语义零变化；元素不存在页面零动作） */
+	function grmailApplyAdminFilter(q, status) {
+		document.querySelectorAll("#admin-rows tr[data-addr]").forEach(function (r) {
+			var addrOk = r.getAttribute("data-addr").indexOf(q) >= 0;
+			var statusOk = !status || r.getAttribute("data-status") === status;
+			r.style.display = (addrOk && statusOk) ? "" : "none";
+		});
+	}
+	document.addEventListener("change", function (e) {
+		if (e.target && e.target.id === "admin-status-filter") {
+			var q = (document.getElementById("admin-filter") || {}).value || "";
+			grmailApplyAdminFilter(q.toLowerCase(), e.target.value);
+		}
+	});
+	document.addEventListener("input", function (e) {
+		if (e.target && e.target.id === "admin-filter") {
+			var sel = document.getElementById("admin-status-filter");
+			var status = sel ? sel.value : "";
+			grmailApplyAdminFilter(e.target.value.toLowerCase(), status);
+		}
+	});
+
+	/* ⑤b 批量全选联动（迁自 mail_list.templ onclick——全选框勾选联动全部行；
+	 *     与②计数委托并列独立——HTMX 交换后新行自动覆盖） */
+	document.addEventListener("change", function (e) {
+		if (e.target && e.target.matches &&
+			e.target.matches("#batch-form input[name=all], .tool-bar input[name=all]") &&
+			e.target.type === "checkbox") {
+			var checked = e.target.checked;
+			document.querySelectorAll("input.mail-id").forEach(function (b) { b.checked = checked; });
+		}
+	});
 })();

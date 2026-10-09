@@ -628,7 +628,14 @@ func main() {
 			return tlsMgr.ServerTLSConfig(domain) // STARTTLS 快照（nil 返回=未就绪不通告）
 		},
 		ProtocolDebug: func() bool { return configWatcher.Current().Log.ProtocolDebug }, // U23 协议 debug 快照（命令响应面条件输出）
-		Domain:        domain,
+		// B-S批 F3（裁决 2026-10-09 13:34）：认证失败限流注入（沿提交端点对齐批
+		// F3① 形态——loginAttemptRepo 同源消费+config LoginLimit 快照热生效）
+		Attempts: loginAttemptRepo,
+		AttemptLimit: func() (time.Duration, int64) {
+			ll := configWatcher.Current().LoginLimit
+			return time.Duration(ll.WindowMinutes) * time.Minute, int64(ll.Threshold)
+		},
+		Domain: domain,
 	})
 	go func() {
 		if err := sieveManageServer.ListenAndServe(); err != nil {

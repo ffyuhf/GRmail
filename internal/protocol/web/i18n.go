@@ -95,7 +95,7 @@ func (s *Server) csvImportPOST(c *gin.Context) {
 	}
 	b.WriteString(`</table><p>`)
 	fmt.Fprintf(&b, "%d rows, %d skipped", len(rows), skipped)
-	b.WriteString(` <button type="button" onclick="grmailCsvMerge()">`)
+	b.WriteString(` <button type="button" id="csv-merge-btn">`)
 	b.WriteString(templates.Tr(lang, "compose.csvConfirm"))
 	b.WriteString(`</button></p></div>`)
 	c.Data(http.StatusOK, "text/html; charset=utf-8", b.Bytes())

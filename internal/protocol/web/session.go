@@ -327,6 +327,15 @@ func (s *Server) tryBearerAuth(c *gin.Context) {
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return
 	}
+	// B-S批 F10（既定裁决 2026-10-08 22:09:57「A. 维持全域+加固：二次校验管理员
+	// 身份防异常行提权」）：合成会话前按 token 关联行二次校验 is_admin——防
+	// users 表异常/降权行借 Bearer 通道稳定提权；正常 admin token 零变化（仅拦异常行）
+	u, uerr := s.users.FindByID(ctx, tok.UserID)
+	if uerr != nil || !u.IsAdmin {
+		logger.Info("Bearer 认证拒绝（关联用户非管理员）", "user_id", tok.UserID)
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
 	// IP 绑定判定（行内比对——拒绝原因可观测；C2 参照）
 	if tok.ClientIP != "" && tok.ClientIP != c.ClientIP() {
 		logger.Info("Bearer 认证拒绝（IP 不符）", "bound", tok.ClientIP, "cur", c.ClientIP())

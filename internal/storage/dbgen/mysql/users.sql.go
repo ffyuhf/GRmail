@@ -89,6 +89,35 @@ func (q *Queries) GetAdmin2FAByID(ctx context.Context, id int64) (GetAdmin2FAByI
 	return i, err
 }
 
+const getUserByID = `-- name: GetUserByID :one
+SELECT id, username, password_hash, is_admin, created_at, updated_at
+FROM users
+WHERE id = ?
+`
+
+type GetUserByIDRow struct {
+	ID           int64
+	Username     string
+	PasswordHash string
+	IsAdmin      bool
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
+func (q *Queries) GetUserByID(ctx context.Context, id int64) (GetUserByIDRow, error) {
+	row := q.db.QueryRowContext(ctx, getUserByID, id)
+	var i GetUserByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.PasswordHash,
+		&i.IsAdmin,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getUserByName = `-- name: GetUserByName :one
 SELECT id, username, password_hash, is_admin, created_at, updated_at
 FROM users

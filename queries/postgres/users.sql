@@ -8,6 +8,11 @@ SELECT id, username, password_hash, is_admin, created_at, updated_at
 FROM users
 WHERE username = $1;
 
+-- name: GetUserByID :one
+SELECT id, username, password_hash, is_admin, created_at, updated_at
+FROM users
+WHERE id = $1;
+
 -- name: UpdateUserPassword :exec
 UPDATE users
 SET password_hash = $1, updated_at = $2

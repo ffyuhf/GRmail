@@ -26,6 +26,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"sync"
 
@@ -94,6 +95,12 @@ func (s *SignerService) reloadKey() error {
 	c := s.conf
 	if c.Selector == "" || c.KeyPath == "" || c.Algorithm == "" {
 		return ErrKeyNotConfigured
+	}
+	// B-S批 F9①：私钥文件权限校验——组/其他可读写（mode&0o066≠0）即告警（告警不
+	// 拒绝：umask 环境差异容忍+管理员自治；rfc6376 §6 键保密义务的运维提示面）
+	if fi, serr := os.Stat(c.KeyPath); serr == nil && fi.Mode().Perm()&0o066 != 0 {
+		slog.Warn("DKIM 私钥文件权限过宽（建议 0600）",
+			"path", c.KeyPath, "mode", fi.Mode().Perm().String())
 	}
 	data, err := os.ReadFile(c.KeyPath)
 	if err != nil {
@@ -171,8 +178,10 @@ func (s *SignerService) OnConfigChange(newCfg *config.Config) {
 		s.key = nil // 显式清空配置：签名进入未配置态（后续 Sign 显式报错）
 	default:
 		// 键重载失败：保留旧键（订阅回调约定：错误仅记录告警——config.Subscriber 注释）；
-		// 失败原因经日志输出，下一轮变更重试
-		fmt.Fprintf(os.Stderr, "auth: DKIM 键热重载失败，保留旧键: %v\n", err)
+		// 失败原因经结构化日志输出（B-S批 F9③——原 fmt.Fprintf(os.Stderr) 绕过
+		// slog 装配，LogID 链断；热重载为全局事件无请求 ctx，走默认 logger——
+		// observability.SetupLogger 已 SetDefault）下一轮变更重试
+		slog.Warn("auth: DKIM 键热重载失败，保留旧键", "error", err)
 	}
 }
 

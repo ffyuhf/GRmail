@@ -22,12 +22,23 @@ import (
 	"log/slog"
 	"net"
 	"sync/atomic"
+	"time"
 
 	"GRmail/internal/account"
 	"GRmail/internal/observability"
 	"GRmail/internal/sieve"
 	"GRmail/internal/storage"
 )
+
+// AttemptRecorder 认证失败计数窄接口（B-S批 F3——裁决「限流+校验两面本批实施」
+// 2026-10-09 13:34：storage.LoginAttemptRepo 前三方法隐式满足；窄接口形态沿 smtp
+// 提交端点对齐批 F3① 先例，managesieve 包零 storage import，架构第四章依赖方向
+// 保持）。nil=限流关闭（渐进态）。
+type AttemptRecorder interface {
+	RecordAttempt(ctx context.Context, subjectKey, ip string, success bool, at time.Time) error
+	CountRecentFails(ctx context.Context, subjectKey string, since time.Time) (int64, error)
+	ClearSubject(ctx context.Context, subjectKey string) error
+}
 
 // ErrTLSNotReady TLS 未就绪哨兵（调用方跳过挂载+告警——沿 U6/U7/U8 先例；
 // 本服务 4190 为明文承载+STARTTLS 升级形态，无证书时 STARTTLS 不通告）。
@@ -59,7 +70,12 @@ type ServerConfig struct {
 	TLSConfig     func() *tls.Config      // STARTTLS 快照（nil/nil 返回=未就绪不通告）
 	Quota         func() QuotaConfig      // HAVESPACE 配额快照（nil=缺省档）
 	ProtocolDebug func() bool             // 协议 debug 快照（U23——config Log.ProtocolDebug；nil=false 缺省热生效，命令响应面条件输出）
-	Domain        string                  // OWNER 能力与 IMPLEMENTATION 标识
+	// B-S批 F3（裁决 2026-10-09 13:34「SCRAM 之后做，本批限流+脚本校验」）：
+	// 认证失败计数仓储与限流参数（沿 smtp 提交端点对齐批 F3① 注入位先例；
+	// nil=限流关闭渐进态；SCRAM-SHA-1〔rfc5804 L692 MUST〕经干系人裁决归后续批次）
+	Attempts     AttemptRecorder
+	AttemptLimit func() (window time.Duration, threshold int64)
+	Domain       string // OWNER 能力与 IMPLEMENTATION 标识
 }
 
 // protocolDebug 协议 debug 快照读取（U23；nil 注入=禁用——缺省零输出零行为变化）。

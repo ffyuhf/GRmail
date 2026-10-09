@@ -101,3 +101,11 @@ func VerifyPassword(password, phc string) (bool, error) {
 	got := argon2.IDKey([]byte(password), salt, timeIter, memoryKiB, threads, uint32(len(want)))
 	return subtle.ConstantTimeCompare(got, want) == 1, nil
 }
+
+// dummyVerifyHash 时序拉平用固定 argon2id 哈希（B-S批 F7——登录用户名枚举侧信道
+// 收口：不存在/影子/禁用路径执行与真实校验同量级 argon2 计算，响应时序不可区分；
+// init 一次性计算〔~百 ms 启动成本〕，校验结果恒失败且丢弃——仅消费计算时延）。
+var dummyVerifyHash = func() string {
+	h, _ := HashPassword("grmail-timing-equalizer-dummy")
+	return h
+}()

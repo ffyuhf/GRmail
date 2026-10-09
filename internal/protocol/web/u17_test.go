@@ -45,7 +45,10 @@ func TestU17ComposeEditorRender(t *testing.T) {
 		`id="editor-initial"`,
 		`id="compose-page"`,
 		`id="fullscreen-btn"`,
-		`onsubmit="return grmailComposeSync();"`,
+		// B-S批 F2 断言形态适配：提交桥接改 compose.js 内 submit 绑定（原 form
+		// onsubmit 内联清除——CSP 配套外迁；页面锚=form id+外链脚本引用）
+		`id="compose-form"`,
+		`src="/static/compose.js"`,
 		"初始正文", // 初始内容经隐藏 textarea 文本携带（转义细节不锚）
 		"ql-bold", "ql-image", "ql-clean",
 		"全屏书写", "退出全屏", // 全屏按钮双语 data 属性

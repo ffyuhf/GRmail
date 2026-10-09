@@ -155,7 +155,7 @@ templ MailListFragment(d *MailListData) {
 			<span class="sel-count" data-fmt={ Tr(lang, "mail.selectedFmt") }>0</span>
 			<form hx-post="/mails/batch" hx-target="#mail-list" id="batch-form">
 				<input type="hidden" name="csrf_token" value={ d.CSRF }/>
-				<label class="inline"><input type="checkbox" name="all" onclick="document.querySelectorAll('.mail-id').forEach(e=>e.checked=this.checked)"/>{ Tr(lang, "mail.selectAll") }</label>
+				<label class="inline"><input type="checkbox" name="all"/>{ Tr(lang, "mail.selectAll") }</label>
 				<select name="action" class="btn-sm">
 					<option value="mark-read">{ Tr(lang, "mail.markRead") }</option>
 					<option value="mark-unread">{ Tr(lang, "mail.markUnread") }</option>

@@ -216,7 +216,13 @@ func (s *Server) attachmentGET(c *gin.Context) {
 
 	disposition := "attachment"
 	if c.Query("cid") != "" {
-		disposition = "inline" // CID 内联资源：正文内嵌呈现
+		// B-S批 F2（裁决 A）：CID 内联白名单——仅 image/audio/video 可 inline
+		// （text/html 附件强制 attachment——源站同源渲染面收口；正文 iframe sandbox
+		// 渲染通道不受影响，仅直链收紧；FR-013 ⑨ 图片内联判定项保持）
+		if strings.HasPrefix(contentType, "image/") || strings.HasPrefix(contentType, "audio/") ||
+			strings.HasPrefix(contentType, "video/") {
+			disposition = "inline" // CID 内联资源：正文内嵌呈现（白名单内）
+		}
 	}
 	if contentType == "" {
 		contentType = "application/octet-stream"

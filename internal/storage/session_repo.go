@@ -97,6 +97,9 @@ type UserRepo interface {
 	EnsureAdmin(ctx context.Context, u *User) error
 	// FindByName 按用户名查管理员；无行返回 ErrUserNotFound。
 	FindByName(ctx context.Context, name string) (*User, error)
+	// FindByID 按 ID 查管理员（B-S批 F10——既定裁决 2026-10-08 22:09:57「维持全域
+	// +加固」：Bearer 合成会话前二次校验管理员身份的消费位；无行返回 ErrUserNotFound）。
+	FindByID(ctx context.Context, id int64) (*User, error)
 	// UpdatePassword 更新管理员密码哈希。
 	UpdatePassword(ctx context.Context, id int64, hash string) error
 
@@ -262,6 +265,34 @@ func (r *SQLiteUserRepo) EnsureAdmin(ctx context.Context, u *User) error {
 // FindByName 按用户名查管理员；无行返回 ErrUserNotFound（登录防枚举语义由上层统一拒绝承载）。
 func (r *SQLiteUserRepo) FindByName(ctx context.Context, name string) (*User, error) {
 	row, err := r.q.GetUserByName(ctx, name)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrUserNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("查询管理员: %w", err)
+	}
+	created, err := parseTimestamp(row.CreatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("解析管理员 created_at: %w", err)
+	}
+	updated, err := parseTimestamp(row.UpdatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("解析管理员 updated_at: %w", err)
+	}
+	return &User{
+		ID:           row.ID,
+		Username:     row.Username,
+		PasswordHash: row.PasswordHash,
+		IsAdmin:      row.IsAdmin,
+		CreatedAt:    created,
+		UpdatedAt:    updated,
+	}, nil
+}
+
+// FindByID 按 ID 查管理员；无行返回 ErrUserNotFound（B-S批 F10——Bearer 合成会话前
+// 二次校验管理员身份消费位；查询 GetUserByID 三库同构）。
+func (r *SQLiteUserRepo) FindByID(ctx context.Context, id int64) (*User, error) {
+	row, err := r.q.GetUserByID(ctx, id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrUserNotFound
 	}

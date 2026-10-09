@@ -343,6 +343,15 @@ func (s *Server) setupPostDatabase(c *gin.Context) error {
 	default:
 		return &errSetupStep{msg: "数据库类型必须为 sqlite / mysql / postgres"}
 	}
+	// B-S批 F11（裁决 A 2026-10-09 13:34）：高级模式空值提交=保持既有 DSN——回显
+	// 留空（password 型输入）的配套语义：已配置同 driver 且表单未填新连接串时
+	// 沿用既有 DSN（以既有 DSN 探活验证连接仍可用）；首次配置（无既有/换 driver）
+	// 走下方必填拒绝——首次部署流程零变化
+	if driver != "sqlite" && dsn == "" && c.PostForm("dsnMode") != "basic" {
+		if cur := s.currentConfig(c); cur != nil && cur.Database.Driver == driver && cur.Database.DSN != "" {
+			dsn = cur.Database.DSN
+		}
+	}
 	if driver != "sqlite" && dsn == "" {
 		return &errSetupStep{msg: "MySQL/PostgreSQL 必须填写数据库连接信息"}
 	}

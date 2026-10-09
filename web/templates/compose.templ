@@ -33,7 +33,7 @@ templ ComposeView(d *ComposeData) {
 	{{ lang := NormalizeLang(d.Lang) }}
 	@AppFrame(lang, Tr(lang, "compose.title"), Tr(lang, "compose.title"), d.IsAdmin, d.CSRF, d.Nav) {
 		<div class="main" id="compose-page" data-img-max-edge={ fmt.Sprintf("%d", d.ImgMaxEdgeAttr()) } data-jpeg-quality={ fmt.Sprintf("%g", d.JpegQualityAttr()) } data-csv-err={ Tr(lang, "compose.csvErr") }>
-			<form method="post" action="/compose" enctype="multipart/form-data" onsubmit="return grmailComposeSync();">
+			<form method="post" action="/compose" enctype="multipart/form-data" id="compose-form">
 				<input type="hidden" name="csrf_token" value={ d.CSRF }/>
 				if d.DraftID > 0 {
 					<input type="hidden" name="draft_id" value={ fmt.Sprintf("%d", d.DraftID) }/>
@@ -57,7 +57,7 @@ templ ComposeView(d *ComposeData) {
 								<option value="f-cc">{ Tr(lang, "compose.cc") }</option>
 								<option value="f-bcc">{ Tr(lang, "compose.bcc") }</option>
 							</select>
-							<button class="secondary" type="button" onclick="grmailCsvImport()">{ Tr(lang, "compose.csvParse") }</button>
+							<button class="secondary" type="button" id="csv-parse-btn">{ Tr(lang, "compose.csvParse") }</button>
 						</div>
 						<div id="csv-result"></div>
 					</details>
@@ -73,9 +73,9 @@ templ ComposeView(d *ComposeData) {
 					<div class="section-label">
 						<span>{ Tr(lang, "compose.body") }</span>
 						<span class="tool-spacer"></span>
-						<button class="secondary btn-sm" type="button" id="fullscreen-btn" onclick="grmailComposeFullscreen()"
-							data-enter={ Tr(lang, "compose.fullscreen") }
-							data-exit={ Tr(lang, "compose.exitFullscreen") }>{ Tr(lang, "compose.fullscreen") }</button>
+						<button class="secondary btn-sm" type="button" id="fullscreen-btn"
+								data-enter={ Tr(lang, "compose.fullscreen") }
+								data-exit={ Tr(lang, "compose.exitFullscreen") }>{ Tr(lang, "compose.fullscreen") }</button>
 					</div>
 					<input type="hidden" name="body" id="f-body" value=""/>
 					<div id="compose-toolbar">
@@ -162,166 +162,7 @@ templ ComposeView(d *ComposeData) {
 			</form>
 			<link rel="stylesheet" href="/static/quill.snow.css"/>
 			<script src="/static/quill.js"></script>
-			<script>
-				// ── U17 富文本编辑器（G3/G4/G9——零框架内联 JS，沿 CSV 先例）──
-				// 初始化：snow 主题+自定义 toolbar 容器（模板渲染双语 title）；
-				// 初始内容经隐藏 textarea 携带（HTML 源文本）——dangerouslyPasteHTML
-				// 注入（自产内容：草稿回填/回信预填，接收侧 iframe sandbox 既有防线）。
-				let grmailEditor = null;
-				// U22 图片压缩工程常量（计划书 1.5③——实现级常量非 config 承载：
-				// 最长边重采样上限/JPEG 质量档——D8#11：config 注入（compose-page
-				// data-* 承载——改 config.json 热加载后下次渲染生效；缺省兜底 1920/0.85）
-				const GRMAIL_IMG_MAX_EDGE = parseInt(document.getElementById('compose-page').dataset.imgMaxEdge) || 1920;
-				const GRMAIL_JPEG_QUALITY = parseFloat(document.getElementById('compose-page').dataset.jpegQuality) || 0.85;
-				function grmailEditorInit() {
-					if (typeof Quill === 'undefined') { return; }
-					grmailEditor = new Quill('#editor-container', {
-						theme: 'snow',
-						modules: {
-							toolbar: {
-									container: '#compose-toolbar',
-									handlers: {
-										// U22：undo/redo 无 toolbar 内置按钮（源码核对
-										// 零 ql-undo/ql-redo 注册）——经 history 模块
-										// （内置）两行桥接
-										undo: function() { this.quill.history.undo(); },
-										redo: function() { this.quill.history.redo(); },
-										// E-B（D8#13）：表格插入——Quill 2.0.3 内置 table
-										// 模块（insertTable/行操作 API——vendor 源码实证）
-										// 工具栏化激活：固定 2×2 起步（计划书 2.3-2 候选 A
-										// 最小面自决；单元格编辑经 contenteditable 既有承载）
-										table: function() { this.quill.getModule('table').insertTable(2, 2); }
-									}
-								},
-								// E-B：table 模块显式启用（snow 主题下幂等——注册形态
-								// 与 vendor 内置一致，显式声明消除主题默认差异）
-								table: true,
-							// U22 图片统一压缩接线（源码核对：工具栏选择/粘贴 files/
-							// 拖放三路径全部汇聚 uploader.upload→options.handler——
-							// 一处覆盖全入口；mimetypes 扩展 png/jpeg/gif/webp 与
-							// image/* 等价，svg 排除——data: 内联脚本面收敛）
-							uploader: {
-								mimetypes: ['image/png', 'image/jpeg', 'image/gif', 'image/webp'],
-								handler: grmailUploaderHandler
-							}
-						}
-					});
-					const initial = document.getElementById('editor-initial').value;
-					if (initial && initial.trim() !== '') {
-						grmailEditor.clipboard.dangerouslyPasteHTML(initial);
-					}
-				}
-				// Blob/File → data: URL（FileReader 原语——压缩输出与原样兜底共用）。
-				function grmailReadAsDataURL(blob) {
-					return new Promise(resolve => {
-						const reader = new FileReader();
-						reader.onload = () => resolve(reader.result);
-						reader.onerror = () => resolve('');
-						reader.readAsDataURL(blob);
-					});
-				}
-				// U22 图片压缩纯函数（Canvas 最长边重采样——缓解 base64 膨胀收口 U19
-				// 登记项③）：①非 image/* 或解码失败：原样返回（尽力语义）；②最长边
-				// ≤1920：原样零重采样（G9 小图保真）；③最长边 >1920：等比缩放至 1920
-				// ——PNG 输入保 PNG（透明通道无损口径），其余输出 JPEG quality 0.85。
-				async function grmailCompressImage(file) {
-					if (!file.type || !file.type.startsWith('image/')) { return grmailReadAsDataURL(file); }
-					// D8#14：gif 跳过压缩——Canvas 重采样会静默丢失动画（单帧化），
-					// 原样内联保真（U22 登记项收口：动图保动画）
-					if (file.type === 'image/gif') { return grmailReadAsDataURL(file); }
-					let bmp = null;
-					try { bmp = await createImageBitmap(file); } catch (e) { bmp = null; }
-					if (bmp && Math.max(bmp.width, bmp.height) > GRMAIL_IMG_MAX_EDGE) {
-						const scale = GRMAIL_IMG_MAX_EDGE / Math.max(bmp.width, bmp.height);
-						const w = Math.max(1, Math.round(bmp.width * scale));
-						const h = Math.max(1, Math.round(bmp.height * scale));
-						const canvas = document.createElement('canvas');
-						canvas.width = w;
-						canvas.height = h;
-						canvas.getContext('2d').drawImage(bmp, 0, 0, w, h);
-						const type = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
-						const out = await new Promise(r => canvas.toBlob(r, type, GRMAIL_JPEG_QUALITY));
-						if (bmp.close) { bmp.close(); }
-						if (out) { return grmailReadAsDataURL(out); }
-					}
-					if (bmp && bmp.close) { bmp.close(); }
-					return grmailReadAsDataURL(file);
-				}
-				// U22 uploader 模块自定义 handler——默认 readAsDataURL 直插语义的压缩版
-				// 复刻（逐图压缩→顺序 insertEmbed→光标后移；G9 data: 内联形态不变）。
-				function grmailUploaderHandler(range, files) {
-					const uploads = Array.from(files).map(f => grmailCompressImage(f));
-					Promise.all(uploads).then(urls => {
-						urls.forEach(u => {
-							if (u) { grmailEditor.insertEmbed(range.index, 'image', u); }
-						});
-						grmailEditor.setSelection(range.index + urls.length);
-					});
-				}
-				// 提交桥接：编辑器容器非表单原生控件——submit 前将 root.innerHTML
-				// 写入隐藏 input body（随表单 POST——端点形态零变更）。
-				function grmailComposeSync() {
-					if (grmailEditor) {
-						document.getElementById('f-body').value = grmailEditor.root.innerHTML;
-					}
-					return true;
-				}
-				// G4 写信页全屏覆写：整页容器（含收件人/主题/附件区）requestFullscreen
-				// /exitFullscreen 切换（Fullscreen API 原生——纯 JS 零库；ESC 系统默认退出）。
-				function grmailComposeFullscreen() {
-					const page = document.getElementById('compose-page');
-					const btn = document.getElementById('fullscreen-btn');
-					if (!document.fullscreenElement) {
-						page.requestFullscreen().then(() => {
-							btn.textContent = btn.getAttribute('data-exit');
-						}).catch(() => {});
-					} else {
-						document.exitFullscreen().then(() => {
-							btn.textContent = btn.getAttribute('data-enter');
-						}).catch(() => {});
-					}
-				}
-				// E-A（D8#10）：macOS 平台快捷键提示 ⌘ 记法自适应——U19「统一 Ctrl 记法
-				// 不分支」口径的平台面收口（Quill shortKey 内部已平台自适应——本函数仅
-				// 提示文案层；服务端渲染 title 保持 Ctrl 记法初值〔u17/u22 断言锚零触碰〕，
-				// Mac 客户端加载后改写为 ⌘ 记法；navigator.platform 与 Quill 源码同源口径）。
-				function grmailAdaptShortcutTitles() {
-					if (!/Mac|iPhone|iPad/.test(navigator.platform || '')) { return; }
-					document.querySelectorAll('#compose-toolbar button[title*="(Ctrl+"]').forEach(function (btn) {
-						btn.title = btn.title.replace(/\(Ctrl\+([A-Z])\)/g, '(⌘$1)');
-					});
-				}
-				grmailEditorInit();
-				grmailAdaptShortcutTitles();
-				// ── CSV 候选合入（U16 Q5-A 既有——勾选行地址合并进所选 to/cc/bcc 输入框）──
-				function grmailCsvImport() {
-					const f = document.getElementById('csv-file').files[0];
-					if (!f) { return; }
-					const fd = new FormData();
-					fd.append('csrf_token', document.querySelector('input[name=csrf_token]').value);
-					fd.append('file', f);
-					fetch('/compose/csv-import', { method: 'POST', body: fd })
-						.then(r => r.ok ? r.text() : Promise.reject(r.status))
-						.then(html => {
-							document.getElementById('csv-result').innerHTML = html;
-						})
-						.catch(() => {
-							var pageEl = document.getElementById('compose-page');
-							var csvErr = pageEl && pageEl.dataset ? pageEl.dataset.csvErr : '';
-							document.getElementById('csv-result').innerHTML = '<p class="error">' + (csvErr || 'CSV parse failed') + '</p>';
-						});
-				}
-				function grmailCsvMerge() {
-					const target = document.getElementById('csv-target').value;
-					const boxes = document.querySelectorAll('#csv-result input.csv-addr:checked');
-					const addrs = Array.from(boxes).map(b => b.value);
-					if (addrs.length === 0) { return; }
-					const el = document.getElementById(target);
-					const cur = el.value.trim();
-					const merged = cur ? cur + ', ' + addrs.join(', ') : addrs.join(', ');
-					el.value = merged;
-				}
-			</script>
+			<script src="/static/compose.js"></script>
 		</div>
 	}
 }

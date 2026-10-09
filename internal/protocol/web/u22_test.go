@@ -15,6 +15,7 @@ package web
 import (
 	"context"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -74,22 +75,33 @@ func TestU22ToolbarControlsRender(t *testing.T) {
 		}
 	}
 	// 压缩注入锚：data-* 注入（D8#11——config 承载后常量字面量废止，断言面随
-	// 承载形态更新：缺省档经 applyEditorConf 渲染为 data 属性）+纯函数+uploader
-	// 一处接线+mimetypes 扩展（svg 排除）+gif 跳过压缩（D8#14）
+	// 承载形态更新：缺省档经 applyEditorConf 渲染为 data 属性）。
+	// B-S批 F2（裁决 A 2026-10-09 13:34）断言形态适配：内联脚本外迁 compose.js——
+	// 页面断言 data-* 属性+外链 src 引用；函数/逻辑锚（纯函数+uploader 一处接线+
+	// mimetypes 扩展〔svg 排除〕+gif 跳过压缩〔D8#14〕+history 桥接）迁移至
+	// compose.js 文件内容断言——断言语义保持「锚在位」（断言面零删减）
 	for _, want := range []string{
 		`data-img-max-edge="1920"`, `data-jpeg-quality="0.85"`,
+		`src="/static/compose.js"`,
+	} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("压缩注入锚缺失（页面）: %q", want)
+		}
+	}
+	composeJS, rerr := os.ReadFile("../../../web/static/compose.js")
+	if rerr != nil {
+		t.Fatalf("compose.js 读取失败: %v", rerr)
+	}
+	js := string(composeJS)
+	for _, want := range []string{
 		"file.type === 'image/gif'",
 		"grmailCompressImage", "grmailUploaderHandler", "grmailReadAsDataURL",
 		"uploader:", `'image/png'`, `'image/webp'`, "createImageBitmap",
+		// undo/redo history 桥接锚（源码核对无 ql-undo 内置注册——handler 两行桥接）
+		"history.undo()", "history.redo()",
 	} {
-		if !strings.Contains(s, want) {
-			t.Fatalf("压缩注入锚缺失: %q", want)
-		}
-	}
-	// undo/redo history 桥接锚（源码核对无 ql-undo 内置注册——handler 两行桥接）
-	for _, want := range []string{"history.undo()", "history.redo()"} {
-		if !strings.Contains(s, want) {
-			t.Fatalf("history 桥接锚缺失: %q", want)
+		if !strings.Contains(js, want) {
+			t.Fatalf("压缩注入锚缺失（compose.js）: %q", want)
 		}
 	}
 	// 既有控件零回归锚（U17 十二按钮代表+U19 快捷键 title 保持）

@@ -140,10 +140,14 @@ func (s *Service) ActivateMailbox(ctx context.Context, addr, password string) er
 func (s *Service) VerifyCredentials(ctx context.Context, addr, password string) (*storage.Mailbox, error) {
 	m, err := s.GetMailbox(ctx, addr)
 	if err != nil {
+		// B-S批 F7：时序拉平——不存在路径执行 dummy argon2 校验（响应时序与真实
+		// 校验同量级，用户名枚举侧信道收口；结果丢弃，语义仍统一 ErrInvalidCredentials）
+		_, _ = VerifyPassword(password, dummyVerifyHash)
 		return nil, ErrInvalidCredentials // 不存在 → 统一拒绝
 	}
 	if m.Status != storage.MailboxStatusActive || m.PasswordHash == "" {
-		return nil, ErrInvalidCredentials // 影子（无凭据不可登录，FR-004）/禁用 → 统一拒绝
+		_, _ = VerifyPassword(password, dummyVerifyHash) // B-S批 F7：影子/禁用路径同款时序拉平
+		return nil, ErrInvalidCredentials                // 影子（无凭据不可登录，FR-004）/禁用 → 统一拒绝
 	}
 	ok, err := VerifyPassword(password, m.PasswordHash)
 	if err != nil || !ok {

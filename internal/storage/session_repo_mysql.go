@@ -147,6 +147,26 @@ func (r *MySQLUserRepo) FindByName(ctx context.Context, name string) (*User, err
 	}, nil
 }
 
+// FindByID 按 ID 查管理员；无行返回 ErrUserNotFound（B-S批 F10——Bearer 合成会话
+// 前二次校验管理员身份消费位）。
+func (r *MySQLUserRepo) FindByID(ctx context.Context, id int64) (*User, error) {
+	row, err := r.q.GetUserByID(ctx, id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrUserNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("查询管理员: %w", err)
+	}
+	return &User{
+		ID:           row.ID,
+		Username:     row.Username,
+		PasswordHash: row.PasswordHash,
+		IsAdmin:      row.IsAdmin,
+		CreatedAt:    row.CreatedAt,
+		UpdatedAt:    row.UpdatedAt,
+	}, nil
+}
+
 // UpdatePassword 更新管理员密码哈希（特权变化——上层同步重建会话）。
 func (r *MySQLUserRepo) UpdatePassword(ctx context.Context, id int64, hash string) error {
 	if err := r.q.UpdateUserPassword(ctx, dbgen.UpdateUserPasswordParams{

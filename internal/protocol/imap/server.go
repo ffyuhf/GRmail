@@ -21,6 +21,7 @@
 package imap
 
 import (
+	"bytes"
 	"crypto/tls"
 	"errors"
 	"log/slog"
@@ -40,16 +41,58 @@ import (
 // debugWriter 协议 debug 条件 Writer（U21——H5 IMAP debug 输出等价承载）。
 // go-imap v2 经 Options.DebugWriter 输出 raw ingress/egress 帧；本类型每次 Write 读
 // 快照决定输出与否（false=静默丢弃——恒返回 len(p) 保持消费语义）。
+// B-S批 F4（裁决 A 2026-10-09 13:34）：认证帧凭据掩码——行缓冲状态机：
+// ①AUTHENTICATE 命令行（任意 tag 后跟 AUTHENTICATE token）的 initial-response
+// 参数掩码 [REDACTED]；②SASL continuation 轮（上一完整行为 "+" 前缀 challenge——
+// rfc9051 §7.5 continuation 数据形态）的下一客户端行整行掩码（base64 凭据无命令
+// 词可判，行级状态承载）；非认证帧原样；非 debug 模式零输出零行为变化。
+// 多连接共享同一 Writer 实例（Options 全局单份）——互斥锁保护行缓冲状态。
 type debugWriter struct {
 	enabled func() bool // 快照供给（ServerConfig.ProtocolDebug 注入；nil=禁用）
+
+	mu             sync.Mutex
+	buf            []byte // 行缓冲（Write 可能半行——拼至行界逐行处理）
+	afterChallenge bool   // 上一完整行为 "+" 前缀 continuation challenge（下一行掩码）
 }
 
-// Write 条件输出单帧（Debug 级；行尾空白剥除，多行帧保持原样输出）。
+// Write 条件输出（行缓冲掩码后逐行输出；Debug 级；行尾空白剥除）。
 func (w *debugWriter) Write(p []byte) (int, error) {
-	if w.enabled != nil && w.enabled() {
-		slog.Debug("imap_debug", "proto", "imap", "data", strings.TrimRight(string(p), "\r\n"))
+	if w.enabled == nil || !w.enabled() {
+		return len(p), nil
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.buf = append(w.buf, p...)
+	for {
+		i := bytes.IndexByte(w.buf, '\n')
+		if i < 0 {
+			break
+		}
+		line := string(w.buf[:i+1])
+		w.buf = w.buf[i+1:]
+		out, masked := w.maskLine(line)
+		slog.Debug("imap_debug", "proto", "imap", "data", strings.TrimRight(out, "\r\n"))
+		w.afterChallenge = masked
 	}
 	return len(p), nil
+}
+
+// maskLine 单行掩码判定（B-S批 F4）。
+// 返回：输出行；该行是否为服务端 continuation challenge（"+" 前缀——下一客户端行掩码）。
+func (w *debugWriter) maskLine(line string) (string, bool) {
+	if strings.HasPrefix(line, "+") {
+		return line, true // continuation challenge——下一行（客户端凭据应答）掩码
+	}
+	if w.afterChallenge {
+		return "[REDACTED]\r\n", false // challenge 后的客户端行=base64 凭据——整行掩码
+	}
+	trimmed := strings.TrimRight(line, "\r\n")
+	fields := strings.Fields(trimmed)
+	if len(fields) >= 2 && strings.EqualFold(fields[1], "AUTHENTICATE") && len(fields) >= 3 {
+		// tag AUTHENTICATE mech [initial-response]——保留 tag+命令+机制，掩第四段起
+		return fields[0] + " " + fields[1] + " " + fields[2] + " [REDACTED]\r\n", false
+	}
+	return line, false
 }
 
 // uidValidity 固定 UIDVALIDITY（Q4-A：零 schema 承载；rfc9051 2.3.1.1 递增义务

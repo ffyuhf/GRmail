@@ -69,6 +69,9 @@ type session struct {
 	r      *bufio.Reader
 	w      *bufio.Writer
 	logID  string
+	// B-S批 F4（裁决 A 2026-10-09 13:34）：challenge 轮应答帧掩码标志——cmdAuth
+	// 发 "+ " 后置位，下一 readLine 为 base64 凭据应答（无命令词可判），读毕复位
+	authRedact bool
 
 	mbox *storage.Mailbox // 认证后邮箱（nil=AUTHORIZATION 态）
 	msgs []pop3Msg        // maildrop 快照（message-number=index+1）
@@ -182,7 +185,9 @@ func (ss *session) cmdAuth(arg string) {
 	}
 	if resp == "" && !zeroLengthIR { // 省略形态：challenge 一轮（"+ "，rfc5034 §4 continue-req）
 		ss.writeLine("+ ")
+		ss.authRedact = true // B-S批 F4：下一 readLine 为 challenge 应答（base64 凭据）
 		line, err := ss.readLine()
+		ss.authRedact = false
 		if err != nil {
 			return
 		}
@@ -547,8 +552,32 @@ func (ss *session) readLine() (string, error) {
 	if len(line) > readLineMax {
 		return "", errors.New("pop3: 命令行超长")
 	}
-	ss.debugFrame("C", line) // U21 协议 debug（开启时输出——命令面）
+	// B-S批 F4（裁决 A 2026-10-09 13:34）：认证帧凭据掩码——AUTH 族命令行
+	// initial-response 参数与 challenge 轮应答帧（authRedact 置位时整行）替换
+	// [REDACTED]（ProtocolDebug 开启时明文口令不落 30 天日志文件；非认证帧原样；
+	// 非 debug 模式零输出零行为变化）
+	if ss.authRedact {
+		ss.debugFrame("C", "[REDACTED]")
+	} else {
+		ss.debugFrame("C", redactAuthLine(line))
+	}
 	return line, nil
+}
+
+// redactAuthLine AUTH 命令行凭据掩码（B-S批 F4）：`AUTH PLAIN <base64>` 形态的
+// initial-response 参数整段替换 [REDACTED]（保留机制名——排障可见认证交互结构）；
+// 无参数形态（省略 initial-response，凭据走 challenge 轮）无凭据可掩原样返回。
+func redactAuthLine(line string) string {
+	trimmed := strings.TrimRight(line, "\r\n")
+	upper := strings.ToUpper(trimmed)
+	if !strings.HasPrefix(upper, "AUTH ") && !strings.HasPrefix(upper, "AUTH\t") {
+		return line // 非认证命令——原样
+	}
+	fields := strings.SplitN(trimmed, " ", 3)
+	if len(fields) == 3 {
+		return fields[0] + " " + fields[1] + " [REDACTED]\r\n"
+	}
+	return line
 }
 
 // writeLine 写单行响应（自动补 CRLF）。
