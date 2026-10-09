@@ -2,6 +2,9 @@
 // 依据：rfc5804 §1.7（能力三项 MUST：IMPLEMENTATION/SIEVE/VERSION；STARTTLS MUST 实现；
 // SASL 通告规则——SASL 空当且仅当通告 STARTTLS）、§1.8（TCP 4190）、§2（命令族全集）；
 // 契约 v1.37.0 2.4 注记（accounts+scripts+语法校验+TLSConfig 快照注入形态；v1.19.0 能力串/v1.33.0 资源限制注记同章承载）；
+// SCRAM认证批（v1.39.0——G2 批准 2026-10-09 23:37:36）：AUTHENTICATE 增 SCRAM-SHA-1
+// 机制（rfc5804 §1.6 L692-694 MUST）——凭据源经 Accounts 既有注入（GetSCRAMCredentials
+// 透传迁移 00014 四元组；ServerConfig 零新注入位）；
 // SRS IR-004/FR-011（TC-011 判定②）；NFR-006（明文连接 AUTHENTICATE 一律 NO）。
 // 裁决来源：Q1-R1 全自研（2026-09-21 00:30:59）；G2 批准 2026-09-21 00:36:18。
 // U23 增量（可观测性扩展——U21 登记项②收口，H5 等价）：ServerConfig 增 ProtocolDebug
@@ -12,6 +15,8 @@
 //	2026-09-27 13:40:00 | 扩展 | U23 可观测性扩展：ProtocolDebug 注入位+快照方法
 //	（来源：G2 批准 2026-09-27 13:20:53，U23 计划书 v1.0.0 步骤 5/1.5⑤）
 //	2026-10-08 13:10:00 | 修正 | 文档治理批 C1：头注契约版本引用刷新 v1.8.0→v1.37.0（注释漂移收口；纯注释零行为变更）
+//	2026-10-10 03:25:00 | 扩展 | SCRAM认证批：头注 SCRAM 注记（v1.39.0——机制承载
+//	  归 session.go authSCRAM 函数群；本文件仅注入位语义注记，零代码变更）
 package managesieve
 
 import (

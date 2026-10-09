@@ -1,6 +1,6 @@
 -- name: CreateMailbox :execresult
-INSERT INTO mailboxes (local_part, domain, address, password_hash, status, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?);
+INSERT INTO mailboxes (local_part, domain, address, password_hash, scram_stored_key, scram_server_key, scram_salt, scram_iterations, status, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: GetMailboxByAddress :one
 SELECT id, local_part, domain, address, password_hash, status, created_at, updated_at
@@ -15,7 +15,7 @@ ORDER BY id;
 
 -- name: SetMailboxCredentials :execresult
 UPDATE mailboxes
-SET password_hash = ?, status = 'active', updated_at = ?
+SET password_hash = ?, scram_stored_key = ?, scram_server_key = ?, scram_salt = ?, scram_iterations = ?, status = 'active', updated_at = ?
 WHERE id = ? AND status IN ('active', 'shadow');
 
 -- name: SetMailboxStatus :exec
@@ -68,3 +68,8 @@ SELECT id FROM mailboxes WHERE id = ? FOR UPDATE;
 SELECT id, local_part, domain, address, password_hash, status, created_at, updated_at
 FROM mailboxes
 WHERE id = ?;
+
+-- name: GetSCRAMCredentialsByAddress :one
+SELECT scram_stored_key, scram_server_key, scram_salt, scram_iterations
+FROM mailboxes
+WHERE address = ?;

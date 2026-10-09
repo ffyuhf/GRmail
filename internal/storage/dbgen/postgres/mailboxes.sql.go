@@ -50,19 +50,23 @@ func (q *Queries) ConsumeRecoveryCodeCAS(ctx context.Context, arg ConsumeRecover
 }
 
 const createMailbox = `-- name: CreateMailbox :one
-INSERT INTO mailboxes (local_part, domain, address, password_hash, status, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO mailboxes (local_part, domain, address, password_hash, scram_stored_key, scram_server_key, scram_salt, scram_iterations, status, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 RETURNING id
 `
 
 type CreateMailboxParams struct {
-	LocalPart    string
-	Domain       string
-	Address      string
-	PasswordHash sql.NullString
-	Status       string
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	LocalPart       string
+	Domain          string
+	Address         string
+	PasswordHash    sql.NullString
+	ScramStoredKey  []byte
+	ScramServerKey  []byte
+	ScramSalt       []byte
+	ScramIterations sql.NullInt32
+	Status          string
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
 }
 
 func (q *Queries) CreateMailbox(ctx context.Context, arg CreateMailboxParams) (int64, error) {
@@ -71,6 +75,10 @@ func (q *Queries) CreateMailbox(ctx context.Context, arg CreateMailboxParams) (i
 		arg.Domain,
 		arg.Address,
 		arg.PasswordHash,
+		arg.ScramStoredKey,
+		arg.ScramServerKey,
+		arg.ScramSalt,
+		arg.ScramIterations,
 		arg.Status,
 		arg.CreatedAt,
 		arg.UpdatedAt,
@@ -142,6 +150,31 @@ func (q *Queries) GetMailboxByAddress(ctx context.Context, address string) (GetM
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getSCRAMCredentialsByAddress = `-- name: GetSCRAMCredentialsByAddress :one
+SELECT scram_stored_key, scram_server_key, scram_salt, scram_iterations
+FROM mailboxes
+WHERE address = $1
+`
+
+type GetSCRAMCredentialsByAddressRow struct {
+	ScramStoredKey  []byte
+	ScramServerKey  []byte
+	ScramSalt       []byte
+	ScramIterations sql.NullInt32
+}
+
+func (q *Queries) GetSCRAMCredentialsByAddress(ctx context.Context, address string) (GetSCRAMCredentialsByAddressRow, error) {
+	row := q.db.QueryRowContext(ctx, getSCRAMCredentialsByAddress, address)
+	var i GetSCRAMCredentialsByAddressRow
+	err := row.Scan(
+		&i.ScramStoredKey,
+		&i.ScramServerKey,
+		&i.ScramSalt,
+		&i.ScramIterations,
 	)
 	return i, err
 }
@@ -259,18 +292,30 @@ func (q *Queries) MarkTOTPStep(ctx context.Context, arg MarkTOTPStepParams) (sql
 
 const setMailboxCredentials = `-- name: SetMailboxCredentials :execresult
 UPDATE mailboxes
-SET password_hash = $1, status = 'active', updated_at = $2
-WHERE id = $3 AND status IN ('active', 'shadow')
+SET password_hash = $1, scram_stored_key = $2, scram_server_key = $3, scram_salt = $4, scram_iterations = $5, status = 'active', updated_at = $6
+WHERE id = $7 AND status IN ('active', 'shadow')
 `
 
 type SetMailboxCredentialsParams struct {
-	PasswordHash sql.NullString
-	UpdatedAt    time.Time
-	ID           int64
+	PasswordHash    sql.NullString
+	ScramStoredKey  []byte
+	ScramServerKey  []byte
+	ScramSalt       []byte
+	ScramIterations sql.NullInt32
+	UpdatedAt       time.Time
+	ID              int64
 }
 
 func (q *Queries) SetMailboxCredentials(ctx context.Context, arg SetMailboxCredentialsParams) (sql.Result, error) {
-	return q.db.ExecContext(ctx, setMailboxCredentials, arg.PasswordHash, arg.UpdatedAt, arg.ID)
+	return q.db.ExecContext(ctx, setMailboxCredentials,
+		arg.PasswordHash,
+		arg.ScramStoredKey,
+		arg.ScramServerKey,
+		arg.ScramSalt,
+		arg.ScramIterations,
+		arg.UpdatedAt,
+		arg.ID,
+	)
 }
 
 const setMailboxStatus = `-- name: SetMailboxStatus :exec

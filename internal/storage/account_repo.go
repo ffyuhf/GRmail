@@ -13,6 +13,10 @@
 //	2026-10-01 16:50:00 | 扩展 | U24 双因素认证（G2 批准 2026-10-01 16:41:08）：MailboxRepo
 //	  增 2FA 方法族七方法+TwoFactorState 域类型（契约 v1.20.0 2.1 增量——沿 v1.x
 //	  增量先例；迁移 00009 三库；SQLite 实现落 twofactor_repo.go）
+//	2026-10-09 23:52:00 | 扩展 | SCRAM认证批（G2 批准 2026-10-09 23:37:36 候选全 A）：
+//	  Mailbox 增 SCRAM 四元组字段+SetCredentials 签名扩展（PHC 与四元组单语句原子写
+//	  ——3.1-A）+GetSCRAMCredentialsByAddress 新方法+ErrSCRAMNotProvisioned 哨兵
+//	  （契约 v1.39.0；迁移 00014 三库；存量策略 3.2-A：既有邮箱 NULL 态回退 PLAIN）
 package storage
 
 import (
@@ -65,6 +69,9 @@ type Mailbox struct {
 	Status       MailboxStatus
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
+	// SCRAM SCRAM-SHA-1 服务端四元组（v1.39.0 SCRAM认证批——迁移 00014 列组；
+	// nil=无（影子邮箱/未配备——设密链恒由 service 层派生非 nil））。
+	SCRAM *SCRAMCredentials
 }
 
 // TwoFactorState 邮箱 2FA 绑定态快照（FR-018；表结构 v1.7.0 3.2 增列组——U24）。
@@ -82,6 +89,18 @@ type TwoFactorState struct {
 // Bound 绑定完成判定：密钥与恢复码同时非空（FR-018 登录二步生效条件；pending 态
 // 〔仅密钥无恢复码〕不生效——防绑定中途中断导致无 authenticator 即被要求二步的死锁）。
 func (s *TwoFactorState) Bound() bool { return s.PendingSecret != "" && len(s.CodesHash) > 0 }
+
+// SCRAMCredentials SCRAM-SHA-1 服务端四元组（v1.39.0 SCRAM认证批；表结构 v2.2.0
+// 3.18 列组——迁移 00014 三库）。StoredKey=H(ClientKey)/ServerKey=HMAC(SaltedPassword,
+// "Server Key")（rfc5802 §3 L413-421——argon2id PHC 单向不可逆无法转制，须设密时经
+// account.SCRAMDerive 同步派生）；未配备=行存在而列 NULL（存量邮箱迁移后态——SCRAM
+// 拒绝回退 PLAIN，改密后即具备——G2 候选 3.2-A 裁决 2026-10-09 23:37:36）。
+type SCRAMCredentials struct {
+	StoredKey  []byte // 20B（SHA-1 输出长——rfc5802 §2.2 HMAC 注）
+	ServerKey  []byte // 20B
+	Salt       []byte // 16B（CSPRNG——§9 L1153「randomly generated salt values」）
+	Iterations int    // 4096（§5.1 L679-680 SHOULD ≥4096——G2 候选 3.3-A）
+}
 
 // Folder 文件夹域模型（表 folders；无 ParentID——单层模型 REQ-021）
 type Folder struct {
@@ -115,6 +134,11 @@ var (
 	// 并发同窗重放或回退步（rfc6238 §5.2 L343-347 MUST NOT 第二次接受；mailbox/
 	// users 双表共用哨兵）。
 	ErrTOTPStepConflict = errors.New("twofactor: TOTP 验证步冲突（同窗重放拒绝）")
+	// ErrSCRAMNotProvisioned SCRAM 四元组未配备（SCRAM认证批 2026-10-09——迁移
+	// 00014 前存量邮箱 NULL 态）：调用方以伪装盐继续交互防用户名枚举（rfc5802 §7
+	// 「server may substitute the real reason with "other-error"」防信息披露口径），
+	// 最终 proof 验证统一失败。
+	ErrSCRAMNotProvisioned = errors.New("mailbox: SCRAM 凭据未配备")
 )
 
 // ───────────────────────── 接口族（契约 2.1 逐字） ─────────────────────────
@@ -129,7 +153,10 @@ type MailboxRepo interface {
 	// ListByStatus 按状态列举邮箱（FR-003 catch-all 聚合用 status=shadow 查询）。
 	ListByStatus(ctx context.Context, status MailboxStatus) ([]*Mailbox, error)
 	// SetCredentials 设凭据并激活（影子→激活原地继承：status 置 active，历史邮件不动；REQ-020）。
-	SetCredentials(ctx context.Context, id int64, hash string) error
+	// v1.39.0 SCRAM认证批：签名扩展——PHC 与 SCRAM 四元组单语句原子写入（候选 3.1-A
+	// 裁决——杜绝 PHA/SCRAM 半更新中间态的凭据不一致缺陷面）；scram=nil 写 NULL
+	// （防御态——service 三入口恒派生非 nil）。
+	SetCredentials(ctx context.Context, id int64, hash string, scram *SCRAMCredentials) error
 	// SetStatus 变更状态（FR-002 管理员禁用/激活）。
 	SetStatus(ctx context.Context, id int64, status MailboxStatus) error
 
@@ -158,6 +185,11 @@ type MailboxRepo interface {
 	// FindMailboxByID 按 ID 查邮箱（U24：2FA otpauth label/顶栏主体名需地址反查；
 	// 无行返回 ErrMailboxNotFound）。
 	FindMailboxByID(ctx context.Context, id int64) (*Mailbox, error)
+	// GetSCRAMCredentialsByAddress 按地址取 SCRAM 服务端四元组（v1.39.0 SCRAM认证批
+	// ——managesieve AUTHENTICATE "SCRAM-SHA-1" 消费位；地址须已小写规范化）；
+	// 无行=ErrMailboxNotFound；行存在而未配备（列 NULL）=ErrSCRAMNotProvisioned
+	// （两哨兵均由调用方统一伪装交互承载——防用户名枚举）。
+	GetSCRAMCredentialsByAddress(ctx context.Context, addr string) (*SCRAMCredentials, error)
 }
 
 // FolderRepo 文件夹仓储
@@ -211,14 +243,19 @@ func (r *SQLiteMailboxRepo) Create(ctx context.Context, m *Mailbox) error {
 	defer func() { _ = tx.Rollback() }() // 提交后回滚为无害空操作
 
 	qtx := r.q.WithTx(tx)
+	sk, ek, ss, si := scramCols(m.SCRAM) // SCRAM认证批：四元组随 PHC 同 INSERT 原子落库
 	res, err := qtx.CreateMailbox(ctx, dbgen.CreateMailboxParams{
-		LocalPart:    m.LocalPart,
-		Domain:       m.Domain,
-		Address:      m.Address,
-		PasswordHash: hashOrNil(m.PasswordHash),
-		Status:       string(m.Status),
-		CreatedAt:    formatTimestamp(now),
-		UpdatedAt:    formatTimestamp(now),
+		LocalPart:       m.LocalPart,
+		Domain:          m.Domain,
+		Address:         m.Address,
+		PasswordHash:    hashOrNil(m.PasswordHash),
+		ScramStoredKey:  sk,
+		ScramServerKey:  ek,
+		ScramSalt:       ss,
+		ScramIterations: si,
+		Status:          string(m.Status),
+		CreatedAt:       formatTimestamp(now),
+		UpdatedAt:       formatTimestamp(now),
 	})
 	if err != nil {
 		if isUniqueConstraint(err) {
@@ -276,11 +313,17 @@ func (r *SQLiteMailboxRepo) ListByStatus(ctx context.Context, status MailboxStat
 // 安全原子性批 F2 2026-10-06：WHERE 限定 status IN ('active','shadow') +
 // :execresult RowsAffected 消费——disabled 邮箱改密被拒（ErrMailboxStatusConflict），
 // 消除"改密路径静默复活禁用邮箱"授权旁路）。
-func (r *SQLiteMailboxRepo) SetCredentials(ctx context.Context, id int64, hash string) error {
+// SCRAM认证批（v1.39.0 候选 3.1-A）：PHC 与 SCRAM 四元组单语句原子写。
+func (r *SQLiteMailboxRepo) SetCredentials(ctx context.Context, id int64, hash string, scram *SCRAMCredentials) error {
+	sk, ek, ss, si := scramCols(scram)
 	res, err := r.q.SetMailboxCredentials(ctx, dbgen.SetMailboxCredentialsParams{
-		PasswordHash: hashOrNil(hash),
-		UpdatedAt:    formatTimestamp(time.Now().UTC()),
-		ID:           id,
+		PasswordHash:    hashOrNil(hash),
+		ScramStoredKey:  sk,
+		ScramServerKey:  ek,
+		ScramSalt:       ss,
+		ScramIterations: si,
+		UpdatedAt:       formatTimestamp(time.Now().UTC()),
+		ID:              id,
 	})
 	if err != nil {
 		return fmt.Errorf("设置邮箱凭据: %w", err)
@@ -305,6 +348,28 @@ func (r *SQLiteMailboxRepo) SetStatus(ctx context.Context, id int64, status Mail
 		return fmt.Errorf("设置邮箱状态: %w", err)
 	}
 	return nil
+}
+
+// GetSCRAMCredentialsByAddress 按地址取 SCRAM 四元组（v1.39.0 SCRAM认证批——SQLite
+// 可空 BLOB/INTEGER 列经 interface{} 读出；任一键列 NULL=未配备哨兵〔3.2-A 存量态〕）。
+func (r *SQLiteMailboxRepo) GetSCRAMCredentialsByAddress(ctx context.Context, addr string) (*SCRAMCredentials, error) {
+	row, err := r.q.GetSCRAMCredentialsByAddress(ctx, addr)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrMailboxNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("查询 SCRAM 凭据: %w", err)
+	}
+	sc := &SCRAMCredentials{
+		StoredKey:  blobOfAny(row.ScramStoredKey),
+		ServerKey:  blobOfAny(row.ScramServerKey),
+		Salt:       blobOfAny(row.ScramSalt),
+		Iterations: intOfAny(row.ScramIterations),
+	}
+	if sc.StoredKey == nil || sc.ServerKey == nil || sc.Salt == nil {
+		return nil, ErrSCRAMNotProvisioned
+	}
+	return sc, nil
 }
 
 // SQLiteFolderRepo FolderRepo 的 SQLite 实现
@@ -519,6 +584,31 @@ func hashToString(hash any) string {
 		return s
 	}
 	return ""
+}
+
+// scramCols 四元组拆 SQLite interface{} 列组（v1.39.0 SCRAM认证批；nil→四 nil——
+// dbgen 可空 BLOB/INTEGER 直传 []byte/int64，驱动承载 NULL）。
+func scramCols(sc *SCRAMCredentials) (storedKey, serverKey, salt, iterations any) {
+	if sc == nil {
+		return nil, nil, nil, nil
+	}
+	return sc.StoredKey, sc.ServerKey, sc.Salt, int64(sc.Iterations)
+}
+
+// blobOfAny dbgen interface{} 可空 BLOB 列 → []byte（nil/异常→nil——沿 hashToString 先例）。
+func blobOfAny(v any) []byte {
+	if b, ok := v.([]byte); ok {
+		return b
+	}
+	return nil
+}
+
+// intOfAny dbgen interface{} 可空 INTEGER 列 → int（nil/异常→0——沿 stringOfAny 家族形态）。
+func intOfAny(v any) int {
+	if i, ok := v.(int64); ok {
+		return int(i)
+	}
+	return 0
 }
 
 // formatTimestamp time.Time → RFC3339 UTC 字符串（数据模型第五章：SQLite TEXT 统一口径）。

@@ -66,6 +66,10 @@ type Mailbox struct {
 	RecoveryCodes     interface{}
 	TwoFactorRequired bool
 	TotpLastStep      interface{}
+	ScramStoredKey    interface{}
+	ScramServerKey    interface{}
+	ScramSalt         interface{}
+	ScramIterations   interface{}
 }
 
 type MailboxKeyword struct {

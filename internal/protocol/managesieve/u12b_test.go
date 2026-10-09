@@ -273,7 +273,7 @@ func TestU12bCapsBlock(t *testing.T) {
 	c.expectOK("STARTTLS 升级")
 	c.upgradeTLS()
 	caps2 := readCapsBlock(c)
-	if !strings.Contains(caps2, `"SASL" "PLAIN"`) {
+	if !strings.Contains(caps2, `"SASL" "PLAIN SCRAM-SHA-1"`) { // SCRAM认证批形态适配：机制集扩展（断言语义=完整通告值——非删减）
 		t.Fatalf("升级后能力应含 SASL \"PLAIN\"：\n%s", caps2)
 	}
 

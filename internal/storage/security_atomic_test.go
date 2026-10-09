@@ -53,13 +53,13 @@ func TestAtomicSetCredentialsDisabledRejected(t *testing.T) {
 	shadow := mk("s@t.io", MailboxStatusShadow)
 	disabled := mk("d@t.io", MailboxStatusDisabled)
 
-	if err := mbRepo.SetCredentials(ctx, active.ID, "h1"); err != nil {
+	if err := mbRepo.SetCredentials(ctx, active.ID, "h1", nil); err != nil { // SCRAM认证批签名适配（nil=测试形态——断言面零变化）
 		t.Fatalf("active 改密应成功: %v", err)
 	}
-	if err := mbRepo.SetCredentials(ctx, shadow.ID, "h2"); err != nil {
+	if err := mbRepo.SetCredentials(ctx, shadow.ID, "h2", nil); err != nil {
 		t.Fatalf("shadow 激活应成功: %v", err)
 	}
-	if err := mbRepo.SetCredentials(ctx, disabled.ID, "h3"); !errors.Is(err, ErrMailboxStatusConflict) {
+	if err := mbRepo.SetCredentials(ctx, disabled.ID, "h3", nil); !errors.Is(err, ErrMailboxStatusConflict) {
 		t.Fatalf("disabled 改密应 ErrMailboxStatusConflict: %v", err)
 	}
 	// 复活防线的终态断言：disabled 行状态保持

@@ -5,6 +5,9 @@
 // 修改历史：
 //
 //	2026-09-20 05:29:00 | 新增 | U11 三库验收（计划书步骤 4）
+//	2026-10-09 23:52:00 | 扩展 | SCRAM认证批（G2 批准 2026-10-09 23:37:36）：Create/
+//	  SetCredentials 四元组原子写（3.1-A）+GetSCRAMCredentialsByAddress+scramColsPG
+//	  辅助（BYTEA→[]byte 直传方言——迁移 00014；契约 v1.39.0）
 package storage
 
 import (
@@ -46,14 +49,19 @@ func (r *PostgresMailboxRepo) Create(ctx context.Context, m *Mailbox) error {
 	defer func() { _ = tx.Rollback() }()
 
 	qtx := r.q.WithTx(tx)
+	sk, ek, ss, si := scramColsPG(m.SCRAM) // SCRAM认证批：四元组随 PHC 同 INSERT 原子落库
 	id, err := qtx.CreateMailbox(ctx, dbgen.CreateMailboxParams{
-		LocalPart:    m.LocalPart,
-		Domain:       m.Domain,
-		Address:      m.Address,
-		PasswordHash: nullString(m.PasswordHash),
-		Status:       string(m.Status),
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		LocalPart:       m.LocalPart,
+		Domain:          m.Domain,
+		Address:         m.Address,
+		PasswordHash:    nullString(m.PasswordHash),
+		ScramStoredKey:  sk,
+		ScramServerKey:  ek,
+		ScramSalt:       ss,
+		ScramIterations: si,
+		Status:          string(m.Status),
+		CreatedAt:       now,
+		UpdatedAt:       now,
 	})
 	if err != nil {
 		if r.ck.uniqueViolation(err) {
@@ -122,11 +130,17 @@ func (r *PostgresMailboxRepo) ListByStatus(ctx context.Context, status MailboxSt
 
 // SetCredentials 设凭据并激活（REQ-020 影子→激活原地继承；安全原子性批 F2
 // 2026-10-06：原状态限定+RowsAffected——disabled 改密被拒，见 sqlite 版注记）。
-func (r *PostgresMailboxRepo) SetCredentials(ctx context.Context, id int64, hash string) error {
+// SCRAM认证批（v1.39.0 候选 3.1-A）：PHC 与 SCRAM 四元组单语句原子写。
+func (r *PostgresMailboxRepo) SetCredentials(ctx context.Context, id int64, hash string, scram *SCRAMCredentials) error {
+	sk, ek, ss, si := scramColsPG(scram)
 	res, err := r.q.SetMailboxCredentials(ctx, dbgen.SetMailboxCredentialsParams{
-		PasswordHash: nullString(hash),
-		UpdatedAt:    time.Now().UTC(),
-		ID:           id,
+		PasswordHash:    nullString(hash),
+		ScramStoredKey:  sk,
+		ScramServerKey:  ek,
+		ScramSalt:       ss,
+		ScramIterations: si,
+		UpdatedAt:       time.Now().UTC(),
+		ID:              id,
 	})
 	if err != nil {
 		return fmt.Errorf("设置邮箱凭据: %w", err)
@@ -151,6 +165,36 @@ func (r *PostgresMailboxRepo) SetStatus(ctx context.Context, id int64, status Ma
 		return fmt.Errorf("设置邮箱状态: %w", err)
 	}
 	return nil
+}
+
+// GetSCRAMCredentialsByAddress 按地址取 SCRAM 四元组（v1.39.0 SCRAM认证批——PG
+// BYTEA 列 []byte 直取〔nil=NULL〕；任一键列 NULL=未配备哨兵〔3.2-A 存量态〕）。
+func (r *PostgresMailboxRepo) GetSCRAMCredentialsByAddress(ctx context.Context, addr string) (*SCRAMCredentials, error) {
+	row, err := r.q.GetSCRAMCredentialsByAddress(ctx, addr)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrMailboxNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("查询 SCRAM 凭据: %w", err)
+	}
+	if row.ScramStoredKey == nil || row.ScramServerKey == nil || row.ScramSalt == nil {
+		return nil, ErrSCRAMNotProvisioned
+	}
+	return &SCRAMCredentials{
+		StoredKey:  row.ScramStoredKey,
+		ServerKey:  row.ScramServerKey,
+		Salt:       row.ScramSalt,
+		Iterations: int(row.ScramIterations.Int32),
+	}, nil
+}
+
+// scramColsPG 四元组拆 PG 列组（v1.39.0；nil→三 nil 列+无效迭代——BYTEA []byte
+// 直传、INTEGER 经 NullInt32）。
+func scramColsPG(sc *SCRAMCredentials) (storedKey, serverKey, salt []byte, iterations sql.NullInt32) {
+	if sc == nil {
+		return nil, nil, nil, sql.NullInt32{}
+	}
+	return sc.StoredKey, sc.ServerKey, sc.Salt, sql.NullInt32{Int32: int32(sc.Iterations), Valid: true}
 }
 
 // PostgresFolderRepo FolderRepo 的 PostgreSQL 实现。

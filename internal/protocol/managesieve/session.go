@@ -9,6 +9,10 @@
 // U23 增量（协议 debug——U21 登记项②收口，H5 等价）：readLine 命令面+writeOK/writeNO/
 // writeBye/writeCapabilities 响应面逐帧条件输出（快照控制热生效；字面量 {n+} 脚本体经
 // readLiteralBytes 读取不经 readLine 埋点——PUTSCRIPT 大体量防刷屏，与 SMTP DATA 口径一致）。
+// SCRAM认证批增量（v1.39.0——G2 批准 2026-10-09 23:37:36 候选全 A）：AUTHENTICATE 增
+// SCRAM-SHA-1 机制（rfc5804 §1.6 L692-694「MUST implement the SCRAM-SHA-1」缺口
+// 实施——B-S 批 F3「之后做」裁决兑现；rfc5802 §5 四步交换/§5.1 SASLprep 与 =2C/=3D
+// 转义/§6 gs2 通道绑定旗标〔n/y 接受、p 拒——服务端无 -PLUS 通告〕/§7 文法）。
 // 修改历史：
 //
 //	2026-09-21 01:00:00 | 新建 | U12 Sieve 过滤与 ManageSieve（计划书步骤 8）
@@ -23,8 +27,10 @@ package managesieve
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
 	"crypto/tls"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -34,6 +40,8 @@ import (
 	"strings"
 	"time"
 
+	"GRmail/internal/account"
+	"GRmail/internal/auth"
 	"GRmail/internal/observability"
 	"GRmail/internal/storage"
 )
@@ -64,6 +72,19 @@ type session struct {
 	// B-S批 F4（裁决 A 2026-10-09 13:34）：challenge 轮应答帧掩码标志——
 	// cmdAuthenticate 发空 challenge 后置位，下一 readLine 为 base64 凭据应答
 	authRedact bool
+}
+
+// scramExchange SCRAM-SHA-1 握手会话态（v1.39.0——rfc5802 §5 交换承载）。
+// 哈希口径：AuthMessage 各分量用原文逐字拼接（§5.1 n 属性「MUST use it as received
+// in hash calculations」——SASLprep 仅作查找键，不改哈希输入）。
+type scramExchange struct {
+	authcid         string                    // SASLprep 后查找键（库内小写地址）
+	clientFirstBare string                    // client-first-message-bare 原文（AuthMessage 首分量）
+	gs2Header       string                    // "n,," / "y,,"（c= 期望值的 base64 源——§7 cbind-input）
+	clientNonce     string                    // 客户端 nonce 原文（组合 nonce 前缀）
+	serverFirst     string                    // server-first 原文（AuthMessage 中分量）
+	combinedNonce   string                    // 组合 nonce（client-final r= 须逐字相等——§5.1 MUST verify）
+	creds           *storage.SCRAMCredentials // 服务端四元组（伪装态=DummySalt/全零键——proof 恒败防枚举）
 }
 
 // newSession 构造会话。
@@ -160,7 +181,8 @@ func (s *session) writeCapabilities() {
 		if !s.inTLS {
 			b.WriteString("\"SASL\" \"\"\r\n") // 先 STARTTLS（§1.7 iff 规则）
 		} else {
-			b.WriteString("\"SASL\" \"PLAIN\"\r\n")
+			// SCRAM认证批（v1.39.0）：机制集扩展——PLAIN 位序在前（既有客户端偏好序零变化）
+			b.WriteString("\"SASL\" \"PLAIN SCRAM-SHA-1\"\r\n")
 		}
 	} else if !s.inTLS {
 		b.WriteString("\"SASL\" \"\"\r\n")
@@ -227,10 +249,18 @@ func (s *session) cmdAuthenticate(line string) {
 	if len(fields) >= 3 {
 		ir = fields[2]
 	}
-	if mech != "PLAIN" {
-		s.writeNO("不支持的机制 %q（仅 PLAIN）", mech)
-		return
+	switch mech {
+	case "PLAIN":
+		s.authPLAIN(ir)
+	case "SCRAM-SHA-1": // SCRAM认证批（v1.39.0）：rfc5804 §1.6 L692-694 MUST 机制
+		s.authSCRAM(ir)
+	default:
+		s.writeNO("不支持的机制 %q（PLAIN/SCRAM-SHA-1）", mech)
 	}
+}
+
+// authPLAIN PLAIN 机制主体（rfc4616 三段式——原 cmdAuthenticate 内联体平移，行为零变化）。
+func (s *session) authPLAIN(ir string) {
 	if ir == "" {
 		// F-M9：空 challenge 为空串（rfc5804 §2.1 L582-591——服务端挑战是 string，
 		// 空 challenge/response 以空串发送；原中文文本致规范客户端 base64 解码失败）
@@ -277,6 +307,257 @@ func (s *session) cmdAuthenticate(line string) {
 	s.authed, s.mboxID, s.mboxAdr = true, m.ID, m.Address
 	s.writeCapabilities()
 	s.writeOK("认证成功")
+}
+
+// authSCRAM SCRAM-SHA-1 机制主体（SCRAM认证批 v1.39.0——rfc5802 §5 四步交换 +
+// rfc5804 §2.1 质询/应答承载：challenge 与应答的 string 内容均为 base64 编码的
+// SASL 数据〔L583-585〕；server-final 经 OK (SASL "...") 响应码回发省一轮〔L591-594〕）。
+// 安全口径：用户不存在/未配备→伪装盐继续交互（响应形态与真实用户一致——§7 防信息
+// 披露口径），最终 proof 验证统一失败；认证失败限流沿 PLAIN 形态（B-S批 F3）。
+func (s *session) authSCRAM(ir string) {
+	// 第一步 client-first：ir 为空发空 challenge 读应答（与 PLAIN 同形态）
+	if ir == "" {
+		_, _ = s.bw.WriteString("\"\"\r\n")
+		_ = s.bw.Flush()
+		var err error
+		s.authRedact = true // B-S批 F4 延续：认证交换帧掩码（SCRAM 帧含 proof）
+		ir, err = s.readLine()
+		s.authRedact = false
+		if err != nil {
+			s.quitting = true
+			return
+		}
+		ir = strings.TrimRight(ir, "\r\n")
+	}
+	if ir == "*" {
+		s.writeNO("客户端取消认证")
+		return
+	}
+	first, derr := base64.StdEncoding.DecodeString(ir)
+	if derr != nil {
+		s.writeNO("base64 解码失败")
+		return
+	}
+	ex := parseSCRAMClientFirst(string(first))
+	if ex == nil {
+		s.writeNO("client-first 格式错误")
+		return
+	}
+	// §5.1 n 属性：服务端 MUST SASLprep 处理 username（query string 口径）
+	prep, perr := auth.SASLprep(ex.authcid)
+	if perr != nil || prep == "" {
+		s.writeNO("认证失败（凭据无效）") // invalid-username-encoding 统一口径
+		return
+	}
+	ex.authcid = prep
+	subjectKey := "managesieve:" + ex.authcid
+	if s.authLocked(subjectKey) {
+		s.writeNO("认证失败次数过多（稍后再试）")
+		return
+	}
+	// 取四元组：两哨兵（不存在/未配备）均转伪装态——防 unknown-user 即时失败暴露
+	creds := &storage.SCRAMCredentials{
+		StoredKey:  make([]byte, 20),
+		ServerKey:  make([]byte, 20),
+		Salt:       account.SCRAMDummySalt,
+		Iterations: account.SCRAMIterations,
+	}
+	if real, cerr := s.cfg.Accounts.GetSCRAMCredentials(s.ctx, ex.authcid); cerr == nil {
+		creds = real
+	}
+	ex.creds = creds
+	ex.combinedNonce = ex.clientNonce + randomSCRAMNonce()
+	ex.serverFirst = fmt.Sprintf("r=%s,s=%s,i=%d",
+		ex.combinedNonce, base64.StdEncoding.EncodeToString(creds.Salt), creds.Iterations)
+	// 第二步 server-first：quoted base64 challenge（rfc5804 §2.1 L583-584——
+	// 挑战 string 内容为 base64 编码的 SASL 数据）；第三步 client-final 在
+	// 同函数内同步读取（沿 PLAIN challenge 轮形态——应答不经主循环 dispatch）
+	_, _ = s.bw.WriteString(fmt.Sprintf("\"%s\"\r\n",
+		base64.StdEncoding.EncodeToString([]byte(ex.serverFirst))))
+	_ = s.bw.Flush()
+	s.authRedact = true // B-S批 F4 延续：client-final 含 proof——整行掩码
+	resp, rerr := s.readLine()
+	s.authRedact = false
+	if rerr != nil {
+		s.quitting = true
+		return
+	}
+	s.authSCRAMFinal(ex, strings.TrimRight(resp, "\r\n"))
+}
+
+// authSCRAMFinal client-final 解析与验证（第三/四步——rfc5802 §5：nonce 逐字校验
+// 〔§5.1「server MUST verify that the nonce sent by the client in the second
+// message is the same as the one sent by the server in its first message」〕；
+// c= 通道绑定数据校验〔§6 L805-807「The server MUST always validate the client's
+// c= field」——cbind-input=gs2-header〕；proof 经 account.SCRAMServerVerify〔§3
+// L424-429〕；成功回发 server-final v= 于 OK (SASL) 响应码——rfc5804 §2.1 L591-594
+// 「this data MAY be placed within the data portion of the SASL response code to
+// save a round trip」；失败统一文本防枚举+限流计数〔沿 PLAIN 形态〕）。
+func (s *session) authSCRAMFinal(ex *scramExchange, ir string) {
+	if ir == "*" {
+		s.writeNO("客户端取消认证")
+		return
+	}
+	subjectKey := "managesieve:" + ex.authcid
+	if s.authLocked(subjectKey) {
+		s.writeNO("认证失败次数过多（稍后再试）")
+		return
+	}
+	final, derr := base64.StdEncoding.DecodeString(ir)
+	if derr != nil {
+		s.recordAuthFail(subjectKey)
+		s.writeNO("认证失败（凭据无效）") // base64 层失败统一口径（不泄细节）
+		return
+	}
+	cBind, rNonce, proof, withoutProof, ok := parseSCRAMClientFinal(string(final))
+	if !ok || rNonce != ex.combinedNonce {
+		s.recordAuthFail(subjectKey)
+		s.writeNO("认证失败（凭据无效）")
+		return
+	}
+	if string(cBind) != ex.gs2Header {
+		s.recordAuthFail(subjectKey)
+		s.writeNO("认证失败（凭据无效）")
+		return
+	}
+	authMessage := ex.clientFirstBare + "," + ex.serverFirst + "," + withoutProof
+	pass, serverSig := account.SCRAMServerVerify(ex.creds.StoredKey, ex.creds.ServerKey,
+		[]byte(authMessage), proof)
+	if !pass {
+		s.recordAuthFail(subjectKey)
+		s.writeNO("认证失败（凭据无效）")
+		return
+	}
+	// proof 已过：主体态校验（active）——授权层检查（非枚举面；disabled 邮箱拒绝
+	// 与 PLAIN VerifyCredentials 同语义）
+	m, merr := s.cfg.Accounts.GetMailbox(s.ctx, ex.authcid)
+	if merr != nil || m.Status != storage.MailboxStatusActive {
+		s.recordAuthFail(subjectKey)
+		s.writeNO("认证失败（凭据无效）")
+		return
+	}
+	s.clearAuthFails(subjectKey)
+	s.authed, s.mboxID, s.mboxAdr = true, m.ID, m.Address
+	s.writeCapabilities()
+	// 第四步 server-final：v=base64(ServerSignature)——OK (SASL "<b64(server-final)>")
+	// 承载（rfc5804 §2.1 形态——外层 base64 编码 SASL additional data 原文）
+	sf := "v=" + base64.StdEncoding.EncodeToString(serverSig)
+	s.debugFrame("S", fmt.Sprintf("OK (SASL %q)", base64.StdEncoding.EncodeToString([]byte(sf))))
+	_, _ = s.bw.WriteString(fmt.Sprintf("OK (SASL \"%s\")\r\n",
+		base64.StdEncoding.EncodeToString([]byte(sf))))
+	_ = s.bw.Flush()
+}
+
+// parseSCRAMClientFirst 解析 client-first-message（rfc5802 §7 文法：gs2-header +
+// client-first-bare）。gs2 旗标：本服务端无 -PLUS 通告（不实现通道绑定）——"n"〔客户
+// 端不支持〕与 "y"〔客户端支持但认为服务端不支持——§6 L791-793 仅服务端支持 CB 时
+// "y" 须拒，本服务端不支持故接受〕均接受；"p" 拒绝〔§6 L801-803〕；首字符非 n/y/p
+// 无效〔§5 L519-522 MUST fail〕。authzid（a=）非空拒绝——单用户语义无代理授权承载；
+// m= 保留属性 MUST fail〔§5.1〕；bare 后未知可选扩展忽略〔§5.1 L717〕；username 的
+// =2C/=3D 转义解码。参数：msg base64 解码后的 client-first 原文。返回：握手态（nil=
+// 格式错误）。
+func parseSCRAMClientFirst(msg string) *scramExchange {
+	var flag string
+	switch {
+	case strings.HasPrefix(msg, "n,"):
+		flag = "n,"
+	case strings.HasPrefix(msg, "y,"):
+		flag = "y,"
+	default:
+		return nil // "p=..."（通道绑定）与非 n/y/p 首字符——均拒
+	}
+	rest := msg[len(flag):]
+	authzEnd := strings.IndexByte(rest, ',')
+	if authzEnd < 0 || authzEnd > 0 {
+		return nil // gs2-header 第二段缺失 / authzid 非空（"a=..."）——均拒
+	}
+	gs2 := flag + ","
+	bare := rest[authzEnd+1:]
+	if strings.HasPrefix(bare, "m=") {
+		return nil // §5.1 m 属性存在 MUST fail
+	}
+	nEnd := strings.IndexByte(bare, ',')
+	if nEnd < 3 || !strings.HasPrefix(bare, "n=") {
+		return nil
+	}
+	username := decodeSASLName(bare[2:nEnd])
+	if username == "" {
+		return nil
+	}
+	rPart := bare[nEnd+1:]
+	if rEnd := strings.IndexByte(rPart, ','); rEnd >= 0 {
+		rPart = rPart[:rEnd] // 其后可选扩展忽略
+	}
+	if !strings.HasPrefix(rPart, "r=") || len(rPart) < 3 {
+		return nil
+	}
+	return &scramExchange{authcid: username, clientFirstBare: bare, gs2Header: gs2, clientNonce: rPart[2:]}
+}
+
+// parseSCRAMClientFinal 解析 client-final-message（rfc5802 §7 文法：channel-binding
+// "," nonce ["," extensions] "," proof——proof 为最末属性）。返回：c= 解码值、r=
+// nonce、p= 解码 proof、without-proof 原文、是否合法。
+func parseSCRAMClientFinal(msg string) (cBind []byte, rNonce string, proof []byte, withoutProof string, ok bool) {
+	pIdx := strings.LastIndex(msg, ",p=")
+	if pIdx < 0 {
+		return nil, "", nil, "", false
+	}
+	withoutProof = msg[:pIdx]
+	proofB64 := msg[pIdx+3:]
+	cEnd := strings.IndexByte(withoutProof, ',')
+	if cEnd < 0 || !strings.HasPrefix(withoutProof, "c=") {
+		return nil, "", nil, "", false
+	}
+	cB64 := withoutProof[2:cEnd]
+	rPart := withoutProof[cEnd+1:]
+	if rEnd := strings.IndexByte(rPart, ','); rEnd >= 0 {
+		rPart = rPart[:rEnd] // 可选扩展忽略
+	}
+	if !strings.HasPrefix(rPart, "r=") || len(rPart) < 3 {
+		return nil, "", nil, "", false
+	}
+	var err error
+	if cBind, err = base64.StdEncoding.DecodeString(cB64); err != nil {
+		return nil, "", nil, "", false
+	}
+	if proof, err = base64.StdEncoding.DecodeString(proofB64); err != nil {
+		return nil, "", nil, "", false
+	}
+	return cBind, rPart[2:], proof, withoutProof, true
+}
+
+// decodeSASLName saslname 的 =2C/=3D 转义解码（rfc5802 §5.1 L627-630：','/'=' 在
+// username 中以 '=2C'/'=3D' 发送；'=' 不跟随 2C/3D MUST fail——空串承载）。
+func decodeSASLName(s string) string {
+	if !strings.Contains(s, "=") {
+		return s
+	}
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] == '=' {
+			switch {
+			case strings.HasPrefix(s[i:], "=2C"):
+				b.WriteByte(',')
+				i += 2
+			case strings.HasPrefix(s[i:], "=3D"):
+				b.WriteByte('=')
+				i += 2
+			default:
+				return "" // 非 2C/3D 转义——MUST fail
+			}
+			continue
+		}
+		b.WriteByte(s[i])
+	}
+	return b.String()
+}
+
+// randomSCRAMNonce 服务端 nonce（rfc5802 §5.1 r 属性：printable ASCII 除 ','——
+// hex 编码天然满足；CSPRNG 12B→24 字符，§9 L1191 随机性建议承载）。
+func randomSCRAMNonce() string {
+	b := make([]byte, 12)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
 }
 
 // authLocked 认证失败限流判定（B-S批 F3——沿提交端点对齐批先例；nil 注入=关闭；

@@ -6,10 +6,14 @@
 // 修改历史：
 //
 //	2026-09-17 01:44:00 | 新建 | U2 account 模块（计划书步骤 5，G2 批准 2026-09-17 01:31:40）
+//	2026-10-09 23:52:00 | 扩展 | SCRAM认证批（G2 批准 2026-10-09 23:37:36）：设密三入口
+//	  （Create/Activate/SetMailboxPassword）统一派生 SCRAM 四元组随 PHC 原子落库
+//	  +GetSCRAMCredentials 透传（managesieve 消费——契约 v1.39.0）
 package account
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"strings"
@@ -86,18 +90,22 @@ func (s *Service) CreateMailbox(ctx context.Context, addr, password string) (*st
 	if err != nil {
 		return nil, err
 	}
-	return s.createMailbox(ctx, addr, hash, storage.MailboxStatusActive)
+	salt, serr := newSCRAMSalt() // SCRAM认证批：四元组随 PHC 同步派生
+	if serr != nil {
+		return nil, serr
+	}
+	return s.createMailbox(ctx, addr, hash, deriveSCRAMCredentials(password, salt), storage.MailboxStatusActive)
 }
 
 // CreateShadowMailbox 创建 shadow 影子邮箱（无凭据不可登录；U4 SMTP RCPT 判定「地址不存在」
 // 分支调用；FR-004 判定①：影子归档+管理员通知的存储前提）。
 // 参数：ctx 上下文；addr 未注册地址（自动规范化）。返回：已建影子邮箱。
 func (s *Service) CreateShadowMailbox(ctx context.Context, addr string) (*storage.Mailbox, error) {
-	return s.createMailbox(ctx, addr, "", storage.MailboxStatusShadow)
+	return s.createMailbox(ctx, addr, "", nil, storage.MailboxStatusShadow) // 影子无凭据（SCRAM nil→NULL）
 }
 
 // createMailbox 创建邮箱的共享路径（规范化 → 组装 → 建库含五系统文件夹事务）。
-func (s *Service) createMailbox(ctx context.Context, addr, hash string, status storage.MailboxStatus) (*storage.Mailbox, error) {
+func (s *Service) createMailbox(ctx context.Context, addr, hash string, scram *storage.SCRAMCredentials, status storage.MailboxStatus) (*storage.Mailbox, error) {
 	local, domain, err := NormalizeAddress(addr)
 	if err != nil {
 		return nil, err
@@ -107,6 +115,7 @@ func (s *Service) createMailbox(ctx context.Context, addr, hash string, status s
 		Domain:       domain,
 		Address:      local + "@" + domain,
 		PasswordHash: hash,
+		SCRAM:        scram, // SCRAM认证批：随 INSERT 原子落库（v1.39.0）
 		Status:       status,
 	}
 	if err := s.mailboxes.Create(ctx, m); err != nil {
@@ -130,8 +139,13 @@ func (s *Service) ActivateMailbox(ctx context.Context, addr, password string) er
 	if err != nil {
 		return err
 	}
-	// 原地继承：仅设凭据+置 active，mailbox_messages 历史行零触碰（REQ-020）
-	return s.mailboxes.SetCredentials(ctx, m.ID, hash)
+	salt, serr := newSCRAMSalt() // SCRAM认证批：激活设密同步派生四元组
+	if serr != nil {
+		return serr
+	}
+	// 原地继承：仅设凭据+置 active，mailbox_messages 历史行零触碰（REQ-020）；
+	// SCRAM认证批：PHC 与四元组单语句原子写（v1.39.0 候选 3.1-A）
+	return s.mailboxes.SetCredentials(ctx, m.ID, hash, deriveSCRAMCredentials(password, salt))
 }
 
 // VerifyCredentials 登录凭据校验（FR-001 三入口共用：IMAP U6 / POP3 U7 / Webmail U8 注入点）。
@@ -165,6 +179,36 @@ func (s *Service) GetMailbox(ctx context.Context, addr string) (*storage.Mailbox
 	return s.mailboxes.FindByAddress(ctx, local+"@"+domain)
 }
 
+// GetSCRAMCredentials 按地址取 SCRAM 服务端四元组（SCRAM认证批 v1.39.0——managesieve
+// AUTHENTICATE "SCRAM-SHA-1" 经 ServerConfig.Accounts 消费；地址自动规范化小写）。
+// 哨兵语义透传：ErrMailboxNotFound/ErrSCRAMNotProvisioned——调用方以伪装盐继续交互
+// 防用户名枚举（rfc5802 §7 防信息披露口径），最终 proof 验证统一失败。
+func (s *Service) GetSCRAMCredentials(ctx context.Context, addr string) (*storage.SCRAMCredentials, error) {
+	local, domain, err := NormalizeAddress(addr)
+	if err != nil {
+		return nil, err
+	}
+	return s.mailboxes.GetSCRAMCredentialsByAddress(ctx, local+"@"+domain)
+}
+
+// newSCRAMSalt SCRAM 盐 CSPRNG 16B（rfc5802 §9 L1153「it is important to use
+// randomly generated salt values」——逐口令独立攻击面；沿 HashPassword 盐先例）。
+func newSCRAMSalt() ([]byte, error) {
+	salt := make([]byte, SCRAMSaltLen)
+	if _, err := rand.Read(salt); err != nil {
+		return nil, fmt.Errorf("account: 生成 SCRAM 盐失败（CSPRNG）: %w", err)
+	}
+	return salt, nil
+}
+
+// deriveSCRAMCredentials 设密链统一派生（三入口共享——SCRAMDerive 4096 档〔候选
+// 3.3-A 裁决 2026-10-09 23:37:36〕；随 PHC 单语句原子落库〔候选 3.1-A〕——明文
+// 经手窗口与 argon2id 哈希同域，不落日志零持久化）。
+func deriveSCRAMCredentials(password string, salt []byte) *storage.SCRAMCredentials {
+	stored, server := SCRAMDerive(password, salt, SCRAMIterations)
+	return &storage.SCRAMCredentials{StoredKey: stored, ServerKey: server, Salt: salt, Iterations: SCRAMIterations}
+}
+
 // SetMailboxPassword 修改邮箱登录密码（Webmail管理职能批次 G1——FR-002「编辑」语义收口：
 // 管理员对任一邮箱改密+邮箱用户个人改密的域承载）。
 // 语义：与影子激活 SetCredentials 同链（哈希后原地覆写凭据——历史邮件与状态零触碰）；
@@ -187,10 +231,14 @@ func (s *Service) SetMailboxPassword(ctx context.Context, addr, newPassword stri
 	if err != nil {
 		return err
 	}
+	salt, serr := newSCRAMSalt() // SCRAM认证批：改密同步重派生四元组（新盐——旧值同步覆写）
+	if serr != nil {
+		return serr
+	}
 	// 安全原子性批 F2（2026-10-06）：SQL 原状态限定后 disabled 邮箱改密返回
 	// ErrMailboxStatusConflict——统一映射 ErrInvalidStatus（与影子拒绝同呈现，
-	// 管理员须先启用再改密）。
-	if err := s.mailboxes.SetCredentials(ctx, m.ID, hash); err != nil {
+	// 管理员须先启用再改密）；SCRAM认证批：PHC 与四元组单语句原子写（v1.39.0）。
+	if err := s.mailboxes.SetCredentials(ctx, m.ID, hash, deriveSCRAMCredentials(newPassword, salt)); err != nil {
 		if errors.Is(err, storage.ErrMailboxStatusConflict) {
 			return fmt.Errorf("%w: 邮箱已禁用（请先启用再修改密码）", ErrInvalidStatus)
 		}

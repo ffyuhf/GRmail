@@ -67,6 +67,10 @@ type Mailbox struct {
 	RecoveryCodes     sql.NullString
 	TwoFactorRequired bool
 	TotpLastStep      sql.NullInt64
+	ScramStoredKey    sql.NullString
+	ScramServerKey    sql.NullString
+	ScramSalt         sql.NullString
+	ScramIterations   sql.NullInt32
 }
 
 type MailboxKeyword struct {
