@@ -47,7 +47,10 @@ func (s *Server) langSetGET(c *gin.Context) {
 	if next == "" || !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") {
 		next = "/" // 站内相对路径白名单（// 协议相对形态同拒）
 	}
-	c.SetCookie(langCookieName, string(target), 365*24*3600, "/", "", true, false)
+	// F12（C23，2026-10-10 C级债务收尾批）：HttpOnly=true——非凭据偏好 cookie 的
+	// 防御纵深（JS 侧零消费实证——grmail.js 仅操作 /lang 链接 href；服务端读取
+	// 不受 HttpOnly 影响，行为零变化）。
+	c.SetCookie(langCookieName, string(target), 365*24*3600, "/", "", true, true)
 	c.Redirect(http.StatusFound, next)
 }
 

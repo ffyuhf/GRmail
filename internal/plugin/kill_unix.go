@@ -1,4 +1,5 @@
-// killProcess 平台辅助：向插件子进程发送 SIGKILL（崩溃隔离测试用——TC-016 判定②）。
+// killProcess 平台辅助：向插件子进程发送 SIGKILL（崩溃隔离测试用——TC-016 判定③
+// 「kill 插件进程后主程序存活」；F14/C10 2026-10-10 判定号笔误修正：原误写判定②）。
 // 限 unix（Windows 经 TC-026 构建矩阵覆盖，测试用例侧已 //go:build !windows 隔离）。
 // 修改历史：
 //

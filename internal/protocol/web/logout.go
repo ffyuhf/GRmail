@@ -23,6 +23,13 @@ func (s *Server) logoutPOST(c *gin.Context) {
 		c.Redirect(http.StatusSeeOther, "/login")
 		return
 	}
+	// F11（C22，2026-10-10 C级债务收尾批）：Bearer 合成会话（ID 空）短路——服务端
+	// Delete("") 为空操作、cookie 置空与 Clear-Site-Data 对程序化客户端均无意义；
+	// Token 生命周期管理归 /admin/tokens 撤销（语义完整）。应答 303 /login 不变。
+	if sess.ID == "" {
+		c.Redirect(http.StatusSeeOther, "/login")
+		return
+	}
 	ctx := c.Request.Context()
 	if err := s.sessions.Delete(ctx, sess.ID); err != nil {
 		sessLogger(c).Error("登出会话删除失败", "error", err)

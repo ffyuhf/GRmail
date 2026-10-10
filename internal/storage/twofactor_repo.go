@@ -84,10 +84,10 @@ func (r *SQLiteMailboxRepo) GetTwoFactor(ctx context.Context, mailboxID int64) (
 		return nil, err
 	}
 	return &TwoFactorState{
-		PendingSecret: stringOfAny(row.TotpSecret),
-		CodesHash:     codes,
-		Required:      row.TwoFactorRequired,
-		LastTOTPStep:  stepOfAny(row.TotpLastStep),
+		TotpSecret:   stringOfAny(row.TotpSecret), // F4/C5 改名（原 PendingSecret）
+		CodesHash:    codes,
+		Required:     row.TwoFactorRequired,
+		LastTOTPStep: stepOfAny(row.TotpLastStep),
 	}, nil
 }
 

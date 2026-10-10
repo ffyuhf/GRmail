@@ -4,6 +4,8 @@
 // 修改历史：
 //
 //	2026-09-21 00:44:00 | 新建 | U12 Sieve 过滤与 ManageSieve（计划书步骤 3）
+//	2026-10-10 16:10:00 | 扩展 | C级债务收尾批 F10/C21：RenameScript 原子改名
+//	  PostgreSQL 实现（G2 批准 2026-10-10 15:45:40；契约 v1.40.0）
 package storage
 
 import (
@@ -96,6 +98,24 @@ func (r *PostgresSieveScriptRepo) SetActive(ctx context.Context, mailboxID int64
 		}
 		if n, _ := res.RowsAffected(); n == 0 {
 			return ErrSieveScriptNotFound
+		}
+		return nil
+	})
+}
+
+// RenameScript 单事务原子改名（F10/C21——PostgreSQL 实现，与 SQLite 版同构）。
+func (r *PostgresSieveScriptRepo) RenameScript(ctx context.Context, mailboxID int64, oldName, newName string) error {
+	return withTxCompat(ctx, r.db, func(tx *sql.Tx) error {
+		q := r.q.WithTx(tx)
+		res, err := q.CopySieveScript(ctx, dbgen.CopySieveScriptParams{NewName: newName, MailboxID: mailboxID, OldName: oldName})
+		if err != nil {
+			return fmt.Errorf("sieve 脚本改名复制: %w", err)
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return ErrSieveScriptNotFound
+		}
+		if err := q.DeleteSieveScript(ctx, dbgen.DeleteSieveScriptParams{MailboxID: mailboxID, Name: oldName}); err != nil {
+			return fmt.Errorf("sieve 脚本改名删旧: %w", err)
 		}
 		return nil
 	})

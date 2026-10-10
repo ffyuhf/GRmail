@@ -217,8 +217,14 @@ func (s *Server) sessionMiddleware() gin.HandlerFunc {
 		if sess.UserAgent != "" && sess.UserAgent != ua {
 			logger.Warn("会话内 User-Agent 突变（疑似劫持）", "session", s.sess.logHashOf(raw))
 		}
-		if err := s.sessions.Touch(ctx, idHash, ip, ua, now); err != nil {
-			logger.Error("会话 Touch 失败（不中断请求）", "error", err)
+		// F13（C24，2026-10-10 C级债务收尾批）：公开自动加载资源（/static/、
+		// /.well-known/）跳过 Touch——后台标签页静态刷新与外部抓取器不续期会话，
+		// 空闲超时按 OWASP Session Expiration 语义严格执行（用户可感知：闲置
+		// 会话不再被后台自动请求无限续命；会话解析与超时判定保持——仅免续期）。
+		if !isPublicAssetPath(c.Request.URL.Path) {
+			if err := s.sessions.Touch(ctx, idHash, ip, ua, now); err != nil {
+				logger.Error("会话 Touch 失败（不中断请求）", "error", err)
+			}
 		}
 		c.Set(ctxKeySession, sess)
 		c.Next()
@@ -260,6 +266,13 @@ func safeRedirectPath(p string) string {
 		return "/"
 	}
 	return p
+}
+
+// isPublicAssetPath 公开自动加载资源判定（F13/C24，2026-10-10 C级债务收尾批——
+// /static/ 前缀与 /.well-known/ 前缀：浏览器后台自动请求〔静态资源预取/刷新〕与
+// 外部抓取器〔mta-sts 策略拉取〕命中，非用户交互不刷新会话活跃时刻）。
+func isPublicAssetPath(p string) bool {
+	return strings.HasPrefix(p, "/static/") || strings.HasPrefix(p, "/.well-known/")
 }
 
 // redirectAfterLogin 登录成功回跳：读临时 cookie→站内校验→303 目标+清除；

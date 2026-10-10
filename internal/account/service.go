@@ -9,6 +9,8 @@
 //	2026-10-09 23:52:00 | 扩展 | SCRAM认证批（G2 批准 2026-10-09 23:37:36）：设密三入口
 //	  （Create/Activate/SetMailboxPassword）统一派生 SCRAM 四元组随 PHC 原子落库
 //	  +GetSCRAMCredentials 透传（managesieve 消费——契约 v1.39.0）
+//	2026-10-10 16:00:00 | 优化 | C级债务收尾批 F5/C6：EnsurePostmasterMailbox 并发
+//	  幂等收口（UNIQUE 冲突=对端已建→回读，原样上抛致回填任务与管道并发首触发一方报错）
 package account
 
 import (
@@ -282,7 +284,15 @@ func (s *Service) EnsurePostmasterMailbox(ctx context.Context, domain string) (*
 			return nil, err
 		}
 		if m, err = s.CreateShadowMailbox(ctx, postmaster); err != nil {
-			return nil, err
+			// F5/C6（2026-10-10 C级债务收尾批）：并发双调用下 UNIQUE 冲突
+			// （ErrMailboxExists）=对端已建——回读幂等收口（聚合回填任务与收信
+			// 管道并发首触发的竞争窗口；其余错误原样上抛）。
+			if !errors.Is(err, storage.ErrMailboxExists) {
+				return nil, err
+			}
+			if m, err = s.GetMailbox(ctx, postmaster); err != nil {
+				return nil, err
+			}
 		}
 	}
 	if ferr := s.folders.EnsureAggregateFolder(ctx, m.ID); ferr != nil {

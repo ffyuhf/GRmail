@@ -38,10 +38,10 @@ func (r *SQLiteUserRepo) GetTwoFactor(ctx context.Context, userID int64) (*TwoFa
 		return nil, err
 	}
 	return &TwoFactorState{
-		PendingSecret: stringOfAny(row.TotpSecret),
-		CodesHash:     codes,
-		Required:      false, // admin 无强制标记语义（迁移 00011 不设 required 列）
-		LastTOTPStep:  stepOfAny(row.TotpLastStep),
+		TotpSecret:   stringOfAny(row.TotpSecret), // F4/C5 改名（原 PendingSecret）
+		CodesHash:    codes,
+		Required:     false, // admin 无强制标记语义（迁移 00011 不设 required 列）
+		LastTOTPStep: stepOfAny(row.TotpLastStep),
 	}, nil
 }
 

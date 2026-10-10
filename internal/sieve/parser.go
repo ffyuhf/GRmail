@@ -11,6 +11,9 @@
 //
 //	2026-09-21 00:48:00 | 新建 | U12 Sieve 过滤与 ManageSieve（计划书步骤 5）
 //	2026-09-29 17:16:00 | 修正 | RFC候选修正批次 RF-F：F-S1 header/address/envelope 两列表 Names/Keys 边界承载+F-S14 fileinto :flags 文法对齐与标签白名单（计划书 1.1 单元 RF-F）
+//	2026-10-10 16:05:00 | 优化 | C级债务收尾批 F9/C20（G2 批准 2026-10-10
+//	  15:45:40）：能力声明单源化——SupportedCapabilities 有序列表导出（managesieve
+//	  通告串派生源），require 校验集 map 由列表派生（原双源独立字面量分叉根治）
 package sieve
 
 import (
@@ -21,14 +24,23 @@ import (
 // maxNesting 嵌套上限（rfc5228 §2.10.7：块与测试列表各 MUST 支持 15 层）。
 const maxNesting = 15
 
-// 支持的能力集（SIEVE 能力通告同源——U12 计划书 1.5⑥：
-// "fileinto envelope imap4flags encoded-character"；base 语言无需 require）。
-var supportedCapabilities = map[string]bool{
-	"fileinto":          true,
-	"envelope":          true,
-	"imap4flags":        true,
-	"encoded-character": true,
+// SupportedCapabilities 引擎能力有序列表（F9/C20 单源化——2026-10-10 C级债务收尾批：
+// require 校验集与 managesieve SIEVE 通告串的同一事实来源；新增能力仅改此处；
+// comparator-* 前缀族经 require 处豁免判定不入列表——rfc5228 §6.2.3 注册前缀形态。
+// U12 计划书 1.5⑥ 原集：fileinto envelope imap4flags encoded-character（base 语言
+// 无需 require）。
+var SupportedCapabilities = []string{
+	"fileinto", "envelope", "imap4flags", "encoded-character",
 }
+
+// supportedCapabilities require 校验集（SupportedCapabilities 派生 map——单源）。
+var supportedCapabilities = func() map[string]bool {
+	m := make(map[string]bool, len(SupportedCapabilities))
+	for _, c := range SupportedCapabilities {
+		m[c] = true
+	}
+	return m
+}()
 
 // Parse 解析脚本源（编译期校验全量：词法+语法+require 前置+能力声明+嵌套计数）。
 // 参数：src 脚本源文本。返回：AST；错误为 *SyntaxError（行号定位——

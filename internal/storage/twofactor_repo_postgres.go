@@ -31,10 +31,10 @@ func (r *PostgresMailboxRepo) GetTwoFactor(ctx context.Context, mailboxID int64)
 		return nil, err
 	}
 	return &TwoFactorState{
-		PendingSecret: row.TotpSecret.String,
-		CodesHash:     codes,
-		Required:      row.TwoFactorRequired,
-		LastTOTPStep:  row.TotpLastStep.Int64,
+		TotpSecret:   row.TotpSecret.String, // F4/C5 改名（原 PendingSecret）
+		CodesHash:    codes,
+		Required:     row.TwoFactorRequired,
+		LastTOTPStep: row.TotpLastStep.Int64,
 	}, nil
 }
 

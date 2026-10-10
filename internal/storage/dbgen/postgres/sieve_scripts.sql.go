@@ -36,6 +36,25 @@ func (q *Queries) ClearSieveActive(ctx context.Context, mailboxID int64) error {
 	return err
 }
 
+const copySieveScript = `-- name: CopySieveScript :execresult
+INSERT INTO sieve_scripts (mailbox_id, name, content, is_active)
+SELECT s.mailbox_id, $1, s.content, s.is_active
+FROM sieve_scripts s
+WHERE s.mailbox_id = $2 AND s.name = $3
+`
+
+type CopySieveScriptParams struct {
+	NewName   string
+	MailboxID int64
+	OldName   string
+}
+
+// F10/C21 (2026-10-10 C-debt batch): atomic RENAMESCRIPT support - copy row to
+// new name (carrying is_active); paired with DeleteSieveScript in one repo tx.
+func (q *Queries) CopySieveScript(ctx context.Context, arg CopySieveScriptParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, copySieveScript, arg.NewName, arg.MailboxID, arg.OldName)
+}
+
 const deleteSieveScript = `-- name: DeleteSieveScript :exec
 DELETE FROM sieve_scripts
 WHERE mailbox_id = $1 AND name = $2

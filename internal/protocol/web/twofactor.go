@@ -186,7 +186,7 @@ func (s *Server) twoFactorViewOf(c *gin.Context) (*templates.TwoFactorData, erro
 		Label:   m.Address,
 		CSRF:    sess.CSRFToken,
 		Bound:   st.Bound(),
-		Pending: st.PendingSecret != "" && !st.Bound(),
+		Pending: st.TotpSecret != "" && !st.Bound(), // F4/C5 改名（原 PendingSecret）
 		Forced:  c.Query("forced") == "1",
 		Nav:     s.sidebarDataFor(c), // D3 B 形态——全站侧栏
 	}, nil

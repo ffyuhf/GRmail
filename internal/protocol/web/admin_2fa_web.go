@@ -106,8 +106,8 @@ func (s *Server) admin2faViewOf(c *gin.Context) (*templates.TwoFactorData, error
 		Label:   templates.Tr(langOf(c), "home.adminKind"),
 		CSRF:    sess.CSRFToken,
 		Bound:   st.Bound(),
-		Pending: st.PendingSecret != "" && !st.Bound(),
-		Nav:     s.sidebarDataFor(c), // D3 B 形态——全站侧栏
+		Pending: st.TotpSecret != "" && !st.Bound(), // F4/C5 改名（原 PendingSecret）
+		Nav:     s.sidebarDataFor(c),                // D3 B 形态——全站侧栏
 	}, nil
 }
 

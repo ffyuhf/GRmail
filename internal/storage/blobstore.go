@@ -11,6 +11,8 @@
 //	2026-10-07 08:55:00 | 扩展 | 队列防丢信收口批 F7：List 枚举（G2 批准 2026-10-07 08:41:07）
 //	2026-10-08 10:20:00 | 扩展 | 性能批 F7（D11）：Open 流式句柄（G2 批准 2026-10-08
 //	  10:13:49）——io.ReadSeekCloser 形态，os.File 直返零拷贝构造
+//	2026-10-10 16:05:00 | 优化 | C级债务收尾批 F7/C16：Write 补父目录 fsync（崩溃
+//	  安全链完整性——沿 config.Save 先例；G2 批准 2026-10-10 15:45:40）
 package storage
 
 import (
@@ -109,6 +111,12 @@ func (s *FileSystemBlobStore) Write(_ context.Context, key string, data []byte) 
 	}
 	if err = os.Rename(tmpName, final); err != nil {
 		return fmt.Errorf("原子重命名: %w", err)
+	}
+	// F7/C16（2026-10-10 C级债务收尾批）：父目录 fsync——rename 后目录项持久
+	// （断电窗口下新 blob 目录项不丢失；沿 config.Save :293-296 先例，尽力语义）。
+	if d, derr := os.Open(filepath.Dir(final)); derr == nil {
+		_ = d.Sync()
+		_ = d.Close()
 	}
 	return nil
 }

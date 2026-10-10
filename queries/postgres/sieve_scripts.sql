@@ -32,3 +32,11 @@ WHERE mailbox_id = $1 AND name = $2;
 -- name: DeleteSieveScript :exec
 DELETE FROM sieve_scripts
 WHERE mailbox_id = $1 AND name = $2;
+
+-- name: CopySieveScript :execresult
+-- F10/C21 (2026-10-10 C-debt batch): atomic RENAMESCRIPT support - copy row to
+-- new name (carrying is_active); paired with DeleteSieveScript in one repo tx.
+INSERT INTO sieve_scripts (mailbox_id, name, content, is_active)
+SELECT s.mailbox_id, sqlc.arg(new_name), s.content, s.is_active
+FROM sieve_scripts s
+WHERE s.mailbox_id = sqlc.arg(mailbox_id) AND s.name = sqlc.arg(old_name);

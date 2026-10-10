@@ -9,6 +9,10 @@
 // 修改历史：
 //
 //	2026-10-01 16:55:00 | 新增 | U24 双因素认证（G2 批准 2026-10-01 16:41:08）
+//	2026-10-10 16:00:00 | 优化 | C级债务收尾批（G2 批准 2026-10-10 15:45:40）：
+//	  F2/C3 otpauth URI 百分号编码（label 与 issuer——key-uri-format）+
+//	  F3/C4 verifyTOTP 增 nowSec 参数注入（纯函数化——时间可测）+
+//	  F4/C5 PendingSecret 改名 TotpSecret（与列名 totp_secret 对齐——契约 v1.40.0）
 package account
 
 import (
@@ -19,6 +23,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -108,9 +113,12 @@ func (s *TwoFactorService) InitiateBinding(ctx context.Context, mailboxID int64,
 		return nil, err
 	}
 	// otpauth URI（Google key-uri-format 事实标准——IR-009；参数显式化：SHA1/6 位/30s
-	// 与服务端验证参数一致，authenticator 导入即对齐）
+	// 与服务端验证参数一致，authenticator 导入即对齐）。
+	// F2/C3（2026-10-10 C级债务收尾批）：label（issuer:account）与 issuer 参数百分号
+	// 编码——含空格/`?`/`&` 等字符的发行方名不再破坏 URI 解析（纯字母数字与点号
+	// 发行方编码后输出不变——兼容锚）。
 	uri := fmt.Sprintf("otpauth://totp/%s:%s?secret=%s&issuer=%s&algorithm=SHA1&digits=%d&period=%d",
-		issuer, accountAddr, secret, issuer, totpDigits, totpPeriodSeconds)
+		url.PathEscape(issuer), url.PathEscape(accountAddr), secret, url.QueryEscape(issuer), totpDigits, totpPeriodSeconds)
 	return &BindingMaterial{Secret: secret, OtpauthURI: uri}, nil
 }
 
@@ -122,13 +130,13 @@ func (s *TwoFactorService) ConfirmBinding(ctx context.Context, mailboxID int64, 
 	if err != nil {
 		return nil, err
 	}
-	if st.PendingSecret == "" {
+	if st.TotpSecret == "" {
 		return nil, ErrTwoFactorNotBound // 未发起绑定（会话态与库态不一致防护）
 	}
 	if st.Bound() {
 		return nil, ErrTwoFactorBound // 已确认（防重复确认重复发码）
 	}
-	step, ok := verifyTOTP(st.PendingSecret, code, st.LastTOTPStep)
+	step, ok := verifyTOTP(st.TotpSecret, code, st.LastTOTPStep, time.Now().Unix())
 	if !ok {
 		return nil, ErrTwoFactorCode // TC-027 判定③关联：错误码拒绝
 	}
@@ -161,7 +169,7 @@ func (s *TwoFactorService) VerifyLoginFactor(ctx context.Context, mailboxID int6
 	if code == "" || len(code) > 64 {
 		return ErrTwoFactorFormat
 	}
-	if step, ok := verifyTOTP(st.PendingSecret, code, st.LastTOTPStep); ok {
+	if step, ok := verifyTOTP(st.TotpSecret, code, st.LastTOTPStep, time.Now().Unix()); ok {
 		// 安全原子性批 F3（2026-10-06）：SQL 条件守卫的并发冲突（另一请求已推进
 		// 重放基线）按验证失败统一呈现——对调用方等同重放拒绝（rfc6238 §5.2）。
 		if err := s.mailboxes.MarkTOTPStep(ctx, mailboxID, step); err != nil {
@@ -205,9 +213,11 @@ func (s *TwoFactorService) SetRequired(ctx context.Context, mailboxID int64, req
 // 命中步必须严格大于 lastStep（rfc6238 §5.2 L343-347 同窗重放拒绝 MUST——
 // 「the verifier MUST NOT accept the second attempt of the OTP after the
 // successful validation has been issued for the first OTP」）。
-// 参数：secretBase32 列存密钥；code 用户输入；lastStep 重放基线（0=无验证史）。
+// 参数：secretBase32 列存密钥；code 用户输入；lastStep 重放基线（0=无验证史）；
+// nowSec 当前时刻 Unix 秒（F3/C4 纯函数化注入——调用方传 time.Now().Unix()，
+// 时间敏感用例可注入时钟）。
 // 返回：命中时间步与是否通过。
-func verifyTOTP(secretBase32, code string, lastStep int64) (int64, bool) {
+func verifyTOTP(secretBase32, code string, lastStep, nowSec int64) (int64, bool) {
 	code = strings.TrimSpace(code)
 	if code == "" {
 		return 0, false
@@ -216,7 +226,7 @@ func verifyTOTP(secretBase32, code string, lastStep int64) (int64, bool) {
 	if err != nil {
 		return 0, false // 密钥损坏按验证失败（防探测差异化）
 	}
-	t := time.Now().Unix() / totpPeriodSeconds
+	t := nowSec / totpPeriodSeconds
 	for step := t + totpSkewWindows; step >= t-totpSkewWindows; step-- {
 		if step <= lastStep {
 			break // 窗口已落入重放基线之下——同窗/回退码全部拒绝（MUST）

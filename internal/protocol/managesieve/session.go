@@ -19,9 +19,15 @@
 //	2026-09-23 12:56:00 | 修正 | U12b 装配收口：writeCapabilities 补 Flush（连接即推能力
 //	滞留 bufio 缓冲致客户端死锁——loopback 测试驱动发现，缺陷修正①）
 //	（依据：U12b 计划书 v1.0.0 步骤 3，G2 批准 2026-09-23 12:49:06；rfc5804 §1.1 能力协商）
-//	2026-09-27 13:42:00 | 扩展 | U23 可观测性扩展：命令响应面协议 debug 条件输出
-//	（debugFrame 辅助+readLine/writeOK/writeNO/writeBye/writeCapabilities 五埋点）
-//	（来源：G2 批准 2026-09-27 13:20:53，U23 计划书 v1.0.0 步骤 5/1.5⑤）
+//
+// 2026-09-27 13:42:00 | 扩展 | U23 可观测性扩展：命令响应面协议 debug 条件输出
+// （debugFrame 辅助+readLine/writeOK/writeNO/writeBye/writeCapabilities 五埋点）
+// （来源：G2 批准 2026-09-27 13:20:53，U23 计划书 v1.0.0 步骤 5/1.5⑤）
+// 2026-10-10 16:05:00 | 优化 | C级债务收尾批（G2 批准 2026-10-10 15:45:40）：
+//
+//	F9/C20 SIEVE 通告串单源化（sieve.SupportedCapabilities 派生——原双源独立
+//	字面量分叉根治）+F10/C21 RENAMESCRIPT 改调 storage 原子 RenameScript
+//	（原三步非事务中途失败残留双名脚本收口）
 package managesieve
 
 import (
@@ -36,6 +42,7 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -43,19 +50,23 @@ import (
 	"GRmail/internal/account"
 	"GRmail/internal/auth"
 	"GRmail/internal/observability"
+	"GRmail/internal/sieve"
 	"GRmail/internal/storage"
 )
 
 // implementationName IMPLEMENTATION 能力值。
 const implementationName = "GRmail Sieve (U12 R1-A)"
 
-// sieveCapability SIEVE 能力串（实现即通告——U12 计划书 1.5⑥；D8#6 随引擎实现面
-// 扩展：双比较器按 rfc5228 §6.2.3 初始注册「comparator-*（anything starting with
-// "comparator-"）」形态通告——comparator.go §2.7.3 MUST 双值 i;octet/i;ascii-casemap
-// 实现；fileinto/envelope 同为 rfc5228 §6.2.3 注册扩展；imap4flags=rfc5232；
-// encoded-character=rfc5228 §2.4.2.4；依据：D8登记项处置_计划 v1.0.0 1.2#2，
+// sieveCapability SIEVE 能力通告串（F9/C20 单源化——2026-10-10 C级债务收尾批：
+// sieve.SupportedCapabilities 有序列表派生+comparator 双值尾接——parser require
+// 校验集与协议通告的同一事实来源〔原双源独立字面量分叉根治〕；产物与原串
+// 逐字节一致——兼容锚；新增能力仅改 sieve.SupportedCapabilities 一处）。
+// comparator 双值按 rfc5228 §6.2.3 初始注册「comparator-*」形态通告（D8#6——
 // G2 批准 2026-09-30 23:40:58）。
-const sieveCapability = "fileinto envelope imap4flags encoded-character comparator-i;octet comparator-i;ascii-casemap"
+var sieveCapability = strings.Join(slices.Concat(
+	sieve.SupportedCapabilities,
+	[]string{"comparator-i;octet", "comparator-i;ascii-casemap"},
+), " ")
 
 // session 单连接会话状态机（未认证→已认证两态）。
 type session struct {
@@ -834,9 +845,11 @@ func (s *session) cmdCheckScript(line string) {
 	s.writeOK("语法校验通过")
 }
 
-// cmdRenameScript RENAMESCRIPT <old> <new>（VERSION 1.0 命令——读改写承载；
+// cmdRenameScript RENAMESCRIPT <old> <new>（VERSION 1.0 命令——F10/C21 原子承载；
 // F-M4：新名已存在 NO (ALREADYEXISTS) 拒绝——rfc5804 §2.11 L1414-1416，
-// 原 upsert 覆盖既有脚本违反 MUST）。
+// 原 upsert 覆盖既有脚本违反 MUST。C级债务收尾批 2026-10-10：改调 storage 原子
+// RenameScript——原三步非事务〔PutScript→SetActive→DeleteScript〕中途失败残留
+// 双名脚本；外部行为等价〔成功应答与激活迁移语义不变〕，仅消中间失败窗口）。
 func (s *session) cmdRenameScript(tokens []string) {
 	if len(tokens) < 3 {
 		s.writeNO("RENAMESCRIPT 须旧名+新名")
@@ -847,22 +860,12 @@ func (s *session) cmdRenameScript(tokens []string) {
 		s.writeNOCode("ALREADYEXISTS", "新名脚本已存在")
 		return
 	}
-	sc, err := s.cfg.Scripts.GetScript(s.ctx, s.mboxID, oldN)
-	if err != nil {
-		s.writeNO("脚本不存在")
-		return
-	}
-	if verr := s.cfg.Scripts.PutScript(s.ctx, &storage.SieveScript{
-		MailboxID: s.mboxID, Name: newN, Content: sc.Content, IsActive: sc.IsActive,
-	}); verr != nil {
-		s.writeNO("改名失败: %v", verr)
-		return
-	}
-	if sc.IsActive {
-		_ = s.cfg.Scripts.SetActive(s.ctx, s.mboxID, newN)
-	}
-	if verr := s.cfg.Scripts.DeleteScript(s.ctx, s.mboxID, oldN); verr != nil {
-		s.writeNO("旧名清理失败: %v", verr)
+	if err := s.cfg.Scripts.RenameScript(s.ctx, s.mboxID, oldN, newN); err != nil {
+		if errors.Is(err, storage.ErrSieveScriptNotFound) {
+			s.writeNO("脚本不存在")
+			return
+		}
+		s.writeNO("改名失败: %v", err)
 		return
 	}
 	s.writeOK("RENAMESCRIPT 完成")

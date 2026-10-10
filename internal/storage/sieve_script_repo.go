@@ -6,6 +6,9 @@
 // 修改历史：
 //
 //	2026-09-21 00:43:00 | 新建 | U12 Sieve 过滤与 ManageSieve（计划书步骤 3，G2 批准 2026-09-21 00:36:18）
+//	2026-10-10 16:10:00 | 扩展 | C级债务收尾批 F10/C21（G2 批准 2026-10-10
+//	  15:45:40）：RenameScript 单事务原子改名（新名行复制携带激活态+旧名行删除
+//	  同事务——RENAMESCRIPT 原三步非事务中途失败残留双名收口；契约 v1.40.0）
 package storage
 
 import (
@@ -57,6 +60,12 @@ type SieveScriptRepo interface {
 	SetActive(ctx context.Context, mailboxID int64, name string) error
 	// GetActiveScript 取激活脚本（管道逐收件人执行位查询）；无激活返回 ErrNoActiveScript。
 	GetActiveScript(ctx context.Context, mailboxID int64) (*SieveScript, error)
+	// RenameScript 单事务原子改名（F10/C21——C级债务收尾批 2026-10-10：RENAMESCRIPT
+	// 原三步非事务〔PutScript→SetActive→DeleteScript〕中途失败残留双名脚本收口；
+	// 新名行复制〔携带激活态〕+旧名行删除同事务，外部行为等价仅消中间失败窗口）。
+	// 旧名不存在返回 ErrSieveScriptNotFound；新名已存在（并发窗口）UNIQUE 冲突
+	// 原样上抛（会话层 ALREADYEXISTS 预检已挡主路径）。
+	RenameScript(ctx context.Context, mailboxID int64, oldName, newName string) error
 }
 
 // ───────────────────────── SQLite 实现 ─────────────────────────
@@ -161,6 +170,25 @@ func (r *SQLiteSieveScriptRepo) GetActiveScript(ctx context.Context, mailboxID i
 		return nil, fmt.Errorf("sieve 激活脚本查询: %w", err)
 	}
 	return sieveScriptFromRow(row.ID, row.MailboxID, row.Name, row.Content, row.IsActive), nil
+}
+
+// RenameScript 单事务原子改名（F10/C21——SQLite 实现：CopySieveScript 复制行
+// 〔携带 is_active〕+DeleteSieveScript 删旧名同事务；复制零行=旧名不存在哨兵）。
+func (r *SQLiteSieveScriptRepo) RenameScript(ctx context.Context, mailboxID int64, oldName, newName string) error {
+	return withTxCompat(ctx, r.db, func(tx *sql.Tx) error {
+		q := r.q.WithTx(tx)
+		res, err := q.CopySieveScript(ctx, dbgen.CopySieveScriptParams{NewName: newName, MailboxID: mailboxID, OldName: oldName})
+		if err != nil {
+			return fmt.Errorf("sieve 脚本改名复制: %w", err)
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return ErrSieveScriptNotFound
+		}
+		if err := q.DeleteSieveScript(ctx, dbgen.DeleteSieveScriptParams{MailboxID: mailboxID, Name: oldName}); err != nil {
+			return fmt.Errorf("sieve 脚本改名删旧: %w", err)
+		}
+		return nil
+	})
 }
 
 // sieveScriptFromRow SQLite 行→域模型（is_active INTEGER 0/1→bool）。

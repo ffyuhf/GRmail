@@ -31,10 +31,10 @@ func (r *MySQLUserRepo) GetTwoFactor(ctx context.Context, userID int64) (*TwoFac
 		return nil, err
 	}
 	return &TwoFactorState{
-		PendingSecret: row.TotpSecret.String,
-		CodesHash:     codes,
-		Required:      false, // admin 无强制标记语义（迁移 00011 不设 required 列）
-		LastTOTPStep:  row.TotpLastStep.Int64,
+		TotpSecret:   row.TotpSecret.String, // F4/C5 改名（原 PendingSecret）
+		CodesHash:    codes,
+		Required:     false, // admin 无强制标记语义（迁移 00011 不设 required 列）
+		LastTOTPStep: row.TotpLastStep.Int64,
 	}, nil
 }
 

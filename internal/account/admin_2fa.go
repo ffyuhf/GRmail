@@ -10,6 +10,10 @@
 // 修改历史：
 //
 //	2026-10-05 23:40:00 | 新增 | 管理员主体增强与Webmail职能补全批次（G2 批准 2026-10-05 23:31:37）
+//	2026-10-10 16:00:00 | 优化 | C级债务收尾批（G2 批准 2026-10-10 15:45:40）：
+//	  F1/C2 VerifyLoginFactor 补齐 mailbox 版同款输入防御（TrimSpace+长度≤64——
+//	  超长恶意码先格式拒绝不走完整哈希链）+F2/C3 otpauth URI 编码+
+//	  F3/C4 verifyTOTP nowSec 注入+F4/C5 PendingSecret 改名 TotpSecret
 package account
 
 import (
@@ -19,6 +23,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/url"
+	"strings"
+	"time"
 
 	"GRmail/internal/storage"
 )
@@ -60,8 +67,10 @@ func (s *AdminTwoFactorService) InitiateBinding(ctx context.Context, userID int6
 	if err := s.users.SetTwoFactorSecret(ctx, userID, secret); err != nil {
 		return nil, err
 	}
+	// F2/C3（2026-10-10 C级债务收尾批）：label 与 issuer 百分号编码——含特殊字符
+	// 的用户名/发行方不再破坏 URI 解析（纯字母数字编码后输出不变——兼容锚）。
 	uri := fmt.Sprintf("otpauth://totp/%s:%s?secret=%s&issuer=%s&algorithm=SHA1&digits=%d&period=%d",
-		issuer, accountLabel, secret, issuer, totpDigits, totpPeriodSeconds)
+		url.PathEscape(issuer), url.PathEscape(accountLabel), secret, url.QueryEscape(issuer), totpDigits, totpPeriodSeconds)
 	return &BindingMaterial{Secret: secret, OtpauthURI: uri}, nil
 }
 
@@ -73,13 +82,13 @@ func (s *AdminTwoFactorService) ConfirmBinding(ctx context.Context, userID int64
 	if err != nil {
 		return nil, err
 	}
-	if st.PendingSecret == "" {
+	if st.TotpSecret == "" {
 		return nil, ErrTwoFactorNotBound // 未发起绑定（会话态与库态不一致防护）
 	}
 	if st.Bound() {
 		return nil, ErrTwoFactorBound // 已确认（防重复确认重复发码）
 	}
-	step, ok := verifyTOTP(st.PendingSecret, code, st.LastTOTPStep)
+	step, ok := verifyTOTP(st.TotpSecret, code, st.LastTOTPStep, time.Now().Unix())
 	if !ok {
 		return nil, ErrTwoFactorCode // 错误码拒绝
 	}
@@ -107,7 +116,13 @@ func (s *AdminTwoFactorService) VerifyLoginFactor(ctx context.Context, userID in
 	if !st.Bound() {
 		return ErrTwoFactorNotBound
 	}
-	if step, ok := verifyTOTP(st.PendingSecret, code, st.LastTOTPStep); ok {
+	// F1/C2（2026-10-10 C级债务收尾批）：补齐 mailbox 版同款输入防御——空白/超长
+	// 码先格式拒绝（不走完整 TOTP+恢复码哈希链；双版防线对齐）。
+	code = strings.TrimSpace(code)
+	if code == "" || len(code) > 64 {
+		return ErrTwoFactorFormat
+	}
+	if step, ok := verifyTOTP(st.TotpSecret, code, st.LastTOTPStep, time.Now().Unix()); ok {
 		// 安全原子性批 F3（2026-10-06）：并发冲突哨兵按验证失败统一呈现（同
 		// mailbox 侧 TwoFactorService.VerifyLoginFactor 注记）。
 		if err := s.users.MarkTOTPStep(ctx, userID, step); err != nil {

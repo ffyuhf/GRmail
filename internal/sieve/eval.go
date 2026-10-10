@@ -15,6 +15,12 @@
 //	  ——脚本内容 SHA-256 键→AST（原每封来信全流程 Parse 重复编译消除；内容变更
 //	  天然失效；条目上限随机淘汰防无界增长；求值纯函数语义零变化——rfc5228 §2.10.6
 //	  错误即停行为保持）
+//	2026-10-10 16:05:00 | 优化 | C级债务收尾批（G2 批准 2026-10-10 15:45:40）：
+//	  F8/C19② header 测试头值 rfc2047 encoded-word 解码（rfc5228 §2.4.2.2「SHOULD
+//	  be done according to [MIME3]」+§5.7 首尾空白忽略——mime.WordDecoder，失败
+//	  原样宽容）+F18③/C19③ address 测试限定地址结构头白名单（§5.1「MUST restrict
+//	  to headers that contain addresses」——From/To/Cc/Bcc/Sender/Resent-From/
+//	  Resent-To 最小履行集）
 package sieve
 
 import (
@@ -22,6 +28,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"mime"
 	stdmail "net/mail"
 	"strings"
 	"sync"
@@ -302,10 +309,13 @@ func (st *evalState) evalTest(t *TestNode, evalCtx *grmail.EvalContext) (bool, e
 			return false, syntaxErr(t.Line, "未知比较器 %q（rfc5228 §2.7.3）", comparator)
 		}
 		// RF-F/F-S1：names/keys 双列表全量承载（§5.7「the value of any of the
-		// named headers ... matches any key」——任一 named 头值×任一 key 命中即真）
+		// named headers ... matches any key」——任一 named 头值×任一 key 命中即真）。
+		// F8/C19②：头值比较前 rfc2047 解码+首尾空白忽略（§2.4.2.2+§5.7）。
 		var values []string
 		for _, n := range t.Names {
-			values = append(values, evalCtx.Headers[strings.ToLower(n)]...)
+			for _, hv := range evalCtx.Headers[strings.ToLower(n)] {
+				values = append(values, decodeHeaderValue(hv))
+			}
 		}
 		keys, kerr := st.decodeAll(t.Keys)
 		if kerr != nil {
@@ -342,9 +352,18 @@ func (st *evalState) evalTest(t *TestNode, evalCtx *grmail.EvalContext) (bool, e
 				}
 			}
 		} else {
+			// F18③/C19③（2026-10-10 C级债务收尾批）：§5.1「Implementations MUST
+			// restrict the address test to headers that contain addresses」——
+			// 白名单限定（From/To/Cc/Bcc/Sender/Resent-From/Resent-To 最小履行集；
+			// 白名单外头名=运行时错误即停+implicit keep 兜底，与未知 envelope 部分
+			// 同款处置）。
 			for _, p := range parts {
+				if !isAddressHeader(p) {
+					return false, syntaxErr(t.Line, "address 测试仅限地址结构头（rfc5228 §5.1 MUST restrict）: %q", p)
+				}
 				for _, hv := range evalCtx.Headers[strings.ToLower(p)] {
-					values = append(values, extractAddresses(hv, addrPart)...) // §5.1：结构化头逐地址
+					// F8 同源：phrase 内 encoded-word 解码（rfc2047 §5(3)）后地址提取
+					values = append(values, extractAddresses(decodeHeaderValue(hv), addrPart)...) // §5.1：结构化头逐地址
 				}
 			}
 		}
@@ -368,6 +387,30 @@ func (st *evalState) evalTest(t *TestNode, evalCtx *grmail.EvalContext) (bool, e
 	default:
 		return false, syntaxErr(t.Line, "未知测试 %q（求值期防御态）", t.Name)
 	}
+}
+
+// addressHeaders 地址结构头白名单（F18③/C19③——rfc5228 §5.1 MUST restrict 的最小
+// 履行集：From/To/Cc/Bcc/Sender/Resent-From/Resent-To；键小写归一）。
+var addressHeaders = map[string]bool{
+	"from": true, "to": true, "cc": true, "bcc": true,
+	"sender": true, "resent-from": true, "resent-to": true,
+}
+
+// isAddressHeader 地址结构头判定（大小写不敏感）。
+func isAddressHeader(name string) bool { return addressHeaders[strings.ToLower(name)] }
+
+// decodeHeaderValue 头值比较前解码（F8/C19②——rfc5228 §2.4.2.2「Interpretation of
+// header data SHOULD be done according to [MIME3] section 6.2」+§2.7.2 跨字符集
+// 比较转 UTF-8+§5.7「ignoring leading and trailing whitespace」）：mime.WordDecoder
+// 解码 rfc2047 encoded-word（B/Q 双编码；默认 charset 集覆盖 §2.7.2 MUST 的
+// US-ASCII/ISO-8859-1/UTF-8）+首尾空白忽略；解码失败原样（§2.7.2「MAY be treated
+// as plain US-ASCII」宽容口径）。
+func decodeHeaderValue(v string) string {
+	dec, err := (&mime.WordDecoder{}).DecodeHeader(v)
+	if err != nil {
+		dec = v
+	}
+	return strings.TrimSpace(dec)
 }
 
 // extractAddresses 头值提取地址分量（§5.1：仅地址结构头——From/To/Cc/Bcc/Sender/

@@ -373,8 +373,17 @@ func (w *Watcher) scheduleReload(logger *slog.Logger) {
 	})
 }
 
-// Reload 立即重载配置并广播（SIGHUP 手动触发路径同此）
+// Reload 立即重载配置并广播（SIGHUP 手动触发路径同此）。
+// F6（C13，2026-10-10 C级债务收尾批）：入口 closed 前置检查——Close 后迟到的
+// 去抖 AfterFunc 回调零重载零广播（原仅 scheduleReload 检查 closed，已排队触发
+// 的回调仍会执行一次广播；幂等退出）。
 func (w *Watcher) Reload() error {
+	w.mu.Lock()
+	closed := w.closed
+	w.mu.Unlock()
+	if closed {
+		return nil // F6：Close 后迟到回调静默退出
+	}
 	fresh, err := Load(w.path)
 	if err != nil {
 		return err // 失败保持 current 不变（回滚语义）

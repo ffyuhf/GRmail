@@ -17,6 +17,9 @@
 //	  Mailbox 增 SCRAM 四元组字段+SetCredentials 签名扩展（PHC 与四元组单语句原子写
 //	  ——3.1-A）+GetSCRAMCredentialsByAddress 新方法+ErrSCRAMNotProvisioned 哨兵
 //	  （契约 v1.39.0；迁移 00014 三库；存量策略 3.2-A：既有邮箱 NULL 态回退 PLAIN）
+//	2026-10-10 16:00:00 | 优化 | C级债务收尾批 F4/C5：TwoFactorState.PendingSecret
+//	  改名 TotpSecret（字段名与列名 totp_secret 及"pending 或已绑定"实际语义对齐
+//	  ——原命名误导维护者；签名零变化——契约 v1.40.0 注记承载）
 package storage
 
 import (
@@ -75,20 +78,21 @@ type Mailbox struct {
 }
 
 // TwoFactorState 邮箱 2FA 绑定态快照（FR-018；表结构 v1.7.0 3.2 增列组——U24）。
-// 列映射：PendingSecret←totp_secret（Base32 明文——S4-W Q3-A 裁决 2026-10-01 16:44:56）；
+// 列映射：TotpSecret←totp_secret（F4/C5 改名——原 PendingSecret；Base32 明文——
+// S4-W Q3-A 裁决 2026-10-01 16:44:56）；
 // CodesHash←recovery_codes（JSON 数组·SHA-256 hex 哈希态——S4-W Q2-A，沿 token_hash 先例）；
 // Required←two_factor_required（管理员强制标记 REQ-20261001-004）；LastTOTPStep←
 // totp_last_step（rfc6238 §5.2 L343-347 同窗重放拒绝 MUST 承载；0=从未验证——NULL 映射）。
 type TwoFactorState struct {
-	PendingSecret string   // 非空=已发起绑定（pending 或已绑定）
-	CodesHash     []string // 恢复码哈希集（非空=绑定确认完成）
-	Required      bool     // 管理员强制标记（不改变已绑定态——仅引导未绑定账号）
-	LastTOTPStep  int64    // 最近 TOTP 验证成功时间步（X=30s——rfc6238 §4.1）
+	TotpSecret   string   // 非空=已发起绑定（pending 或已绑定）——F4/C5 改名（原 PendingSecret）
+	CodesHash    []string // 恢复码哈希集（非空=绑定确认完成）
+	Required     bool     // 管理员强制标记（不改变已绑定态——仅引导未绑定账号）
+	LastTOTPStep int64    // 最近 TOTP 验证成功时间步（X=30s——rfc6238 §4.1）
 }
 
 // Bound 绑定完成判定：密钥与恢复码同时非空（FR-018 登录二步生效条件；pending 态
 // 〔仅密钥无恢复码〕不生效——防绑定中途中断导致无 authenticator 即被要求二步的死锁）。
-func (s *TwoFactorState) Bound() bool { return s.PendingSecret != "" && len(s.CodesHash) > 0 }
+func (s *TwoFactorState) Bound() bool { return s.TotpSecret != "" && len(s.CodesHash) > 0 }
 
 // SCRAMCredentials SCRAM-SHA-1 服务端四元组（v1.39.0 SCRAM认证批；表结构 v2.2.0
 // 3.18 列组——迁移 00014 三库）。StoredKey=H(ClientKey)/ServerKey=HMAC(SaltedPassword,
