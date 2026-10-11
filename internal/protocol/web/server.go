@@ -163,6 +163,9 @@ func NewServer(cfg ServerConfig, sessions storage.SessionRepo, users storage.Use
 		plugins:        cfg.Plugins,
 		pending2fa:     newPendingLoginStore(),
 	}
+	// Webmail前端缺陷修复批 D7-A：静态内容版本注入（模板引用 ?v= 承载——
+	// 内容寻址，资源变更即缓存键变；测试直构未走 NewServer 时为空串退化无参形态）
+	templates.StaticVersion = computeStaticVersion()
 	s.engine = gin.New()
 	// 安全原子性批 F9（2026-10-06）：零信任代理——ClientIP 不消费 X-Forwarded-For
 	// 类头（Bearer token IP 绑定与会话 IP 突变告警不可被伪造头污染；直连部署语义
@@ -185,11 +188,12 @@ func NewServer(cfg ServerConfig, sessions storage.SessionRepo, users storage.Use
 //   - X-Content-Type-Options: nosniff——MIME 嗅探防护；
 //   - X-Frame-Options: DENY——点击劫持嵌入防护（与 CSP frame-ancestors 双保险）；
 //   - Referrer-Policy: strict-origin-when-cross-origin——跨站来源泄漏收口；
-//   - CSP default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'
-//     data:; frame-ancestors 'none'——脚本/样式仅同源外链（配套内联代码外迁：compose/
-//     admin 模板脚本迁外链 compose.js/grmail.js，onclick/onchange/oninput/onsubmit
-//     内联事件全部改事件绑定——本批 9 处外迁清单见 CHANGE5 第一章）；img data: 承载
-//     FR-013 ⑨ base64 内联图片；正文 iframe sandbox 渲染通道不受影响。
+//   - CSP（Webmail前端缺陷修复批 A1/D2-A——2026-10-10 G2 批准：逐指令显式补齐，
+//     default-src 保持 'none' 未收敛）：script-src 'self'/style-src 'self'/img-src
+//     'self' data: + **connect-src 'self'**（htmx XHR/fetch 放行——原回落 none 致
+//     全部局部更新被浏览器拦截，阻断级缺陷收口）+ **frame-src 'self'**（srcdoc/
+//     同源正文 iframe 创建放行——D3-B 正文代理端点承载）+ **media-src 'self'**
+//     （正文内联音视频资源）+ frame-ancestors 'none'。
 //
 // 静态资源（htmx/quill/grmail.js/app.css）均为外链 src 形态——CSP 兼容实证。
 func (s *Server) securityHeadersMiddleware() gin.HandlerFunc {
@@ -199,7 +203,7 @@ func (s *Server) securityHeadersMiddleware() gin.HandlerFunc {
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		h.Set("Content-Security-Policy",
-			"default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; frame-ancestors 'none'")
+			"default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-src 'self'; media-src 'self'; frame-ancestors 'none'")
 		c.Next()
 	}
 }
@@ -244,6 +248,11 @@ func (s *Server) mountRoutes() {
 	auth.GET("/", s.homeGET)
 	auth.GET("/mails", s.mailsFragmentGET)
 	auth.GET("/mails/:id", s.mailDetailGET)
+	// Webmail前端缺陷修复批 D3-B（干系人裁决 2026-10-10 20:52：正文同源代理端点——
+	// iframe src 指向本端点，响应携带独立 CSP 头〔style-src 'unsafe-inline'〕——
+	// 全浏览器正文内联样式恢复；豁免批一「零端点增减」红线 1 条〔内部只读，鉴权与
+	// 归属校验沿 /attachments/:id 先例〕；gin 树 /mails/:id 与 /mails/:id/body 并存合法）
+	auth.GET("/mails/:id/body", s.mailBodyGET)
 	auth.POST("/mails/batch", s.mailsBatchPOST) // POST 树独立——与 GET /mails/:id 无冲突
 	auth.GET("/compose", s.composeGET)
 	auth.POST("/compose", s.composePOST)

@@ -43,14 +43,14 @@ var iconShield = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" str
 // 参数：lang 界面语言；title 页面标题；label 主体呈现名；isAdmin admin 主体标记；csrf 会话绑定 token。
 templ AppLayout(lang Lang, title string, label string, isAdmin bool, csrf string) {
 	<!DOCTYPE html>
-	<html lang={ string(lang) }>
+	<html lang={ string(lang) } data-confirm-default={ Tr(lang, "common.confirm") }>
 		<head>
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
 			<title>{ title } - GRmail</title>
-			<script src="/static/htmx.min.js"></script>
-			<script src="/static/grmail.js" defer></script>
-			<link rel="stylesheet" href="/static/app.css"/>
+			<script src={ StaticURL("/static/htmx.min.js") }></script>
+			<script src={ StaticURL("/static/grmail.js") } defer></script>
+			<link rel="stylesheet" href={ StaticURL("/static/app.css") }/>
 		</head>
 		<body>
 			<input type="checkbox" id="nav-toggle" class="nav-toggle-input" checked hidden/>
@@ -86,7 +86,7 @@ templ AppLayout(lang Lang, title string, label string, isAdmin bool, csrf string
 							} else {
 								<a href="/settings">{ Tr(lang, "top.settingsHub") }</a>
 							}
-							<a href={ langSwitchHref(lang, "/") }>
+							<a href={ langSwitchHref(lang, "") }>
 								<span class="ic" aria-hidden="true">@templ.Raw(iconLang)</span>
 								{ Tr(lang, "top.lang") }
 							</a>

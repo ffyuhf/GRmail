@@ -37,8 +37,9 @@ func TestU17ComposeEditorRender(t *testing.T) {
 	}
 	s := w.Body.String()
 	for _, want := range []string{
-		`href="/static/quill.snow.css"`,
-		`src="/static/quill.js"`,
+		// Webmail前端缺陷修复批 D7-A 断言形态适配：版本化查询参数（?v=）——前缀包含（去尾引号）
+		`href="/static/quill.snow.css`,
+		`src="/static/quill.js`, // D7-A 断言形态适配：版本化 ?v= 前缀包含（去尾引号）
 		`id="compose-toolbar"`,
 		`id="editor-container"`,
 		`id="f-body"`,
@@ -48,7 +49,8 @@ func TestU17ComposeEditorRender(t *testing.T) {
 		// B-S批 F2 断言形态适配：提交桥接改 compose.js 内 submit 绑定（原 form
 		// onsubmit 内联清除——CSP 配套外迁；页面锚=form id+外链脚本引用）
 		`id="compose-form"`,
-		`src="/static/compose.js"`,
+		// Webmail前端缺陷修复批 D7-A 断言形态适配：版本化 ?v= 前缀包含（去尾引号）
+		`src="/static/compose.js`,
 		"初始正文", // 初始内容经隐藏 textarea 文本携带（转义细节不锚）
 		"ql-bold", "ql-image", "ql-clean",
 		"全屏书写", "退出全屏", // 全屏按钮双语 data 属性

@@ -105,13 +105,20 @@
 
 	// U22 uploader 模块自定义 handler——默认 readAsDataURL 直插语义的压缩版
 	// 复刻（逐图压缩→顺序 insertEmbed→光标后移；G9 data: 内联形态不变）。
+	// B8（Webmail前端缺陷修复批批一——三轮评审二轮#5/#6 收口）：插入索引随有效
+	// 图递增（原恒 range.index 连续插入把前一张挤后——顺序与选择相反）+光标按
+	// 有效计数前进（原 urls.length 含失败空串占位——光标错算）。
 	function grmailUploaderHandler(range, files) {
 		var uploads = Array.from(files).map(function (f) { return grmailCompressImage(f); });
 		Promise.all(uploads).then(function (urls) {
+			var valid = 0;
 			urls.forEach(function (u) {
-				if (u) { grmailEditor.insertEmbed(range.index, 'image', u); }
+				if (u) {
+					grmailEditor.insertEmbed(range.index + valid, 'image', u);
+					valid++;
+				}
 			});
-			grmailEditor.setSelection(range.index + urls.length);
+			grmailEditor.setSelection(range.index + valid);
 		});
 	}
 
@@ -119,9 +126,22 @@
 	// 写入隐藏 input body（随表单 POST——端点形态零变更）。
 	// B-S批 F2：原 form onsubmit 内联改 submit 事件监听（语义等价——
 	// 同步写值后表单正常提交）。
+	// B2（Webmail前端缺陷修复批批一）：Quill 空产物形态精确 trim（<p><br></p>
+	// 等空块序列→空串）——原 innerHTML 恒非空致空白正文绕过校验（服务端
+	// htmlBodyBlank 第二道防线对应）；媒体元素（img/video/audio/iframe）零触碰。
+	function grmailEditorBlank(html) {
+		if (/<img/i.test(html) || /<video/i.test(html) || /<audio/i.test(html) || /<iframe/i.test(html)) {
+			return false;
+		}
+		var t = html.replace(/<p>(?:[\s]|<br\s*\/?>|&nbsp;)*<\/p>/gi, "");
+		t = t.replace(/<br\s*\/?>/gi, "");
+		return t.replace(/&nbsp;/g, " ").trim() === "";
+	}
 	function grmailComposeSync() {
 		if (grmailEditor) {
-			document.getElementById('f-body').value = grmailEditor.root.innerHTML;
+			var html = grmailEditor.root.innerHTML;
+			if (grmailEditorBlank(html)) { html = ""; }
+			document.getElementById('f-body').value = html;
 		}
 	}
 
@@ -153,16 +173,20 @@
 	}
 
 	// ── CSV 候选合入（U16 Q5-A 既有——勾选行地址合并进所选 to/cc/bcc 输入框）──
+	// B12（批一）：CSRF 取值限定 #compose-form 作用域——原全文档 querySelector
+	// 命中顶栏登出表单的隐藏域（值同源故功能未坏——结构耦合：顶栏结构一变即 404）。
+	// D6-B：导入成功 toast 回执（grmail.js window 引用——IIFE 隔离跨越）。
 	function grmailCsvImport() {
 		var f = document.getElementById('csv-file').files[0];
 		if (!f) { return; }
 		var fd = new FormData();
-		fd.append('csrf_token', document.querySelector('input[name=csrf_token]').value);
+		fd.append('csrf_token', document.getElementById('compose-form').querySelector('input[name=csrf_token]').value);
 		fd.append('file', f);
 		fetch('/compose/csv-import', { method: 'POST', body: fd })
 			.then(function (r) { return r.ok ? r.text() : Promise.reject(r.status); })
 			.then(function (html) {
 				document.getElementById('csv-result').innerHTML = html;
+				if (window.grmailShowToast) { window.grmailShowToast(document.getElementById('csv-result').textContent.trim().slice(0, 80), "ok"); }
 			})
 			.catch(function () {
 				var pageEl = document.getElementById('compose-page');
@@ -187,7 +211,22 @@
 	grmailAdaptShortcutTitles();
 	document.getElementById('csv-parse-btn').addEventListener('click', grmailCsvImport);
 	document.getElementById('fullscreen-btn').addEventListener('click', grmailComposeFullscreen);
-	document.getElementById('compose-form').addEventListener('submit', grmailComposeSync);
+	document.getElementById('compose-form').addEventListener('submit', function () {
+		grmailComposeSync();
+		// B10（批一）：提交期禁用全部提交按钮——双击重复入队/重复存草稿防线
+		// （303 导航离开前的窗口期；校验失败重渲染为新 DOM 自然恢复）。
+		var btns = this.querySelectorAll('button[type=submit]');
+		for (var i = 0; i < btns.length; i++) { btns[i].disabled = true; }
+	});
+	// B11（批一）：ESC 退出全屏的按钮文案还原——fullscreenchange 监听（原仅点击
+	// 回调改写，ESC 系统退出后按钮停留「退出全屏」态）。
+	document.addEventListener('fullscreenchange', function () {
+		var btn = document.getElementById('fullscreen-btn');
+		if (!btn) { return; }
+		btn.textContent = document.fullscreenElement
+			? btn.getAttribute('data-exit')
+			: btn.getAttribute('data-enter');
+	});
 	// CSV 合入按钮经服务端片段注入（i18n.go csvImport 片段 id=csv-merge-btn）——
 	// 容器级 click 委托（innerHTML 替换后仍生效）
 	document.getElementById('csv-result').addEventListener('click', function (e) {

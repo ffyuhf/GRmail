@@ -1292,6 +1292,11 @@ input[type="file"]::file-selector-button:hover { background: var(--primary-soft)
 		animation-iteration-count: 1 !important;
 		transition-duration: 0.01ms !important;
 	}
+	/* D6-B（Webmail前端缺陷修复批批一）：toast 信息性动画豁免——生命周期动画
+	 * gr-toast-life 终态含 visibility:hidden，在减动效全局压缩（0.01ms 直达终态）
+	 * 下提示将完全不可见；toast 非装饰动画（D6-B 接入的瞬态反馈），豁免压缩并
+	 * 由 JS setTimeout 移除承载清理（grmailShowToast 5.6s 兜底）。 */
+	.toast { animation: none !important; }
 }
 
 /* ══ 暗色补丁：Quill snow 主题选择器（U22 既有——令牌联动保持）══ */

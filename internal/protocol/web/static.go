@@ -14,6 +14,8 @@
 package web
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"io/fs"
 	"net/http"
 	"path"
@@ -36,8 +38,14 @@ func staticSubtree() fs.FS {
 	return sub
 }
 
-// staticHandler 静态资源端点（GET /static/*filepath）：
+// staticHandler 静态资源端点（GET /static/*filepath?v=<buildID>）：
 // embed 读取 + 扩展名 MIME + 私有缓存头（覆写入口中间件的 no-store）。
+// Webmail前端缺陷修复批 D7-A（2026-10-10 G2 批准：版本化 cache-busting）：
+//   - NewServer 计算全部静态内容 SHA-256 前 8 hex 注入 templates.StaticVersion，
+//     模板引用经 ?v= 承载（内容变更→版本变→缓存键变，发版即生效）；
+//   - Cache-Control 提升 private, max-age=31536000, immutable（版本化后可长缓存；
+//     查询参数不影响路由匹配——filepath 不含 query 零解析）。
+//
 // 目录穿越防线（F6/M12 修复 2026-10-08）：段级 ".." 检测先行（拒绝任何 ".." 路径段
 // ——保守语义：静态资源名不含该形态；子串检测误拒合法双点名 foo..bar.js 已废止）+
 // path.Clean 规范化后读取（校验与读取同对象；embed.FS 越界拒绝为纵深第二道）。
@@ -63,8 +71,26 @@ func (s *Server) staticHandler(c *gin.Context) {
 		c.Status(http.StatusNotFound)
 		return
 	}
-	c.Header("Cache-Control", "private, max-age=86400") // 覆写 no-store（静态非会话承载）
+	c.Header("Cache-Control", "private, max-age=31536000, immutable") // D7-A：版本化长缓存（覆写 no-store——静态非会话承载）
 	c.Data(http.StatusOK, mimeByExt(name), data)
+}
+
+// computeStaticVersion 静态资源内容版本（embed 全部文件内容拼接 SHA-256 前 8 hex——
+// D7-A：内容寻址，任何资源变更即版本更替；NewServer 一次性计算）。
+func computeStaticVersion() string {
+	h := sha256.New()
+	_ = fs.WalkDir(staticFiles, ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		data, rerr := fs.ReadFile(staticFiles, p)
+		if rerr != nil {
+			return nil // 单文件读失败跳过（版本覆盖面尽力）
+		}
+		_, _ = h.Write(data)
+		return nil
+	})
+	return hex.EncodeToString(h.Sum(nil))[:8]
 }
 
 // mimeByExt 常见前端资源 MIME（不足者 application/octet-stream 兜底）。

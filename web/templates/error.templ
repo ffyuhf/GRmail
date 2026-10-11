@@ -1,0 +1,34 @@
+// GRmail Web 错误呈现组件（Webmail前端缺陷修复批·批一 A4/E1 最小面——2026-10-10
+// G2 批准：片段错误块+错误整页骨架；E1 统一错误页组件的批二完整化预留本组件扩展位）。
+// 依据：三轮外部评审一轮#4/#36/#41——片段端点异常态（空体状态码/整页塞片段）与
+// 4xx/5xx 全站无呈现层；A4 片段语境经 fragError helper 双态分派（HX=片段错误块/
+// 非 HX=错误整页）。
+// SRS 条目：FR-013（㉗ 统一拦截与会话失效跳转承载伴随）；NFR-005。
+package templates
+
+// ErrorBlock 片段错误块（HTMX 交换目标内就地呈现——role=alert 读屏播报）。
+// 参数：lang 界面语言；msg 错误文案（Tr 产物）。
+templ ErrorBlock(lang Lang, msg string) {
+	<div class="error" role="alert">{ msg }</div>
+}
+
+// ErrorPageView 错误整页（非 HX 直访/降级语境——Layout 骨架+窄卡片+返回首页链接）。
+// 参数：lang 界面语言；code HTTP 状态码（标题文案映射 400/403/404/423/500/503，
+// 其余归 err.page500）；msg 具体错误文案。
+templ ErrorPageView(lang Lang, code int, msg string) {
+	{{ titleKey := "err.page500" }}
+	{{ switch code {
+	case 400: titleKey = "err.page400"
+	case 403: titleKey = "err.page403"
+	case 404: titleKey = "err.page404"
+	case 423: titleKey = "err.page423"
+	case 503: titleKey = "err.page503"
+	} }}
+	@Layout(lang, Tr(lang, "err.pageTitle"), "") {
+		<div class="card">
+			<h1>{ Tr(lang, titleKey) }</h1>
+			<p>{ msg }</p>
+			<p><a class="btn-text" href="/">{ Tr(lang, "common.backHome") }</a></p>
+		</div>
+	}
+}

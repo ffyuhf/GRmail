@@ -50,7 +50,11 @@ func (s *Server) langSetGET(c *gin.Context) {
 	// F12（C23，2026-10-10 C级债务收尾批）：HttpOnly=true——非凭据偏好 cookie 的
 	// 防御纵深（JS 侧零消费实证——grmail.js 仅操作 /lang 链接 href；服务端读取
 	// 不受 HttpOnly 影响，行为零变化）。
-	c.SetCookie(langCookieName, string(target), 365*24*3600, "/", "", true, true)
+	// D4-B（Webmail前端缺陷修复批批一——干系人裁决 2026-10-10 20:14）：Secure 按
+	// 请求 scheme 动态——明文部署（-p 端口/向导期 80）下语言偏好可写入生效（原恒
+	// Secure 被浏览器静默丢弃致切换失效）；HTTPS 部署零变化。披露：明文通道低敏感
+	// 偏好 cookie 可被中间人读取（非凭据——__Host-sid 会话 cookie 恒 Secure不受影响）。
+	c.SetCookie(langCookieName, string(target), 365*24*3600, "/", "", c.Request.TLS != nil, true)
 	c.Redirect(http.StatusFound, next)
 }
 
@@ -62,29 +66,31 @@ const csvImportMaxBytes = 2 << 20
 // net/mail 地址验证→候选勾选片段（HTML——前端 fetch innerHTML 消费）；解析型端点
 // 无落库（csrfProtect 沿会话绑定形态——纵深防御）。
 func (s *Server) csvImportPOST(c *gin.Context) {
+	// B6（Webmail前端缺陷修复批批一）：四处错误文案 Tr 化（原英文纯文本——中文
+	// 界面语言不符，三轮评审三轮#9）。
+	lang := langOf(c)
 	fh, err := c.FormFile("file")
 	if err != nil || fh == nil {
-		c.Data(http.StatusBadRequest, "text/plain; charset=utf-8", []byte("CSV file required"))
+		c.Data(http.StatusBadRequest, "text/plain; charset=utf-8", []byte(templates.Tr(lang, "csv.fileRequired")))
 		return
 	}
 	if fh.Size > csvImportMaxBytes {
-		c.Data(http.StatusRequestEntityTooLarge, "text/plain; charset=utf-8", []byte("CSV too large (2MB)"))
+		c.Data(http.StatusRequestEntityTooLarge, "text/plain; charset=utf-8", []byte(templates.Tr(lang, "csv.tooLarge")))
 		return
 	}
 	f, oerr := fh.Open()
 	if oerr != nil {
-		c.Data(http.StatusBadRequest, "text/plain; charset=utf-8", []byte("CSV open failed"))
+		c.Data(http.StatusBadRequest, "text/plain; charset=utf-8", []byte(templates.Tr(lang, "csv.readFailed")))
 		return
 	}
 	defer func() { _ = f.Close() }()
 
 	buf := make([]byte, fh.Size)
 	if _, rerr := f.Read(buf); rerr != nil {
-		c.Data(http.StatusBadRequest, "text/plain; charset=utf-8", []byte("CSV read failed"))
+		c.Data(http.StatusBadRequest, "text/plain; charset=utf-8", []byte(templates.Tr(lang, "csv.readFailed")))
 		return
 	}
 	rows, skipped := parseCSVRecipients(buf)
-	lang := langOf(c)
 	var b bytes.Buffer
 	b.WriteString(`<div class="csv-candidates"><p>`)
 	b.WriteString(templates.Tr(lang, "compose.csvTarget"))
@@ -93,11 +99,16 @@ func (s *Server) csvImportPOST(c *gin.Context) {
 		// 安全原子性批 F8（2026-10-06）：地址/姓名列 HTML 转义（Go 标准库）——
 		// 该片段经 compose.templ innerHTML 消费，未转义姓名可注入标记/脚本语义
 		// （Addr 虽经 net/mail 校验仍统一转义——纵深防御）。
-		fmt.Fprintf(&b, `<tr><td><input type="checkbox" class="csv-addr" value=%q/></td><td>%s</td><td>%s</td></tr>`,
-			r.Addr, html.EscapeString(r.Addr), html.EscapeString(r.Name))
+		// B3（批一）：value 属性改 html.EscapeString——原 %q 为 Go 字符串字面量
+		// 转义（" → \"）非 HTML 属性转义，quoted-string 本地部合法地址
+		// （如 "<b>x</b>"@example.com——net/mail 接受）致属性断裂 DOM 注入
+		// （三轮评审三轮#25）；与文本列同一转义器对齐。
+		fmt.Fprintf(&b, `<tr><td><input type="checkbox" class="csv-addr" value="%s"/></td><td>%s</td><td>%s</td></tr>`,
+			html.EscapeString(r.Addr), html.EscapeString(r.Addr), html.EscapeString(r.Name))
 	}
 	b.WriteString(`</table><p>`)
-	fmt.Fprintf(&b, "%d rows, %d skipped", len(rows), skipped)
+	// B6：计数行 Trf 化（原硬编码英文 "%d rows, %d skipped"）。
+	fmt.Fprintf(&b, "%s", templates.Trf(lang, "csv.rowsFmt", len(rows), skipped))
 	b.WriteString(` <button type="button" id="csv-merge-btn">`)
 	b.WriteString(templates.Tr(lang, "compose.csvConfirm"))
 	b.WriteString(`</button></p></div>`)

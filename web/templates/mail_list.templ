@@ -72,6 +72,7 @@ templ Sidebar(d *MailListData) {
 			<a class={ "folder-item", templ.KV("active", f.Active) } tabindex="0"
 				href={ fmt.Sprintf("/?folder=%d&page=1&pagesize=%d", f.ID, d.Pagesize) }
 				hx-get={ fmt.Sprintf("/mails?folder=%d&page=1&pagesize=%d", f.ID, d.Pagesize) }
+				hx-push-url="true"
 				hx-target="#mail-list" hx-indicator="#mail-loading">
 				if f.Kind == "custom" {
 					<span class="ficon" aria-hidden="true">@templ.Raw(iconMailFolder)</span>
@@ -88,7 +89,7 @@ templ Sidebar(d *MailListData) {
 			<summary>{ Tr(lang, "mail.manageFolders") }</summary>
 			<form method="post" action="/folders">
 				<input type="hidden" name="csrf_token" value={ d.CSRF }/>
-				<input type="text" name="name" placeholder={ Tr(lang, "mail.folderName") }/>
+				<input type="text" name="name" required="required" maxlength="255" aria-label={ Tr(lang, "mail.folderName") } placeholder={ Tr(lang, "mail.folderName") }/>
 				<button class="btn-sm" type="submit">{ Tr(lang, "common.create") }</button>
 			</form>
 			for _, f := range d.Folders {
@@ -98,7 +99,7 @@ templ Sidebar(d *MailListData) {
 						<div class="folder-manage-row">
 							<form method="post" action={ fmt.Sprintf("/folders/%d/rename", f.ID) }>
 								<input type="hidden" name="csrf_token" value={ d.CSRF }/>
-								<input type="text" name="name" placeholder={ Tr(lang, "mail.newName") }/>
+								<input type="text" name="name" required="required" maxlength="255" aria-label={ Tr(lang, "mail.newName") } placeholder={ Tr(lang, "mail.newName") }/>
 								<button class="btn-sm" type="submit">{ Tr(lang, "common.rename") }</button>
 							</form>
 							<form method="post" action={ fmt.Sprintf("/folders/%d/delete", f.ID) }>
@@ -127,7 +128,7 @@ templ MailListFragment(d *MailListData) {
 			<p class="notice" role="status">{ Tr(lang, "mail.noticedDeleted") }</p>
 		}
 		<div class="tool-bar">
-			<form hx-get="/search" hx-target="#mail-list" hx-indicator="#mail-loading">
+			<form hx-get="/search" hx-target="#mail-list" hx-indicator="#mail-loading" action="/search" method="get">
 				<span class="search-box">
 					<span class="ic" aria-hidden="true">@templ.Raw(iconSearch)</span>
 					<input type="search" name="keyword" placeholder={ Tr(lang, "mail.searchHint") } value={ d.Keyword }/>
@@ -139,21 +140,28 @@ templ MailListFragment(d *MailListData) {
 			if d.UnreadOnly {
 				<a class="filter-link" href={ fmt.Sprintf("/mails?folder=%d&unread=0&page=1&pagesize=%d", d.ActiveFolder, d.Pagesize) }
 					hx-get={ fmt.Sprintf("/mails?folder=%d&unread=0&page=1&pagesize=%d", d.ActiveFolder, d.Pagesize) }
+					hx-push-url="true"
 					hx-target="#mail-list" hx-indicator="#mail-loading">{ Tr(lang, "mail.clearUnread") }</a>
 			} else {
 				<a class="filter-link" href={ fmt.Sprintf("/mails?folder=%d&unread=1&page=1&pagesize=%d", d.ActiveFolder, d.Pagesize) }
 					hx-get={ fmt.Sprintf("/mails?folder=%d&unread=1&page=1&pagesize=%d", d.ActiveFolder, d.Pagesize) }
+					hx-push-url="true"
 					hx-target="#mail-list" hx-indicator="#mail-loading">{ Tr(lang, "mail.unreadOnly") }</a>
 			}
 			<span class="tool-spacer"></span>
 			<span class="tool-count">{ Trf(lang, "mail.totalFmt", d.Total) }</span>
 			if d.IsSearch {
-				<a class="filter-link" hx-get={ fmt.Sprintf("/mails?folder=%d&page=1", d.ActiveFolder) } hx-target="#mail-list">{ Tr(lang, "mail.exitSearch") }</a>
+				<a class="filter-link" href={ fmt.Sprintf("/mails?folder=%d&page=1", d.ActiveFolder) }
+					hx-get={ fmt.Sprintf("/mails?folder=%d&page=1", d.ActiveFolder) }
+					hx-push-url="true"
+					hx-target="#mail-list">{ Tr(lang, "mail.exitSearch") }</a>
 			}
 		</div>
 		<div class="batch-bar">
 			<span class="sel-count" data-fmt={ Tr(lang, "mail.selectedFmt") }>0</span>
-			<form hx-post="/mails/batch" hx-target="#mail-list" id="batch-form">
+			<form hx-post="/mails/batch" hx-target="#mail-list" id="batch-form"
+				data-confirm-delete={ Tr(lang, "mail.confirmBatchDelete") }
+				data-confirm-move-trash={ Tr(lang, "mail.confirmMoveTrash") }>
 				<input type="hidden" name="csrf_token" value={ d.CSRF }/>
 				<label class="inline"><input type="checkbox" name="all"/>{ Tr(lang, "mail.selectAll") }</label>
 				<select name="action" class="btn-sm">
@@ -165,9 +173,11 @@ templ MailListFragment(d *MailListData) {
 					<option value="delete">{ Tr(lang, "common.delete") }</option>
 				</select>
 				if len(d.Folders) > 0 {
-					<select name="target" class="btn-sm">
+					<select name="target" class="btn-sm" aria-label={ Tr(lang, "mail.moveTo") }>
 						for _, f := range d.Folders {
-							<option value={ fmt.Sprintf("%d", f.ID) }>{ folderDisplayName(lang, f.Kind, f.Name) }</option>
+							if f.Kind != "unregistered" && f.ID != d.ActiveFolder {
+								<option value={ fmt.Sprintf("%d", f.ID) } data-kind={ f.Kind }>{ folderDisplayName(lang, f.Kind, f.Name) }</option>
+							}
 						}
 					</select>
 				}
@@ -203,7 +213,7 @@ templ MailListFragment(d *MailListData) {
 										<span class="dot" title={ Tr(lang, "mail.unreadDot") }></span>
 									}
 								</td>
-								<td class="cell-trunc"><a hx-get={ fmt.Sprintf("/mails/%d", m.ID) } hx-target="#mail-list" title={ subjectOr(lang, m.Subject) }>{ subjectOr(lang, m.Subject) }</a></td>
+								<td class="cell-trunc"><a href={ fmt.Sprintf("/mails/%d", m.ID) } hx-get={ fmt.Sprintf("/mails/%d", m.ID) } hx-push-url="true" hx-target="#mail-list" title={ subjectOr(lang, m.Subject) }>{ subjectOr(lang, m.Subject) }</a></td>
 								<td class="cell-trunc"><span title={ m.FromAddr }>{ m.FromAddr }</span></td>
 								<td class="time-cell">{ m.SentAt }</td>
 							</tr>
@@ -213,15 +223,15 @@ templ MailListFragment(d *MailListData) {
 			</div>
 			<div class="pager">
 				if d.Page > 1 {
-					<a hx-get={ pageHref(d, d.Page-1) } hx-target="#mail-list" hx-indicator="#mail-loading">{ Tr(lang, "mail.prevPage") }</a>
+					<a href={ pageHref(d, d.Page-1) } hx-get={ pageHref(d, d.Page-1) } hx-push-url="true" hx-target="#mail-list" hx-indicator="#mail-loading">{ Tr(lang, "mail.prevPage") }</a>
 				}
 				<span>{ Trf(lang, "mail.pageFmt", d.Page, d.PageCount) }</span>
 				if d.Page < d.PageCount {
-					<a hx-get={ pageHref(d, d.Page+1) } hx-target="#mail-list" hx-indicator="#mail-loading">{ Tr(lang, "mail.nextPage") }</a>
+					<a href={ pageHref(d, d.Page+1) } hx-get={ pageHref(d, d.Page+1) } hx-push-url="true" hx-target="#mail-list" hx-indicator="#mail-loading">{ Tr(lang, "mail.nextPage") }</a>
 				}
 				<span class="pagesize">{ Tr(lang, "mail.pagesizeSelect") }
 					for _, n := range []int{15, 25, 50, 100} {
-						<a hx-get={ pagesizeHref(d, n) } hx-target="#mail-list" class={ templ.KV("active", n == d.Pagesize) }>{ fmt.Sprintf("%d", n) }</a>
+						<a href={ pagesizeHref(d, n) } hx-get={ pagesizeHref(d, n) } hx-push-url="true" hx-target="#mail-list" class={ templ.KV("active", n == d.Pagesize) }>{ fmt.Sprintf("%d", n) }</a>
 					}
 				</span>
 			</div>

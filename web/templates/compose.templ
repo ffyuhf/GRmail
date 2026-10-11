@@ -160,9 +160,9 @@ templ ComposeView(d *ComposeData) {
 					<a class="btn-text" href="/">{ Tr(lang, "common.cancel") }</a>
 				</div>
 			</form>
-			<link rel="stylesheet" href="/static/quill.snow.css"/>
-			<script src="/static/quill.js"></script>
-			<script src="/static/compose.js"></script>
+			<link rel="stylesheet" href={ StaticURL("/static/quill.snow.css") }/>
+			<script src={ StaticURL("/static/quill.js") }></script>
+			<script src={ StaticURL("/static/compose.js") }></script>
 		</div>
 	}
 }

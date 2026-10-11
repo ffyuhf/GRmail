@@ -82,7 +82,8 @@ func TestU22ToolbarControlsRender(t *testing.T) {
 	// compose.js 文件内容断言——断言语义保持「锚在位」（断言面零删减）
 	for _, want := range []string{
 		`data-img-max-edge="1920"`, `data-jpeg-quality="0.85"`,
-		`src="/static/compose.js"`,
+		// Webmail前端缺陷修复批 D7-A 断言形态适配：版本化 ?v= 前缀包含（去尾引号）
+		`src="/static/compose.js`,
 	} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("压缩注入锚缺失（页面）: %q", want)

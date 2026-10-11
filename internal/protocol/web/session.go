@@ -245,8 +245,12 @@ func requireAuth() gin.HandlerFunc {
 				return
 			}
 			if c.Request.Method == http.MethodGet {
+				// D4-B（Webmail前端缺陷修复批批一）：Secure 按请求 scheme 动态——明文
+				// 部署（-p 端口/向导期 80）回跳 cookie 可写入（原恒 Secure 被浏览器丢弃
+				// 致「被登出重登后回不到原页」另一半收口）；HTTPS 零变化。低敏感路径
+				// cookie（非凭据）——披露同 langSetGET。
 				c.SetCookie(loginRedirectCookie, c.Request.URL.Path, 300, "/", "",
-					true, true) // 5min 窗口 HttpOnly+SameSite=Strict（站内回跳临时态）
+					c.Request.TLS != nil, true) // 5min 窗口 HttpOnly+SameSite=Strict（站内回跳临时态）
 			}
 			c.Redirect(http.StatusFound, "/login")
 			c.Abort()

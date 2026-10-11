@@ -545,6 +545,38 @@ var messages = map[string][2]string{
 	"folder.trash":        {"已删除", "Trash"},
 	"folder.junk":         {"垃圾邮件", "Junk"},
 	"folder.unregistered": {"未注册来信", "Unregistered"},
+	// ── Webmail前端缺陷修复批·批一（组A/B 承载键——A4 片段错误块/ErrorPage、B4 文件夹
+	// 哨兵文案、B5 遗留 compose 键复用（err.* 既有）、B6 CSV、B13 确认、B7 失配提示）──
+	"err.pageTitle":           {"请求出错", "Request error"},
+	"err.page404":             {"页面不存在", "Page not found"},
+	"err.page403":             {"无权访问", "Forbidden"},
+	"err.page400":             {"请求无效", "Bad request"},
+	"err.page500":             {"系统故障，请稍后重试", "Internal error, please retry later"},
+	"err.page503":             {"功能未启用", "Feature unavailable"},
+	"err.page423":             {"尝试次数过多，请稍后再试", "Too many attempts, try later"},
+	"common.backHome":         {"返回首页", "Back to home"},
+	"frag.errLoad":            {"列表加载失败，请刷新重试。", "Failed to load the list, please refresh."},
+	"frag.errMsgGone":         {"邮件不存在或已被删除。", "Message not found or deleted."},
+	"frag.errDenied":          {"无权执行该操作。", "Not allowed to perform this action."},
+	"frag.errInvalid":         {"请求无效。", "Invalid request."},
+	"frag.errServer":          {"系统故障，请稍后重试。", "Internal error, please retry later."},
+	"mail.confirmBatchDelete": {"删除所选邮件？", "Delete the selected messages?"},
+	"mail.confirmMoveTrash":   {"将所选邮件移入垃圾箱？", "Move the selected messages to Trash?"},
+	"compose.replyGone":       {"原邮件不存在或已被删除，以下为空白写信页。", "The original message is gone; a blank compose page follows."},
+	"compose.draftGone":       {"草稿不存在或已被删除，以下为空白写信页。", "The draft is gone; a blank compose page follows."},
+	"csv.fileRequired":        {"请选择 CSV 文件", "CSV file required"},
+	"csv.tooLarge":            {"CSV 文件超过 2MB 上限", "CSV exceeds the 2MB limit"},
+	"csv.readFailed":          {"CSV 读取失败", "CSV read failed"},
+	"csv.rowsFmt":             {"%d 行可导入，%d 行跳过", "%d rows, %d skipped"},
+	"err.folderNameInvalid":   {"文件夹名不能为空且不超过 255 字符", "Folder name required (max 255 chars)"},
+	"err.folderExists":        {"同名文件夹已存在", "A folder with this name already exists"},
+	"err.folderNotEmpty":      {"文件夹非空，请先清空邮件", "Folder is not empty; clear its messages first"},
+	"err.folderSystem":        {"系统文件夹不可操作", "System folders cannot be modified"},
+	"err.folderNotFound":      {"文件夹不存在", "Folder not found"},
+	"err.folderOp":            {"操作失败，请重试", "Operation failed, please retry"},
+	// 批一附获（既有缺键补齐——CSV 候选片段标题原渲染键名回落「compose.csvTarget」
+	// 文本；B6 用例核验时发现，登记于 CHANGE5 实现偏差）
+	"compose.csvTarget": {"导入结果：勾选要导入的地址", "Import result: check addresses to import"},
 }
 
 // folderDisplayName 文件夹呈现名（D5——系统文件夹按 kind 本地化，custom/未知 kind 回退原 Name）。
@@ -571,6 +603,19 @@ func Tr(lang Lang, key string) string {
 		return pair[1]
 	}
 	return pair[0]
+}
+
+// StaticVersion 静态资源版本参数（Webmail前端缺陷修复批 D7-A——web.NewServer 计算注入；
+// 模板引用经 StaticURL 统一拼接；空串=未注入〔测试直构〕退化无参数形态——既有引用零影响）。
+var StaticVersion string
+
+// StaticURL 静态资源引用地址（版本参数拼接——版本化长缓存键；内容寻址：任何资源
+// 变更即版本更替，发版后用户立即拿到新资源——原 max-age 24h 旧缓存缺陷收口）。
+func StaticURL(name string) string {
+	if StaticVersion == "" {
+		return name
+	}
+	return name + "?v=" + StaticVersion
 }
 
 // colonFor 冒号本地化（组C——冒号口径随语言：zh全角/en半角+尾空格；替代模板硬编码，

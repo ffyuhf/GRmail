@@ -36,7 +36,11 @@
 	});
 
 	/* ── ② 批量选中计数（batch-bar 内 .sel-count——列表勾选即时更新；
-	 *     事件委托覆盖 HTMX 交换后的新行；全选 checkbox 联动）── */
+	 *     事件委托覆盖 HTMX 交换后的新行；全选 checkbox 联动）──
+	 * B1（Webmail前端缺陷修复批批一——三轮评审二轮#4 收口）：本监听器仅匹配行
+	 * checkbox（input.mail-id）——原匹配串含全选框致全选事件先被本处理器把全选框
+	 * 强制写回未选态、⑤b 联动再读该值反向取消全部行（全选完全失效）；全选框的
+	 * 行联动与计数统一归 ⑤b（触发源互斥——职责分离根治互踩）。 */
 	function updateSelCount(scope) {
 		var root = scope || document;
 		var boxes = root.querySelectorAll("input.mail-id");
@@ -47,7 +51,7 @@
 		root.querySelectorAll(".sel-count").forEach(function (el) {
 			el.textContent = el.getAttribute("data-fmt").replace("%d", String(n));
 		});
-		/* 全选框状态同步（半选态） */
+		/* 全选框状态同步（半选态）——仅行变更后的回写（全选框自身事件归 ⑤b） */
 		var allBox = root.querySelector("#batch-form input[name=all]") ||
 			root.querySelector(".tool-bar input[name=all]");
 		if (allBox && boxes.length > 0) {
@@ -56,13 +60,20 @@
 		}
 	}
 	document.addEventListener("change", function (e) {
-		if (e.target && e.target.matches("input.mail-id, #batch-form input[name=all], .tool-bar input[name=all]")) {
+		if (e.target && e.target.matches("input.mail-id")) {
 			updateSelCount(document);
 		}
 	});
-	/* HTMX 交换后重算（列表刷新/翻页——计数复位） */
-	document.body.addEventListener("htmx:afterSwap", function () {
+	/* HTMX 交换后重算（列表刷新/翻页——计数复位）+D6-B：交换区错误块伴生 toast
+	 * （.error role=alert 之外的视觉浮层回执——浏览器可见性增强） */
+	document.body.addEventListener("htmx:afterSwap", function (e) {
 		updateSelCount(document);
+		if (e && e.target && e.target.querySelector) {
+			var blk = e.target.querySelector(".error");
+			if (blk && window.grmailShowToast) {
+				window.grmailShowToast(blk.textContent.trim(), "err");
+			}
+		}
 	});
 	updateSelCount(document);
 
@@ -127,16 +138,21 @@
 	});
 
 	/* ── ④c F15：危险操作二次确认（捕获阶段先于 submit——
-	 *     .danger/.menu-danger/data-confirm 按钮+批量 delete 表单拦截）── */
-	function grmailConfirmText(fallbackZh) {
+	 *     .danger/.menu-danger/data-confirm 按钮+批量表单拦截）。
+	 * B13（Webmail前端缺陷修复批批一——三轮评审一轮#26/二轮#10/#11 收口）：
+	 *   ①文案统一 data-confirm 属性承载（服务端 Tr 渲染——废除 JS 双语三元两套
+	 *     自维护；默认文案读 <html data-confirm-default>）；
+	 *   ②覆盖面补齐：批量「移动到垃圾箱」等价删除路径纳入确认（option data-kind
+	 *     判定目标——mail_list.templ 批量表单 data-confirm-* 属性配套）。 ── */
+	function grmailDefaultConfirm() {
 		var el = document.documentElement;
-		return el && el.lang === "en" ? "Proceed with this action?" : fallbackZh;
+		return (el && el.dataset && el.dataset.confirmDefault) || "确定执行该操作？";
 	}
 	document.addEventListener("click", function (e) {
 		var btn = e.target.closest && e.target.closest(
 			"button.danger, button.menu-danger, button[data-confirm]");
 		if (!btn || btn.disabled) { return; }
-		var msg = btn.getAttribute("data-confirm") || grmailConfirmText("确定执行该操作？");
+		var msg = btn.getAttribute("data-confirm") || grmailDefaultConfirm();
 		if (!window.confirm(msg)) {
 			e.preventDefault();
 			e.stopImmediatePropagation();
@@ -146,12 +162,33 @@
 		var form = e.target;
 		if (!form || form.id !== "batch-form") { return; }
 		var sel = form.querySelector("select[name=action]");
-		if (sel && sel.value === "delete") {
-			var msg = document.documentElement.lang === "en"
-				? "Delete the selected messages?" : "删除所选邮件？";
-			if (!window.confirm(msg)) { e.preventDefault(); }
+		if (!sel) { return; }
+		var msg = "";
+		if (sel.value === "delete") {
+			msg = form.getAttribute("data-confirm-delete") || grmailDefaultConfirm();
+		} else if (sel.value === "move") {
+			var opt = form.querySelector("select[name=target] option:checked");
+			if (opt && opt.getAttribute("data-kind") === "trash") {
+				msg = form.getAttribute("data-confirm-move-trash") || grmailDefaultConfirm();
+			}
 		}
+		if (msg && !window.confirm(msg)) { e.preventDefault(); }
 	}, true);
+
+	/* ── D6-B（Webmail前端缺陷修复批批一）：toast 瞬态反馈组件接入（.toast CSS
+	 *     既有——定位/生命周期动画；5.6s 后 JS 移除兜底〔reduced-motion 豁免下
+	 *     动画 none——移除是唯一清理路径〕）。消费点：afterSwap 错误块伴生（②内）+
+	 *     CSV 导入成功（compose.js 经 window 引用）。 ── */
+	window.grmailShowToast = function (msg, kind) {
+		var t = document.createElement("div");
+		t.className = "toast" + (kind ? " toast-" + kind : "");
+		t.setAttribute("role", "status");
+		t.textContent = msg;
+		document.body.appendChild(t);
+		setTimeout(function () {
+			if (t.parentNode) { t.parentNode.removeChild(t); }
+		}, 5600);
+	};
 
 	/* ── ⑤ B-S批 F2（裁决 A 2026-10-09 13:34）：内联事件外迁承载（CSP
 	 *     script-src 'self' 配套——原模板 onclick/onchange/oninput 清除） ── */
@@ -180,13 +217,14 @@
 	});
 
 	/* ⑤b 批量全选联动（迁自 mail_list.templ onclick——全选框勾选联动全部行；
-	 *     与②计数委托并列独立——HTMX 交换后新行自动覆盖） */
+	 *     B1：联动后同步计数（原②在 all 事件上写回全选框致双向互锁——见②注） */
 	document.addEventListener("change", function (e) {
 		if (e.target && e.target.matches &&
 			e.target.matches("#batch-form input[name=all], .tool-bar input[name=all]") &&
 			e.target.type === "checkbox") {
 			var checked = e.target.checked;
 			document.querySelectorAll("input.mail-id").forEach(function (b) { b.checked = checked; });
+			updateSelCount(document);
 		}
 	});
 })();

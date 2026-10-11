@@ -43,8 +43,10 @@ func TestE2EComposeRichTextFlow(t *testing.T) {
 		"插入表格 (2×2)",       // E-B：表格 title（zh）
 		// B-S批 F2 断言形态适配：E-A ⌘ 记法自适应函数随内联脚本外迁 compose.js
 		// （D8#10 锚语义保持——页面锚改外链脚本引用；Ctrl 初值锚零触碰）
-		`src="/static/compose.js"`, // E-A：⌘ 记法自适应承载（compose.js 外链）
-		"加粗 (Ctrl+B)",              // E-A：title Ctrl 初值锚（服务端渲染断言锚零触碰）
+		// Webmail前端缺陷修复批 D7-A 断言形态适配：外链引用带版本参数（?v=——
+		// NewServer 内容寻址注入），断言改前缀包含（锚语义「引用 compose.js」保持）
+		`src="/static/compose.js`, // E-A：⌘ 记法自适应承载（compose.js 外链）
+		"加粗 (Ctrl+B)",             // E-A：title Ctrl 初值锚（服务端渲染断言锚零触碰）
 	} {
 		if !strings.Contains(page, want) {
 			t.Fatalf("渲染缺少要素: %q", want)

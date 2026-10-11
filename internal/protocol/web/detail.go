@@ -30,6 +30,8 @@ import (
 
 // mailDetailGET 详情片段（GET /mails/{id}——HTMX 替换主列表区；id=mailbox_messages.id）。
 // 打开即置已读（Webmail 语义——列表未读态联动 G11）。
+// Webmail前端缺陷修复批 A4（批一）：异常态双态错误呈现（HX=片段错误块/非 HX=错误
+// 整页——原空体状态码〔点已删除邮件界面零反馈〕收口；fragError 统一承载）。
 func (s *Server) mailDetailGET(c *gin.Context) {
 	view, err := s.currentMailboxView(c)
 	if err != nil {
@@ -38,18 +40,18 @@ func (s *Server) mailDetailGET(c *gin.Context) {
 	}
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || id <= 0 {
-		c.Status(http.StatusBadRequest)
+		s.fragError(c, http.StatusBadRequest, "frag.errInvalid")
 		return
 	}
 	ctx := c.Request.Context()
 	msg, err := s.messages.GetDetail(ctx, view.MailboxID, id) // 双重限定——FR-001 隔离锚
 	if errors.Is(err, storage.ErrMessageNotFound) {
-		c.Status(http.StatusNotFound)
+		s.fragError(c, http.StatusNotFound, "frag.errMsgGone")
 		return
 	}
 	if err != nil {
 		sessLogger(c).Error("详情查询失败", "error", err)
-		c.Status(http.StatusInternalServerError)
+		s.fragError(c, http.StatusInternalServerError, "frag.errServer")
 		return
 	}
 
@@ -152,6 +154,59 @@ func normalizeCID(cid string) string {
 // urlEscapeCID CID 的 URL 查询编码（尖括号等保留字符经 QueryEscape）。
 func urlEscapeCID(cid string) string {
 	return strings.NewReplacer("<", "%3C", ">", "%3E", "\"", "%22", "'", "%27").Replace(cid)
+}
+
+// mailBodyGET 正文同源代理端点（GET /mails/{id}/body——Webmail前端缺陷修复批 D3-B，
+// 干系人裁决 2026-10-10 20:52：全浏览器正文内联样式恢复通道）。
+// 形态：iframe src 指向本端点（DetailView HTML 态）——同源导航文档采用**自身响应头
+// CSP**（不继承父页策略）：独立策略 style-src 'unsafe-inline'（邮件排版内联样式放行）
+// + img/media 'self'（CID 改写后的附件端点资源+data: 图片）+ frame-ancestors 'self'
+// （仅允许本站嵌套——防外站 iframe 引用）；script-src 'none'（脚本零放行——sandbox
+// 之外的响应层第二道防线）。纯文本邮件经 text/plain 响应（iframe 内等宽呈现）。
+// 鉴权：会话+邮箱归属双限定（沿 attachmentGET 先例——FR-001 隔离锚）；不置已读
+// （详情打开时 mailDetailGET 已承载——端点保持只读幂等）。
+func (s *Server) mailBodyGET(c *gin.Context) {
+	view, err := s.currentMailboxView(c)
+	if err != nil {
+		s.fragError(c, http.StatusForbidden, "frag.errDenied")
+		return
+	}
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		s.fragError(c, http.StatusBadRequest, "frag.errInvalid")
+		return
+	}
+	ctx := c.Request.Context()
+	msg, err := s.messages.GetDetail(ctx, view.MailboxID, id) // 双重限定——FR-001 隔离锚
+	if errors.Is(err, storage.ErrMessageNotFound) {
+		s.fragError(c, http.StatusNotFound, "frag.errMsgGone")
+		return
+	}
+	if err != nil {
+		sessLogger(c).Error("正文查询失败", "error", err)
+		s.fragError(c, http.StatusInternalServerError, "frag.errServer")
+		return
+	}
+	raw, err := s.blobs.Read(ctx, msg.BlobKey)
+	if err != nil {
+		sessLogger(c).Error("原始字节读取失败", "error", err)
+		s.fragError(c, http.StatusInternalServerError, "frag.errServer")
+		return
+	}
+	display, derr := mail.ParseDisplay(raw)
+	if derr != nil {
+		sessLogger(c).Warn("正文展示模型解析降级（纯文本空）", "error", derr)
+		display = mail.Display{Attachments: []mail.AttachmentView{}, CIDs: map[string]bool{}}
+	}
+	body, contentType := display.BodyText, "text/plain; charset=utf-8"
+	if display.BodyHTML != "" {
+		body = rewriteCIDs(display.BodyHTML, id, display)
+		contentType = "text/html; charset=utf-8"
+	}
+	// 独立 CSP（覆盖 securityHeadersMiddleware 的全域头——gin Header.Set 后设胜出）
+	c.Header("Content-Security-Policy",
+		"default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; media-src 'self'; frame-ancestors 'self'")
+	c.Data(http.StatusOK, contentType, []byte(body))
 }
 
 // attachmentGET 附件下载（GET /attachments/{id}?part=N 或 ?cid=<...>——二进制响应）。

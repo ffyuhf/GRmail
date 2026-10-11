@@ -73,6 +73,9 @@ func (s *Server) renderMailListPage(c *gin.Context) {
 }
 
 // mailsFragmentGET 列表片段（GET /mails——HTMX 局部更新：翻页/过滤/文件夹切换）。
+// Webmail前端缺陷修复批 A3（批一）：非 HX 直访（href 降级锚/刷新/直链——D5-A
+// push-url 使片段 URL 进入地址栏后的刷新与分享场景）返回整页骨架——替代原裸
+// 片段响应（无布局无 htmx 运行时——降级链路断裂收口）。
 func (s *Server) mailsFragmentGET(c *gin.Context) {
 	view, err := s.currentMailboxView(c)
 	if err != nil {
@@ -82,6 +85,10 @@ func (s *Server) mailsFragmentGET(c *gin.Context) {
 	sess, _ := currentSession(c)
 	data := s.loadMailListData(c, view, parseListParams(c), "", false, sess.CSRFToken)
 	if data == nil {
+		return
+	}
+	if c.GetHeader("HX-Request") == "" {
+		renderPage(c, http.StatusOK, templates.MailPageView(data))
 		return
 	}
 	renderFragment(c, http.StatusOK, templates.MailListFragment(data))
@@ -96,7 +103,7 @@ func (s *Server) loadMailListData(c *gin.Context, view *mailboxView, p listParam
 	folders, err := s.folders.List(ctx, view.MailboxID)
 	if err != nil {
 		sessLogger(c).Error("侧边栏文件夹查询失败", "error", err)
-		c.Status(http.StatusInternalServerError)
+		s.fragError(c, http.StatusInternalServerError, "frag.errServer")
 		return nil
 	}
 	unread, err := s.folders.UnreadCounts(ctx, view.MailboxID)
@@ -140,7 +147,7 @@ func (s *Server) loadMailListData(c *gin.Context, view *mailboxView, p listParam
 		})
 		if serr != nil {
 			sessLogger(c).Error("搜索失败", "error", serr)
-			c.Status(http.StatusInternalServerError)
+			s.fragError(c, http.StatusInternalServerError, "frag.errServer")
 			return nil
 		}
 		appendItems(items, total)
@@ -160,7 +167,7 @@ func (s *Server) loadMailListData(c *gin.Context, view *mailboxView, p listParam
 		})
 		if lerr != nil {
 			sessLogger(c).Error("列表查询失败", "error", lerr)
-			c.Status(http.StatusInternalServerError)
+			s.fragError(c, http.StatusInternalServerError, "frag.errServer")
 			return nil
 		}
 		appendItems(items, total)
@@ -194,9 +201,31 @@ func (s *Server) resolveFolderID(c *gin.Context, folders []*storage.Folder, want
 // errFolderResolve 文件夹定位失败哨兵（收件箱缺失——数据异常态）。
 var errFolderResolve = errors.New("web: 文件夹定位失败")
 
+// fragError 片段端点异常态统一呈现（Webmail前端缺陷修复批 A4——批一：三轮评审
+// 一轮#4/#36/#41 收口）。双态分派：HX 请求=片段错误块（ErrorBlock——#mail-list
+// 交换目标内就地呈现+role=alert 读屏播报）；非 HX（直访/降级）=错误整页
+// （ErrorPageView——Layout 骨架+状态码标题+返回首页链接；替代原空体状态码白页）。
+// 参数：c 上下文；code HTTP 状态码；key 文案键（frag.* / err.page* 族）。
+func (s *Server) fragError(c *gin.Context, code int, key string) {
+	lang := langOf(c)
+	if c.GetHeader("HX-Request") != "" {
+		renderFragment(c, code, templates.ErrorBlock(lang, templates.Tr(lang, key)))
+		return
+	}
+	renderPage(c, code, templates.ErrorPageView(lang, code, templates.Tr(lang, key)))
+}
+
 // renderNoMailboxView 主体无邮箱视图引导页（部署引导期 admin 或异常态）。
 // F23：硬编码中文双语文案 Tr 化（home.noMailbox/home.hintKind——Webmail界面精修批次 2026-10-03）。
+// Webmail前端缺陷修复批 A4（批一）：HX 语境改发 HX-Redirect 整页跳转——原整页
+// HomeView（含 <!DOCTYPE>）被塞进 #mail-list 片段目标致页面结构崩坏（评审一轮#4）
+// 收口；非 HX 保持整页渲染。
 func (s *Server) renderNoMailboxView(c *gin.Context) {
+	if c.GetHeader("HX-Request") != "" {
+		c.Header("HX-Redirect", "/")
+		c.AbortWithStatus(http.StatusOK)
+		return
+	}
 	sess, _ := currentSession(c)
 	csrf := ""
 	if sess != nil {

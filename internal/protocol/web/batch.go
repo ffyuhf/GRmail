@@ -14,13 +14,16 @@
 package web
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 
+	"GRmail/internal/account"
 	"GRmail/internal/storage"
+	"GRmail/web/templates"
 )
 
 // 批量动作集（G10 核心子集——计划书 1.5 口径）。
@@ -177,6 +180,8 @@ func parseIDList(raw []string) []int64 {
 }
 
 // folderCreatePOST 创建自定义文件夹（POST /folders——契约 v1.5.0 3.2，Q4-A）。
+// Webmail前端缺陷修复批 D9/A4（批一）：空名错误呈现（原 400 空体白页——普通表单
+// POST 语境收口为错误整页）。
 func (s *Server) folderCreatePOST(c *gin.Context) {
 	view, err := s.currentMailboxView(c)
 	if err != nil {
@@ -185,7 +190,7 @@ func (s *Server) folderCreatePOST(c *gin.Context) {
 	}
 	name := strings.TrimSpace(c.PostForm("name"))
 	if name == "" {
-		c.Status(http.StatusBadRequest)
+		s.fragError(c, http.StatusBadRequest, "err.folderNameInvalid")
 		return
 	}
 	if err = s.accounts.CreateFolder(c.Request.Context(), view.MailboxID, name); err != nil {
@@ -216,7 +221,7 @@ func (s *Server) folderRenamePOST(c *gin.Context) {
 	}
 	name := strings.TrimSpace(c.PostForm("name"))
 	if name == "" {
-		c.Status(http.StatusBadRequest)
+		s.fragError(c, http.StatusBadRequest, "err.folderNameInvalid")
 		return
 	}
 	if err = s.accounts.RenameFolder(c.Request.Context(), id, name); err != nil {
@@ -252,18 +257,35 @@ func (s *Server) folderDeletePOST(c *gin.Context) {
 	c.Redirect(http.StatusSeeOther, "/?noted=deleted") // G3——D9 整页刷新+反馈
 }
 
-// folderErrResponse 文件夹操作错误 → 用户可读提示（FK 约束/重名/系统文件夹保护）。
+// folderErrResponse 文件夹操作错误 → 用户可读提示（Webmail前端缺陷修复批 B4——批一：
+// 三轮评审一轮#35/三轮#6/#24 收口）。
+// 原实现以 SQLite 英文错误子串（"UNIQUE"/"FOREIGN KEY"/"kind"）判定——storage 三库
+// 哨兵体系（ErrFolderExists/ErrFolderNotEmpty/ErrFolderIsSystem/ErrFolderNotFound——
+// SQLite 2067/787·MySQL 1062/1452·PG 23505/23503 各自 checker 翻译）早已就位，本判定
+// 为哨兵前置时代遗留死代码：非 SQLite 部署下哨兵错误不含英文子串恒落入兜底文案。
+// 本版改哨兵 errors.Is 消费（三库同构零 storage 改动）+文案 Tr 化+响应双态：
+// HX→#folder-hint 内联提示（既有目标保持）；非 HX（普通表单 POST——侧栏三操作无 hx）
+// →错误整页（原 200 text/plain 裸文本页收口；成功路径 303 整页既有形态对称）。
 func (s *Server) folderErrResponse(c *gin.Context, err error) {
-	msg := "操作失败"
+	lang := langOf(c)
+	key := "err.folderOp"
 	switch {
-	case strings.Contains(err.Error(), "UNIQUE"):
-		msg = "同名文件夹已存在"
-	case strings.Contains(err.Error(), "FOREIGN KEY"):
-		msg = "文件夹非空，请先清空邮件"
-	case strings.Contains(err.Error(), "kind"):
-		msg = "系统文件夹不可操作"
+	case errors.Is(err, storage.ErrFolderExists):
+		key = "err.folderExists"
+	case errors.Is(err, storage.ErrFolderNotEmpty):
+		key = "err.folderNotEmpty"
+	case errors.Is(err, storage.ErrFolderIsSystem):
+		key = "err.folderSystem"
+	case errors.Is(err, storage.ErrFolderNotFound):
+		key = "err.folderNotFound"
+	case errors.Is(err, account.ErrEmptyFolderName):
+		key = "err.folderNameInvalid"
 	}
-	c.Header("HX-Retarget", "#folder-hint")
-	c.Header("HX-Reswap", "innerHTML")
-	c.String(http.StatusOK, msg)
+	if c.GetHeader("HX-Request") != "" {
+		c.Header("HX-Retarget", "#folder-hint")
+		c.Header("HX-Reswap", "innerHTML")
+		c.String(http.StatusOK, templates.Tr(lang, key))
+		return
+	}
+	renderPage(c, http.StatusBadRequest, templates.ErrorPageView(lang, http.StatusBadRequest, templates.Tr(lang, key)))
 }

@@ -53,7 +53,7 @@ templ DetailView(lang Lang, msg *storage.Detail, disp *mail.Display, safeBody st
 					{ Tr(lang, "detail.reply") }
 				</a>
 			}
-			<button class="secondary" hx-get={ backHref } hx-target="#mail-list">
+			<button class="secondary" hx-get={ backHref } hx-push-url="true" hx-target="#mail-list">
 				<span class="ic" aria-hidden="true">@templ.Raw(iconBack)</span>
 				{ Tr(lang, "common.back") }
 			</button>
@@ -72,7 +72,11 @@ templ DetailView(lang Lang, msg *storage.Detail, disp *mail.Display, safeBody st
 		</div>
 		<hr/>
 		if bodyIsHTML {
-			<iframe sandbox="" srcdoc={ safeBody } title={ Tr(lang, "detail.bodyFrame") }></iframe>
+			// D3-B（Webmail前端缺陷修复批批一——干系人裁决 2026-10-10 20:52）：iframe
+			// src 指向同源正文代理端点（响应头独立 CSP style-src 'unsafe-inline'——全浏览器
+			// 内联样式恢复；原 srcdoc 继承父页 CSP 剥离全部内联样式且 iframe csp 属性
+			// Firefox/Safari 未实现——MDN BCD 实证）；sandbox 属性保持（沙箱隔离不降级）。
+			<iframe sandbox="" src={ fmt.Sprintf("/mails/%d/body", msg.ID) } title={ Tr(lang, "detail.bodyFrame") }></iframe>
 		} else {
 			<pre>{ safeBody }</pre>
 		}
@@ -158,9 +162,15 @@ func detailSizeLine(lang Lang, size int64) string {
 }
 
 // prettyList JSON 数组缓存串 → 逗号呈现。
+// B15（Webmail前端缺陷修复批批一）：非 JSON 数组形态防御——单地址直存/长度<2 的
+// 缓存列值原样返回（原 jsonArr[1:len-1] 无条件切串对非数组形态错切、长度 1 越界
+// panic——渲染期 500 面；三轮评审二轮#23）。
 func prettyList(jsonArr string) string {
 	if jsonArr == "" {
 		return "—"
+	}
+	if len(jsonArr) < 2 || jsonArr[0] != '[' || jsonArr[len(jsonArr)-1] != ']' {
+		return jsonArr
 	}
 	out := ""
 	inner := jsonArr[1 : len(jsonArr)-1]

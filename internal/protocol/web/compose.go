@@ -28,6 +28,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -38,6 +39,25 @@ import (
 	"GRmail/internal/storage"
 	"GRmail/web/templates"
 )
+
+// htmlTagRe HTML 标签剥离正则（B2 空白判定辅助）。
+var htmlTagRe = regexp.MustCompile(`(?is)<[^>]*>`)
+
+// htmlBodyBlank 富文本正文空白判定（Webmail前端缺陷修复批 B2——批一：三轮评审一轮
+// #15 收口）。原判定 d.Body=="" 恒假（Quill 空编辑器产物 <p><br></p> 非空——用户可
+// 发出无正文邮件且不报错）；本函数剥离全部标签与实体后纯文本空白即空白，媒体元素
+// （img/video/audio/iframe）正文视为非空（纯图片邮件合法——误拒防线）。前端
+// compose.js 提交前精确 trim Quill 空产物形态（第一道防线），本函数为服务端第二道。
+func htmlBodyBlank(body string) bool {
+	lower := strings.ToLower(body)
+	if strings.Contains(lower, "<img") || strings.Contains(lower, "<video") ||
+		strings.Contains(lower, "<audio") || strings.Contains(lower, "<iframe") {
+		return false
+	}
+	text := htmlTagRe.ReplaceAllString(body, "")
+	text = strings.ReplaceAll(text, "&nbsp;", " ")
+	return strings.TrimSpace(text) == ""
+}
 
 // composeData 收敛至 templates.ComposeData（跨包拍平——web 仅装配）。
 
@@ -88,12 +108,24 @@ func (s *Server) composeGET(c *gin.Context) {
 				} else {
 					data.Subject = msg.Subject
 				}
+			} else {
+				// B7（批一）：回信源失配提示——原静默空白页（评审一轮#17）收口；
+				// 空白写信页照常可用（提示不阻断）。
+				data.ErrText = templates.Tr(langOf(c), "compose.replyGone")
+				sessLogger(c).Warn("回信源读取失败（空白页承载）", "id", id, "error", e)
 			}
 		}
 	}
 	if did := c.Query("draft"); did != "" {
 		if id, e := strconv.ParseInt(did, 10, 64); e == nil && id > 0 {
-			s.fillFromDraft(c, view, data, id)
+			if msg, gerr := s.messages.GetDetail(ctx, view.MailboxID, id); gerr != nil {
+				// B7：草稿失配提示（同上——fillFromDraft 内部错误已静默，此处前置判定承载）。
+				data.ErrText = templates.Tr(langOf(c), "compose.draftGone")
+				sessLogger(c).Warn("草稿读取失败（空白页承载）", "id", id, "error", gerr)
+			} else {
+				_ = msg
+				s.fillFromDraft(c, view, data, id)
+			}
 		}
 	}
 	renderPage(c, http.StatusOK, templates.ComposeView(data))
@@ -157,7 +189,8 @@ func (s *Server) composePOST(c *gin.Context) {
 	}
 	attachments, aerr := readFormAttachments(c)
 	if aerr != nil {
-		data.ErrText = aerr.Error()
+		// B5：附件超限 Tr 化（原文直出改键消费——err.attachTooLarge U18 既有键）。
+		data.ErrText = templates.Tr(langOf(c), "err.attachTooLarge")
 		renderPage(c, http.StatusBadRequest, templates.ComposeView(data))
 		return
 	}
@@ -176,7 +209,9 @@ func (s *Server) composePOST(c *gin.Context) {
 	// （multipart/alternative 双 part——plain 由 htmlToPlain 派生）
 	raw, berr := mail.BuildOutgoingMail(from, data.To, data.Cc, data.Subject, "", data.Body, attachments)
 	if berr != nil {
-		data.ErrText = "邮件构造失败：" + berr.Error()
+		// B5：构造失败模糊化（内部 err 原文仅日志——界面 Tr 键；评审三轮#23 直出收口）。
+		sessLogger(c).Error("邮件构造失败", "error", berr)
+		data.ErrText = templates.Tr(langOf(c), "err.buildFailed")
 		renderPage(c, http.StatusBadRequest, templates.ComposeView(data))
 		return
 	}
@@ -203,14 +238,17 @@ func (s *Server) composePOST(c *gin.Context) {
 }
 
 // composeValidate 表单校验（收件人/主题/正文非空——Bcc 允许空；admin From 由后续域校验）。
+// Webmail前端缺陷修复批 B2/B5（批一）：正文判空改 htmlBodyBlank（Quill 空产物收口）；
+// 文案 Tr 化（err.* U18 既有键——英文界面中文残留〔评审一轮#33〕收口）。
 func (s *Server) composeValidate(c *gin.Context, d *templates.ComposeData) string {
+	lang := langOf(c)
 	switch {
 	case strings.TrimSpace(d.To) == "" && strings.TrimSpace(d.Bcc) == "":
-		return "收件人不能为空"
+		return templates.Tr(lang, "err.toRequired")
 	case strings.TrimSpace(d.Subject) == "":
-		return "主题不能为空"
-	case d.Body == "":
-		return "正文不能为空"
+		return templates.Tr(lang, "err.subjectRequired")
+	case htmlBodyBlank(d.Body):
+		return templates.Tr(lang, "err.bodyRequired")
 	}
 	return ""
 }
@@ -220,35 +258,38 @@ func (s *Server) composeValidate(c *gin.Context, d *templates.ComposeData) strin
 // mailbox 主体 → 自身地址（MailboxRepo.ListByStatus(active) 按 subject_id 反查——
 // 契约 2.1 既有五方法内路径，单管理员规模三态枚举推导零签名增量）。
 // 返回：定夺地址；错误提示（空串=通过）。
+// B5（批一）：文案 Tr 化（err.from* U18 既有键）。
 func (s *Server) ensureFromAddr(c *gin.Context, view *mailboxView, formFrom string) (string, string) {
+	lang := langOf(c)
 	if view.IsAdmin {
 		if formFrom == "" {
-			return "", "发件地址不能为空"
+			return "", templates.Tr(lang, "err.fromRequired")
 		}
 		if !strings.HasSuffix(strings.ToLower(formFrom), "@"+strings.ToLower(s.cfg.Domain)) {
-			return "", "发件地址须为本域地址（FR-002）"
+			return "", templates.Tr(lang, "err.fromLocalOnly")
 		}
 		return formFrom, ""
 	}
 	mailboxes, err := s.mailboxes.ListByStatus(c.Request.Context(), storage.MailboxStatusActive)
 	if err != nil {
 		sessLogger(c).Error("发件身份反查失败", "error", err)
-		return "", "发件身份解析失败，请稍后重试"
+		return "", templates.Tr(lang, "err.fromResolve")
 	}
 	for _, m := range mailboxes {
 		if m.ID == view.MailboxID {
 			return m.Address, ""
 		}
 	}
-	return "", "发件身份解析失败（邮箱状态异常）"
+	return "", templates.Tr(lang, "err.fromAbnormal")
 }
 
 // composeSend 发送入队（SubmissionPipeline 复用——流程设计 3.1 同链路）。
 // AuthUser=From（一致性分支机械满足——web 会话层已完成 FR-002 授权判定）。
 func (s *Server) composeSend(c *gin.Context, view *mailboxView, data *templates.ComposeData, from string, raw []byte) string {
+	lang := langOf(c)
 	recipients := mail.SplitRecipients(data.To + "," + data.Cc + "," + data.Bcc)
 	if len(recipients) == 0 {
-		return "收件人地址非法"
+		return templates.Tr(lang, "err.rcptInvalid")
 	}
 	err := s.submit.Submit(c.Request.Context(), &mail.Submission{
 		Envelope: auth.Envelope{
@@ -259,7 +300,7 @@ func (s *Server) composeSend(c *gin.Context, view *mailboxView, data *templates.
 	}, raw)
 	if err != nil {
 		sessLogger(c).Error("发送入队失败", "error", err)
-		return "发送失败（已记录，请稍后重试）"
+		return templates.Tr(lang, "err.sendFailed")
 	}
 	// 编辑态发送：旧草稿清理（覆盖语义）
 	if data.DraftID > 0 {
@@ -315,21 +356,22 @@ func (s *Server) sentFolderIDOf(c *gin.Context, view *mailboxView) int64 {
 // 编辑态旧稿覆盖删除）。
 func (s *Server) composeSaveDraft(c *gin.Context, view *mailboxView, data *templates.ComposeData, raw []byte) string {
 	ctx := c.Request.Context()
+	lang := langOf(c)
 	sum := sha256.Sum256(raw)
 	blobKey := hex.EncodeToString(sum[:])
 	if err := s.blobs.Write(ctx, blobKey, raw); err != nil {
 		sessLogger(c).Error("草稿 blob 写入失败", "error", err)
-		return "草稿保存失败"
+		return templates.Tr(lang, "err.draftSave")
 	}
 	folderID := s.draftsFolderIDOf(c, view)
 	if folderID <= 0 {
-		return "草稿文件夹不可用"
+		return templates.Tr(lang, "err.draftNoFolder")
 	}
 	meta := mail.CachedToMessageMeta(mail.ParseCachedHeaders(raw), blobKey, int64(len(raw)))
 	meta.BodyCache = mail.BodyCacheOf(raw) // U16 Q3-A：草稿正文缓存（四写入路径之四）
 	if _, err := s.messages.StoreAppend(ctx, view.MailboxID, folderID, &storage.AppendMeta{Message: meta}); err != nil {
 		sessLogger(c).Error("草稿落库失败", "error", err)
-		return "草稿保存失败"
+		return templates.Tr(lang, "err.draftSave")
 	}
 	if data.DraftID > 0 {
 		if derr := s.messages.HardDelete(ctx, []int64{data.DraftID}); derr != nil {
@@ -395,6 +437,8 @@ func parseFormInt64(v string) int64 {
 }
 
 // searchGET 关键词搜索（GET /search?keyword=——空关键词回列表；结果片段复用列表组件）。
+// Webmail前端缺陷修复批 A3（批一）：非 HX 直访返回整页骨架（搜索 URL 刷新/分享——
+// D5-A push-url 联动；原裸片段响应降级链路断裂收口）。
 func (s *Server) searchGET(c *gin.Context) {
 	view, err := s.currentMailboxView(c)
 	if err != nil {
@@ -408,6 +452,10 @@ func (s *Server) searchGET(c *gin.Context) {
 	}
 	data := s.loadMailListData(c, view, parseListParams(c), keyword, true, currentCSRF(c))
 	if data == nil {
+		return
+	}
+	if c.GetHeader("HX-Request") == "" {
+		renderPage(c, http.StatusOK, templates.MailPageView(data))
 		return
 	}
 	renderFragment(c, http.StatusOK, templates.MailListFragment(data))

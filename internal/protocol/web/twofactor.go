@@ -377,6 +377,16 @@ func (s *Server) twoFactorGate() gin.HandlerFunc {
 			return
 		}
 		if st.Required && !st.Bound() {
+			// A5（Webmail前端缺陷修复批批一——三轮评审一轮#5 收口）：HX 请求改发
+			// HX-Redirect 整页跳转——原 302 被 XHR 静默跟随，2FA 绑定页整页 HTML 被
+			// 交换进 #mail-list 片段目标（页面结构崩坏）；非 XHR 整页请求保持 302。
+			// 形态沿 requireAuth 会话失效先例（HX-Redirect+401——htmx 任意状态码
+			// 识别该头即执行整页导航）。
+			if c.GetHeader("HX-Request") == "true" {
+				c.Header("HX-Redirect", "/settings/2fa?forced=1")
+				c.AbortWithStatus(http.StatusUnauthorized)
+				return
+			}
 			c.Redirect(http.StatusFound, "/settings/2fa?forced=1")
 			c.Abort()
 			return
