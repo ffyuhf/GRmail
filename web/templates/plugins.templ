@@ -18,17 +18,18 @@ type PluginRow struct {
 
 // PluginsData 插件状态页数据（视图模型）。
 type PluginsData struct {
-	Nav *MailListData // 全站侧栏数据（D3 B 形态——AppFrame 承载；nil=无邮箱异常态降级）
-	Lang    string       // 界面语言
-	Plugins []PluginRow  // 状态行集（web 桥接转换后注入）
+	Nav  *MailListData // 全站侧栏数据（D3 B 形态——AppFrame 承载；nil=无邮箱异常态降级）
+	Lang string        // 界面语言
+	CSRF string        // F8（批二）：AppFrame CSRF 传参一致化（原空串——接口面一致性）
+	Plugins []PluginRow // 状态行集（web 桥接转换后注入）
 }
 
 // PluginsView 插件状态页（admin 主体——AppLayout admin 形态）。
 // 参数：d 页面数据。
 templ PluginsView(d PluginsData) {
 	{{ lang := NormalizeLang(d.Lang) }}
-	@AppFrame(lang, Tr(lang, "plugins.title"), Tr(lang, "home.adminKind"), true, "", d.Nav) {
-		<div class="main content-page">
+	@AppFrame(lang, Tr(lang, "plugins.title"), Tr(lang, "home.adminKind"), true, d.CSRF, d.Nav) {
+		<main class="main content-page" id="main-content">
 			<nav class="settings-nav"><a href="/admin/settings">{ Tr(lang, "nav.backSettings") }</a></nav>
 			<div class="page-head"><h2>{ Tr(lang, "plugins.title") }</h2></div>
 			<p class="hint">{ Tr(lang, "plugins.hint") }</p>
@@ -73,6 +74,6 @@ templ PluginsView(d PluginsData) {
 					</table>
 				</div>
 			}
-		</div>
+		</main>
 	}
 }

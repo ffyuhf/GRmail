@@ -106,13 +106,22 @@ func draftHref(id int64) string {
 	return fmt.Sprintf("/compose?draft=%d", id)
 }
 
-// DetailPageView 详情深链整页（组D·核对#32——直接 URL 访问 /mails/{id} 时经
-// Layout 骨架呈现，替代旧裸片段无 html 架构形态；HTMX 请求仍走 DetailView 片段）。
-templ DetailPageView(lang Lang, msg *storage.Detail, disp *mail.Display, safeBody string, bodyIsHTML bool, csrf string, backHref string, isDraft bool) {
-	@Layout(lang, subj(lang, msg.Subject), "") {
-		<div class="main content-page">
+// DetailPageView 详情深链整页（组D·核对#32——直接 URL 访问 /mails/{id} 时整页骨架；
+// C7〔批二〕：Layout 裸骨架改 AppFrame 承载——htmx 运行时/全站侧栏/导航齐备，
+// 死返回按钮修复〔nav 注入 sidebarDataFor——视图签名增参，调用点 detail.go〕）。
+templ DetailPageView(lang Lang, msg *storage.Detail, disp *mail.Display, safeBody string, bodyIsHTML bool, csrf string, backHref string, isDraft bool, nav *MailListData) {
+	@appFrameContent(lang, subj(lang, msg.Subject), "", csrf, nav) {
+		<main class="main content-page" id="main-content">
 			@DetailView(lang, msg, disp, safeBody, bodyIsHTML, csrf, backHref, isDraft)
-		</div>
+		</main>
+	}
+}
+
+// appFrameContent C7 辅助：无主体标签形态（Label 空串）的 AppFrame 直通——详情深链
+// 无邮箱主体语义（mailbox 视图恒有——安全兜底），复用 AppFrame 骨架（侧栏+运行时）。
+templ appFrameContent(lang Lang, title string, label string, csrf string, nav *MailListData) {
+	@AppFrame(lang, title, label, false, csrf, nav) {
+		{ children... }
 	}
 }
 

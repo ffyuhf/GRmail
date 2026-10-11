@@ -22,7 +22,7 @@ import "fmt"
 templ SettingsView(data SettingsData) {
 	{{ lang := NormalizeLang(data.Lang) }}
 	@appLayoutSettings(lang, data.CSRFToken, data.Nav) {
-		<div class="main content-page">
+		<main class="main content-page" id="main-content">
 		<div class="page-head"><h2>{ Tr(lang, "settings.h1") }</h2></div>
 		<nav class="settings-nav" aria-label={ Tr(lang, "settings.navTitle") }>
 			<span class="active">{ Tr(lang, "settings.navService") }</span>
@@ -83,13 +83,27 @@ templ SettingsView(data SettingsData) {
 			<fieldset>
 				<legend>{ Tr(lang, "settings.dnsLegend") }</legend>
 				<p class="hint">{ Tr(lang, "settings.stsHint") }<code>{ data.StsPolicyURL }</code>{ Tr(lang, "settings.stsSanHint") }</p>
-				<p class="hint">TXT <code>_mta-sts.{ Tr(lang, "settings.hostPh") }</code>{ colonFor(lang) }<code>{ data.StsTXTRecord }</code></p>
-				<p class="hint">TXT <code>_smtp._tls.{ Tr(lang, "settings.hostPh") }</code>{ colonFor(lang) }<code>{ data.TLSRPTRecord }</code></p>
+				// E9（批二）：记录名渲染真实主域（原「主域」占位词——用户照抄得非法记录名）；
+				// 停发态建议值改由键承载（原 Go 侧中文串——E6 同族收口）。
+				<p class="hint">TXT <code>_mta-sts.{ data.Domain }</code>{ colonFor(lang) }<code>
+					if data.StsTXTRecord == "" {
+						{ Tr(lang, "settings.stsOff") }
+					} else {
+						{ data.StsTXTRecord }
+					}
+				</code></p>
+				<p class="hint">TXT <code>_smtp._tls.{ data.Domain }</code>{ colonFor(lang) }<code>
+					if data.TLSRPTRecord == "" {
+						{ Tr(lang, "settings.tlsrptOff") }
+					} else {
+						{ data.TLSRPTRecord }
+					}
+				</code></p>
 			</fieldset>
 			<button class="primary" type="submit">{ Tr(lang, "common.save") }</button>
-			</form>
-			</div>
-		}
+				</form>
+				</main>
+			}
 	}
 	
 // appLayoutSettings 设置页骨架（AppLayout admin 主体——F01 统一；无 .layout 侧栏：管理

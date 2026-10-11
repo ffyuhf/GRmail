@@ -34,6 +34,7 @@ type SieveListData struct {
 	Scripts []SieveScriptRow
 	Error   string
 	Nav     *MailListData // 全站侧栏数据（D3 B 形态——AppFrame 承载；nil=降级）
+	IsAdmin bool          // F7（批二）：返回设置口径——admin 直达 /admin/settings（原 /settings 多一跳）
 }
 
 // SieveEditData 编辑页数据。
@@ -45,13 +46,20 @@ type SieveEditData struct {
 	Content      string
 	Error        string
 	Nav          *MailListData // 全站侧栏数据（D3 B 形态——AppFrame 承载；nil=降级）
+	IsAdmin      bool          // F7（批二）：同 SieveListData
 }
 
 templ SieveListView(d *SieveListData) {
-	@AppFrame(d.Lang, Tr(d.Lang, "sieve.title"), Tr(d.Lang, "sieve.nav"), false, d.CSRF, d.Nav) {
-		<div class="main content-page">
+	@AppFrame(d.Lang, Tr(d.Lang, "sieve.title"), Tr(d.Lang, "sieve.nav"), d.IsAdmin, d.CSRF, d.Nav) {
+		<main class="main content-page" id="main-content">
 		<section class="sieve-page">
-			<nav class="settings-nav"><a href="/settings">{ Tr(d.Lang, "nav.backSettings") }</a></nav>
+			<nav class="settings-nav">
+				if d.IsAdmin {
+					<a href="/admin/settings">{ Tr(d.Lang, "nav.backSettings") }</a>
+				} else {
+					<a href="/settings">{ Tr(d.Lang, "nav.backSettings") }</a>
+				}
+			</nav>
 			<div class="page-head">
 				<h2>{ Tr(d.Lang, "sieve.h2") }</h2>
 				<a class="primary" href="/sieve/new">{ Tr(d.Lang, "sieve.newLink") }</a>
@@ -61,9 +69,11 @@ templ SieveListView(d *SieveListData) {
 			}
 			<p class="hint">{ Tr(d.Lang, "sieve.manageHint") }</p>
 			if len(d.Scripts) == 0 {
+				// C14（批二）：空态行动入口（新建脚本直达——原空态无出口）。
 				<div class="empty-state">
 					<h3>{ Tr(d.Lang, "sieve.emptyTitle") }</h3>
 					<p>{ Tr(d.Lang, "sieve.empty") }</p>
+					<p><a class="btn-text" href="/sieve/new">{ Tr(d.Lang, "sieve.newLink") }</a></p>
 				</div>
 			} else {
 				<div class="table-wrap">
@@ -99,15 +109,21 @@ templ SieveListView(d *SieveListData) {
 				</div>
 			}
 		</section>
-		</div>
+		</main>
 	}
 }
 
 templ SieveEditView(d *SieveEditData) {
-	@AppFrame(d.Lang, Tr(d.Lang, "sieve.editTitle"), Tr(d.Lang, "sieve.nav"), false, d.CSRF, d.Nav) {
-		<div class="main content-page">
+	@AppFrame(d.Lang, Tr(d.Lang, "sieve.editTitle"), Tr(d.Lang, "sieve.nav"), d.IsAdmin, d.CSRF, d.Nav) {
+		<main class="main content-page" id="main-content">
 		<section class="sieve-edit">
-			<nav class="settings-nav"><a href="/settings">{ Tr(d.Lang, "nav.backSettings") }</a></nav>
+			<nav class="settings-nav">
+				if d.IsAdmin {
+					<a href="/admin/settings">{ Tr(d.Lang, "nav.backSettings") }</a>
+				} else {
+					<a href="/settings">{ Tr(d.Lang, "nav.backSettings") }</a>
+				}
+			</nav>
 			<div class="page-head">
 				// #30：new 态独立标题（原「编辑脚本：new」缺陷顺带收口）
 				if d.NameEditable {
@@ -134,6 +150,6 @@ templ SieveEditView(d *SieveEditData) {
 			</form>
 			<p class="hint">{ Tr(d.Lang, "sieve.syntaxHint") }</p>
 		</section>
-		</div>
+		</main>
 	}
 }

@@ -56,7 +56,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	attempts := storage.NewSQLiteLoginAttemptRepo(db)
 	accounts := account.NewService(mailboxRepo, folderRepo)
 
-	hash, err := account.HashPassword("s3cret!")
+	hash, err := account.HashPassword("s3cret!!") // D10 形态适配：密码≥8（哈希链锚语义保持）
 	if err != nil {
 		t.Fatalf("哈希管理员密码: %v", err)
 	}
@@ -69,7 +69,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	ts := httptest.NewServer(srv.engine)
 	t.Cleanup(ts.Close)
 	return &testEnv{srv: srv, ts: ts, dbPath: dbPath, sessions: sessions, users: users,
-		attempts: attempts, accounts: accounts, adminPass: "s3cret!"}
+		attempts: attempts, accounts: accounts, adminPass: "s3cret!!"} // D10 形态适配（与哈希侧同长）
 }
 
 // postForm 表单 POST 便捷封装（跟随重定向=false，返回响应与字节）。

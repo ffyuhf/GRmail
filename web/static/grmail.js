@@ -12,7 +12,13 @@
  * SRS 条目：FR-013（交互反馈承载）；参考项目 App.tsx/NavBarFrame.tsx 交互语义。
  * 修改历史：
  *   2026-10-02 17:45:00 | 新建 | Webmail设计系统重构批次阶段A（G2 批准 2026-10-02 17:34:40）
- *   2026-10-03 16:35:00 | 扩展 | Webmail界面精修批次 F06/F14/F15/F16（G2 批准 2026-10-03 16:22:31） */
+ *   2026-10-03 16:35:00 | 扩展 | Webmail界面精修批次 F06/F14/F15/F16（G2 批准 2026-10-03 16:22:31）
+ *   2026-10-11 14:25:00 | 扩展 | Webmail前端缺陷修复批批二（G2 批准 2026-10-11 13:28:34）：
+ *     C4 移动端抽屉默认收起（<768 首载 uncheck——SSR checked 桌面 persistent 保持）；
+ *     G2 抽屉开关键盘可达（label role=button Enter/Space 触发）+G12 menu-host 开合
+ *     aria-expanded 维护（details toggle 事件）；B16 grmailRead 事件→侧栏未读递减
+ *     （HX-Trigger 承载——detail.go 置已读联动）；D7 data-copy 复制委托（Token/
+ *     恢复码——navigator.clipboard+toast 回执）；C10 admin 过滤零行空态显隐。 */
 (function () {
 	"use strict";
 
@@ -108,6 +114,80 @@
 	} else {
 		grmailLangNext();
 	}
+
+	/* ── C4（批二）：移动端抽屉默认收起——<768 首载 uncheck（桌面 SSR checked
+	 *     persistent 展开保持；禁 JS 降级=移动保持展开〔noscript 提示已有〕）。 ── */
+	if (window.matchMedia("(max-width: 767.98px)").matches) {
+		var nt = document.getElementById("nav-toggle");
+		if (nt) { nt.checked = false; }
+	}
+
+	/* ── G2（批二）：抽屉开关键盘可达——label role=button 配套 Enter/Space 触发
+	 *     （click 同步 checkbox 翻转——label for 语义聚焦触发原生点击即可）。 ── */
+	document.addEventListener("keydown", function (e) {
+		if ((e.key === "Enter" || e.key === " ") && e.target &&
+			e.target.matches && e.target.matches("label.nav-toggle")) {
+			e.preventDefault();
+			e.target.click();
+		}
+	});
+
+	/* ── G12（批二）：menu-host 开合 aria-expanded 维护（details toggle 事件
+	 *     委托——HTMX 交换后新菜单同生效；初始态 DOMContentLoaded 扫描）。 ── */
+	function syncMenuAria(host) {
+		var s = host.querySelector("summary");
+		if (s) { s.setAttribute("aria-expanded", host.open ? "true" : "false"); }
+	}
+	document.addEventListener("toggle", function (e) {
+		if (e.target && e.target.matches && e.target.matches("details.menu-host")) {
+			syncMenuAria(e.target);
+		}
+	}, true);
+	function syncAllMenuAria() {
+		document.querySelectorAll("details.menu-host").forEach(syncMenuAria);
+	}
+	if (document.readyState === "loading") {
+		document.addEventListener("DOMContentLoaded", syncAllMenuAria);
+	} else {
+		syncAllMenuAria();
+	}
+
+	/* ── B16（批二）：详情置已读 HX-Trigger 事件（detail.go HX-Trigger: grmailRead
+	 *     =folderID）→ 侧栏对应文件夹未读数就地递减（aria 图标同步——无未读隐藏）。 ── */
+	document.body.addEventListener("grmailRead", function (e) {
+		var fid = e && e.detail && (e.detail.folderID || e.detail);
+		if (fid === undefined || fid === null) { return; }
+		document.querySelectorAll(".folder-item").forEach(function (a) {
+			var m = a.getAttribute("href") && a.getAttribute("href").match(/[?&]folder=(\d+)/);
+			if (!m || parseInt(m[1], 10) !== parseInt(fid, 10)) { return; }
+			var u = a.querySelector(".unread");
+			if (!u) { return; }
+			var n = parseInt(u.textContent, 10) - 1;
+			if (n > 0) { u.textContent = String(n); } else { u.remove(); }
+		});
+	});
+
+	/* ── D7（批二）：data-copy 复制委托（Token 明文/恢复码集——navigator.clipboard
+	 *     需安全上下文〔HTTPS/localhost〕；失败降级 execCommand+toast 回执）。 ── */
+	document.addEventListener("click", function (e) {
+		var btn = e.target.closest && e.target.closest("[data-copy]");
+		if (!btn || btn.disabled) { return; }
+		var text = btn.getAttribute("data-copy");
+		function done(ok) {
+			if (window.grmailShowToast) {
+				window.grmailShowToast(ok ? btn.getAttribute("data-ok-msg") || "✓" : "✗", ok ? "ok" : "err");
+			}
+		}
+		if (navigator.clipboard && window.isSecureContext) {
+			navigator.clipboard.writeText(text).then(function () { done(true); }, function () { done(false); });
+		} else {
+			var ta = document.createElement("textarea");
+			ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+			document.body.appendChild(ta); ta.select();
+			try { done(document.execCommand("copy")); } catch (err) { done(false); }
+			ta.remove();
+		}
+	});
 
 	/* ── ④b F14：侧栏文件夹项 Enter 键触发（tabindex=0 配套——键盘切换文件夹）── */
 	document.addEventListener("keydown", function (e) {

@@ -152,7 +152,7 @@ func TestCreateMailboxRoundTrip(t *testing.T) {
 		}
 	}
 	// 重复创建（大小写变体同地址）
-	if _, err := svc.CreateMailbox(ctx, "alice@EXAMPLE.com", "x"); !errors.Is(err, storage.ErrMailboxExists) {
+	if _, err := svc.CreateMailbox(ctx, "alice@EXAMPLE.com", "xxxxxxxx"); !errors.Is(err, storage.ErrMailboxExists) { // D10 形态适配：密码≥8（锚语义=重复创建错误保持）
 		t.Fatalf("重复创建应 ErrMailboxExists，got %v", err)
 	}
 }
@@ -208,7 +208,7 @@ func TestShadowMailboxLifecycle(t *testing.T) {
 // TestActivateUnknownMailbox 激活不存在的地址：ErrMailboxNotFound
 func TestActivateUnknownMailbox(t *testing.T) {
 	svc, _ := newTestService(t)
-	err := svc.ActivateMailbox(context.Background(), "ghost@example.com", "pw")
+	err := svc.ActivateMailbox(context.Background(), "ghost@example.com", "pw123456") // D10 形态适配（锚语义=ErrMailboxNotFound 保持）
 	if !errors.Is(err, storage.ErrMailboxNotFound) {
 		t.Fatalf("应 ErrMailboxNotFound，got %v", err)
 	}
@@ -221,7 +221,7 @@ func TestVerifyCredentialsRejectsBadInput(t *testing.T) {
 	svc, _ := newTestService(t)
 	ctx := context.Background()
 
-	if _, err := svc.CreateMailbox(ctx, "u1@example.com", "right"); err != nil {
+	if _, err := svc.CreateMailbox(ctx, "u1@example.com", "right123"); err != nil { // D10 形态适配
 		t.Fatalf("建号: %v", err)
 	}
 	// 错误密码
@@ -243,7 +243,7 @@ func TestVerifyCredentialsRejectsBadInput(t *testing.T) {
 	if err := svc.SetMailboxStatus(ctx, "u1@example.com", storage.MailboxStatusActive); err != nil {
 		t.Fatalf("恢复: %v", err)
 	}
-	if _, err := svc.VerifyCredentials(ctx, "u1@example.com", "right"); err != nil {
+	if _, err := svc.VerifyCredentials(ctx, "u1@example.com", "right123"); err != nil { // D10 形态适配（与建号密码同步）
 		t.Fatalf("恢复后登录失败: %v", err)
 	}
 }
@@ -252,7 +252,7 @@ func TestVerifyCredentialsRejectsBadInput(t *testing.T) {
 func TestSetMailboxStatusRejectsShadow(t *testing.T) {
 	svc, _ := newTestService(t)
 	ctx := context.Background()
-	if _, err := svc.CreateMailbox(ctx, "u2@example.com", "pw"); err != nil {
+	if _, err := svc.CreateMailbox(ctx, "u2@example.com", "pw123456"); err != nil { // D10 形态适配
 		t.Fatalf("建号: %v", err)
 	}
 	if err := svc.SetMailboxStatus(ctx, "u2@example.com", storage.MailboxStatusShadow); !errors.Is(err, ErrInvalidStatus) {
@@ -269,7 +269,7 @@ func TestListShadowMailboxes(t *testing.T) {
 			t.Fatalf("建影子 %s: %v", addr, err)
 		}
 	}
-	if _, err := svc.CreateMailbox(ctx, "a@ex.com", "pw"); err != nil {
+	if _, err := svc.CreateMailbox(ctx, "a@ex.com", "pw123456"); err != nil { // D10 形态适配
 		t.Fatalf("建 active: %v", err)
 	}
 	shadows, err := svc.ListShadowMailboxes(ctx)
@@ -292,7 +292,7 @@ func TestListShadowMailboxes(t *testing.T) {
 func TestFolderCRUDAndGuards(t *testing.T) {
 	svc, db := newTestService(t)
 	ctx := context.Background()
-	m, err := svc.CreateMailbox(ctx, "folders@ex.com", "pw")
+	m, err := svc.CreateMailbox(ctx, "folders@ex.com", "pw123456") // D10 形态适配
 	if err != nil {
 		t.Fatalf("建号: %v", err)
 	}
@@ -359,7 +359,7 @@ func TestFolderCRUDAndGuards(t *testing.T) {
 func TestUnreadCounts(t *testing.T) {
 	svc, db := newTestService(t)
 	ctx := context.Background()
-	m, err := svc.CreateMailbox(ctx, "unread@ex.com", "pw")
+	m, err := svc.CreateMailbox(ctx, "unread@ex.com", "pw123456") // D10 形态适配
 	if err != nil {
 		t.Fatalf("建号: %v", err)
 	}
@@ -392,10 +392,10 @@ func TestUnreadCounts(t *testing.T) {
 func TestCreateMailboxAtomicAddressConflict(t *testing.T) {
 	svc, db := newTestService(t)
 	ctx := context.Background()
-	if _, err := svc.CreateMailbox(ctx, "dup@ex.com", "pw"); err != nil {
+	if _, err := svc.CreateMailbox(ctx, "dup@ex.com", "pw123456"); err != nil { // D10 形态适配
 		t.Fatalf("首建: %v", err)
 	}
-	if _, err := svc.CreateMailbox(ctx, "dup@ex.com", "pw2"); !errors.Is(err, storage.ErrMailboxExists) {
+	if _, err := svc.CreateMailbox(ctx, "dup@ex.com", "pw123457"); !errors.Is(err, storage.ErrMailboxExists) { // D10 形态适配（锚语义保持）
 		t.Fatalf("重复应 ErrMailboxExists，got %v", err)
 	}
 	// 全库仅一行该地址邮箱；文件夹数 = 5（无第二次事务残留）

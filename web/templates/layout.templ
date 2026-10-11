@@ -13,12 +13,15 @@ package templates
 // 参数：lang 界面语言（html lang 联动）；title 页面标题；errText 错误提示（空串不渲染）。
 templ Layout(lang Lang, title string, errText string) {
 	<!DOCTYPE html>
-	<html lang={ string(lang) }>
+	<html lang={ langAttrFor(lang) }>
 		<head>
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
 			<title>{ title }</title>
 			<link rel="stylesheet" href={ StaticURL("/static/app.css") }/>
+			// H3（批二）：favicon+theme-color（Layout 骨架页同享——404 消除）。
+			<link rel="icon" href={ StaticURL("/static/favicon.svg") } type="image/svg+xml"/>
+			<meta name="theme-color" content="#1976d2"/>
 		</head>
 		<body>
 			if errText != "" {

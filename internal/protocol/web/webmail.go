@@ -117,8 +117,9 @@ func (s *Server) loadMailListData(c *gin.Context, view *mailboxView, p listParam
 		ActiveFolder: p.FolderID, Page: p.Page, Pagesize: p.Pagesize,
 		UnreadOnly: p.UnreadOnly, FlaggedOnly: p.FlaggedOnly,
 		Keyword: keyword, IsSearch: isSearch,
-		Folders: make([]templates.FolderEntry, 0, len(folders)),
-		Items:   make([]templates.MailRow, 0, p.Pagesize),
+		IsListPage: true, // F1（批二）：列表语境——侧栏文件夹项 hx-get 局部更新（设置族侧栏 false 整页导航）
+		Folders:    make([]templates.FolderEntry, 0, len(folders)),
+		Items:      make([]templates.MailRow, 0, p.Pagesize),
 	}
 	for _, f := range folders {
 		data.Folders = append(data.Folders, templates.FolderEntry{
@@ -129,13 +130,17 @@ func (s *Server) loadMailListData(c *gin.Context, view *mailboxView, p listParam
 	appendItems := func(items []*storage.ListItem, total int64) {
 		data.Total = total
 		for _, it := range items {
-			sentAt := ""
+			sentAt, sentAtFull := "", ""
 			if !it.SentAt.IsZero() {
-				sentAt = it.SentAt.Local().Format("2006-01-02 15:04")
+				local := it.SentAt.Local()
+				sentAt = local.Format("2006-01-02 15:04")
+				// C17（批二·E-2-A）：完整时刻 title（秒级+数字时区偏移+时区缩写——
+				// 悬停/读屏可得精确时间与时区，列表文本保持紧凑格式零变化）
+				sentAtFull = local.Format("2006-01-02 15:04:05 -0700 MST")
 			}
 			data.Items = append(data.Items, templates.MailRow{
 				ID: it.ID, Subject: it.Subject, FromAddr: it.FromAddr,
-				SentAt: sentAt, IsRead: it.IsRead, IsFlagged: it.IsFlagged,
+				SentAt: sentAt, SentAtFull: sentAtFull, IsRead: it.IsRead, IsFlagged: it.IsFlagged,
 			})
 		}
 	}

@@ -60,6 +60,13 @@ func (s *Server) mailDetailGET(c *gin.Context) {
 		read := true
 		if err = s.messages.SetFlags(ctx, msg.ID, storage.FlagPatch{IsRead: &read}); err != nil {
 			sessLogger(c).Warn("置已读失败（不阻断详情）", "error", err)
+		} else {
+			// B16（批二·F2 移交承载）：置已读成功→HX-Trigger 事件通知前端侧栏
+			// 未读计数递减（grmail.js 监听 grmailRead 就地更新对应文件夹 unread——
+			// 片段交换目标 #mail-list 不含侧栏的原不联动收口；非 HX 整页语境无需）。
+			if c.GetHeader("HX-Request") != "" {
+				c.Header("HX-Trigger", fmt.Sprintf(`{"grmailRead":%d}`, msg.FolderID))
+			}
 		}
 	}
 
@@ -98,7 +105,7 @@ func (s *Server) mailDetailGET(c *gin.Context) {
 		renderFragment(c, http.StatusOK, templates.DetailView(langOf(c), msg, &display, safeBody, bodyIsHTML, currentCSRF(c), backHref, isDraft))
 		return
 	}
-	renderPage(c, http.StatusOK, templates.DetailPageView(langOf(c), msg, &display, safeBody, bodyIsHTML, currentCSRF(c), backHref, isDraft))
+	renderPage(c, http.StatusOK, templates.DetailPageView(langOf(c), msg, &display, safeBody, bodyIsHTML, currentCSRF(c), backHref, isDraft, s.sidebarDataFor(c)))
 }
 
 // isDraftFolder 判定文件夹是否 Drafts 系统文件夹（组D·核对#29——草稿续编入口
@@ -198,15 +205,56 @@ func (s *Server) mailBodyGET(c *gin.Context) {
 		sessLogger(c).Warn("正文展示模型解析降级（纯文本空）", "error", derr)
 		display = mail.Display{Attachments: []mail.AttachmentView{}, CIDs: map[string]bool{}}
 	}
-	body, contentType := display.BodyText, "text/plain; charset=utf-8"
+	body, contentType := display.BodyText, ""
 	if display.BodyHTML != "" {
-		body = rewriteCIDs(display.BodyHTML, id, display)
+		body = mailBodyDocument(rewriteCIDs(display.BodyHTML, id, display))
+		contentType = "text/html; charset=utf-8"
+	} else {
+		// C12（批二·E-3-A 联动）：纯文本形态同获排版基座（pre 等宽+基座样式）——
+		// 双文档包裹形态下 Content-Type 须同步 text/html（原恒 text/plain 致 iframe
+		// 以纯文本呈现 HTML 源码——C12 落码缺口，续接批次修正；契约 v1.42.0 注记）。
+		body = mailBodyDocumentPlain(display.BodyText)
 		contentType = "text/html; charset=utf-8"
 	}
 	// 独立 CSP（覆盖 securityHeadersMiddleware 的全域头——gin Header.Set 后设胜出）
 	c.Header("Content-Security-Policy",
 		"default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; media-src 'self'; frame-ancestors 'self'")
 	c.Data(http.StatusOK, contentType, []byte(body))
+}
+
+// mailBodyBaseCSS 正文文档排版基座（C12 批二——三轮评审一轮#10 承载：正文 iframe
+// 内 UA 默认呈现无排版基线〔字号/行高/内边距/最大宽/断词〕+暗色对比倒置风险；
+// 经 style 元素注入——本端点 CSP 已放行 style-src 'unsafe-inline'〔批一 D3-B〕；
+// 令牌不引入〔iframe 文档隔离无外链〕，色值用浅色固定基线+prefers-color-scheme
+// 暗色适配〔正文邮件多为白底——暗色保持浅底可读性优先〕）。
+// E-3-A（G14 联动）：可读性由基座字号/行距承载；缩放经外层页面浏览器缩放传导。
+const mailBodyBaseCSS = `<style>
+body{margin:0;padding:16px;font-family:system-ui,-apple-system,"Segoe UI","Helvetica Neue","PingFang SC","Microsoft YaHei",sans-serif;font-size:1rem;line-height:1.65;color:#212121;background:#fff;}
+img,video{max-width:100%;height:auto;}
+table{max-width:100%;border-collapse:collapse;}
+td,th{border:1px solid #e0e0e0;padding:4px 8px;}
+a{color:#1976d2;}
+*{overflow-wrap:anywhere;}
+@media (prefers-color-scheme: dark){body{background:#fff;color:#212121;}}
+</style>`
+
+// mailBodyDocument HTML 正文→完整文档（基座样式 prepend——head+body 包裹）。
+func mailBodyDocument(htmlBody string) string {
+	return "<!DOCTYPE html><html><head><meta charset=\"utf-8\">" + mailBodyBaseCSS +
+		"</head><body>" + htmlBody + "</body></html>"
+}
+
+// mailBodyDocumentPlain 纯文本正文→完整文档（pre 等宽呈现+同款基座）。
+func mailBodyDocumentPlain(textBody string) string {
+	return "<!DOCTYPE html><html><head><meta charset=\"utf-8\">" + mailBodyBaseCSS +
+		"</head><body><pre style=\"white-space:pre-wrap;font-family:inherit;margin:0;\">" +
+		htmlEscapeBody(textBody) + "</pre></body></html>"
+}
+
+// htmlEscapeBody 文本 HTML 转义（纯文本形态防实体注入——&<> 三字符）。
+func htmlEscapeBody(s string) string {
+	r := strings.NewReplacer("&", "&", "<", "<", ">", ">")
+	return r.Replace(s)
 }
 
 // attachmentGET 附件下载（GET /attachments/{id}?part=N 或 ?cid=<...>——二进制响应）。

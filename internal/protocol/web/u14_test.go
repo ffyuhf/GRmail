@@ -50,7 +50,7 @@ func newU14Env(t *testing.T, withTokens bool) *u14Env {
 	attempts := storage.NewSQLiteLoginAttemptRepo(db)
 	accounts := account.NewService(mailboxRepo, folderRepo)
 
-	hash, err := account.HashPassword("s3cret!")
+	hash, err := account.HashPassword("s3cret!!") // D10 形态适配：密码≥8（哈希链锚语义保持）
 	if err != nil {
 		t.Fatalf("哈希管理员密码: %v", err)
 	}
@@ -73,7 +73,7 @@ func newU14Env(t *testing.T, withTokens bool) *u14Env {
 	}, sessions, users, attempts, accounts)
 	ts := httptest.NewServer(srv.engine)
 	t.Cleanup(ts.Close)
-	return &u14Env{srv: srv, ts: ts, tokens: tokenRepo, adminID: admin.ID, adminPass: "s3cret!"}
+	return &u14Env{srv: srv, ts: ts, tokens: tokenRepo, adminID: admin.ID, adminPass: "s3cret!!"} // D10 形态适配
 }
 
 // adminCookie 管理员登录取会话 cookie。

@@ -17,15 +17,20 @@ package templates
 // AdminLoginView 管理员登录页（/login：用户名不含 @，走 UserRepo+VerifyPassword）。
 // 参数：lang 界面语言；errText 登录失败统一模糊提示（防枚举）。
 templ AdminLoginView(lang Lang, errText string) {
-	@Layout(lang, Tr(lang, "login.adminTitle"), errText) {
+	// C6（批二）：错误提示入卡片语境（Layout errText 位 body 首与居中卡片脱节——
+	// 空传 Layout 位+卡片内呈现）；D2：用户名 inputmode；F4：交叉链接。
+	@Layout(lang, Tr(lang, "login.adminTitle"), "") {
 		<div class="card">
 			<div class="card-head"><h1>GRmail</h1><span class="chip">{ Tr(lang, "home.adminKind") }</span></div>
+			if errText != "" {
+				<p class="error" role="alert">{ errText }</p>
+			}
 			<form method="post" action="/login">
-				<label>{ Tr(lang, "login.username") } <input type="text" name="username" autocomplete="username" required autofocus maxlength="64"/></label>
+				<label>{ Tr(lang, "login.username") } <input type="text" name="username" autocomplete="username" required autofocus maxlength="64" inputmode="email" autocapitalize="none" spellcheck="false"/></label>
 				<label>{ Tr(lang, "login.password") } <input type="password" name="password" autocomplete="current-password" required maxlength="1024"/></label>
 				<button class="primary" type="submit">{ Tr(lang, "login.submit") }</button>
 				</form>
-				<p class="hint lang-switch"><a href={ langSwitchHref(lang, "/login") }>{ Tr(lang, "top.lang") }</a></p>
+				<p class="hint lang-switch"><a href={ langSwitchHref(lang, "/login") }>{ Tr(lang, "top.lang") }</a> · <a href="/webmail/login">{ Tr(lang, "login.crossMailbox") }</a></p>
 			</div>
 		}
 	}
@@ -33,15 +38,18 @@ templ AdminLoginView(lang Lang, errText string) {
 // MailboxLoginView 邮箱账号登录页（/webmail/login：地址含 @，走 account.VerifyCredentials）。
 // 参数：lang 界面语言；errText 同 AdminLoginView（统一模糊口径复用 U2 防枚举语义）。
 templ MailboxLoginView(lang Lang, errText string) {
-	@Layout(lang, Tr(lang, "login.mailTitle"), errText) {
+	@Layout(lang, Tr(lang, "login.mailTitle"), "") {
 		<div class="card">
 			<div class="card-head"><h1>GRmail</h1><span class="chip">{ Tr(lang, "home.mailKind") }</span></div>
+			if errText != "" {
+				<p class="error" role="alert">{ errText }</p>
+			}
 			<form method="post" action="/webmail/login">
-				<label>{ Tr(lang, "login.address") } <input type="text" name="address" autocomplete="username" required placeholder="user@example.com" autofocus maxlength="320"/></label>
+				<label>{ Tr(lang, "login.address") } <input type="text" name="address" autocomplete="username" required placeholder="user@example.com" autofocus maxlength="320" inputmode="email" autocapitalize="none" spellcheck="false"/></label>
 				<label>{ Tr(lang, "login.password") } <input type="password" name="password" autocomplete="current-password" required maxlength="1024"/></label>
 				<button class="primary" type="submit">{ Tr(lang, "login.submit") }</button>
 				</form>
-				<p class="hint lang-switch"><a href={ langSwitchHref(lang, "/webmail/login") }>{ Tr(lang, "top.lang") }</a></p>
+				<p class="hint lang-switch"><a href={ langSwitchHref(lang, "/webmail/login") }>{ Tr(lang, "top.lang") }</a> · <a href="/login">{ Tr(lang, "login.crossAdmin") }</a></p>
 			</div>
 		}
 	}

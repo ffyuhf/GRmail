@@ -43,9 +43,9 @@ var iconStar = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="m12 2 3.09
 // 参数：d 列表数据（Lang 驱动双语渲染；兼作 AppFrame 侧栏数据源）。
 templ MailPageView(d *MailListData) {
 	@AppFrame(NormalizeLang(d.Lang), Tr(NormalizeLang(d.Lang), "mail.title"), d.Label, d.IsAdmin, d.CSRF, d) {
-		<div class="main">
+		<main class="main" id="main-content">
 			<div id="folder-hint" class="hint"></div>
-			<div id="mail-list">
+			<div id="mail-list" aria-live="polite">
 				@MailListFragment(d)
 			</div>
 			<div id="mail-loading" class="htmx-indicator" aria-hidden="true">
@@ -55,7 +55,7 @@ templ MailPageView(d *MailListData) {
 				<div class="skeleton-row"></div>
 				<div class="skeleton-row"></div>
 			</div>
-		</div>
+		</main>
 	}
 }
 
@@ -66,14 +66,23 @@ templ MailPageView(d *MailListData) {
 // D3（2026-10-05）：Sidebar 自本批次起为全站侧栏（AppFrame 承载——设置族页统一导航）。
 templ Sidebar(d *MailListData) {
 	{{ lang := NormalizeLang(d.Lang) }}
-	<nav class="sidebar">
+	<nav class="sidebar" aria-label={ Tr(lang, "mail.folders") }>
 		<div class="side-caption">{ Tr(lang, "mail.folders") }</div>
 		for _, f := range d.Folders {
+			// F1（批二）：语境开关——列表页携带 hx-get 局部更新；设置族页侧栏
+			// （IsListPage=false）仅 href 整页导航（原 hx-target 缺失语境下点击被
+			// htmx preventDefault 吞掉无反应收口）；G5：aria-current="page" 当前项。
 			<a class={ "folder-item", templ.KV("active", f.Active) } tabindex="0"
+				if f.Active {
+					aria-current="page"
+				}
 				href={ fmt.Sprintf("/?folder=%d&page=1&pagesize=%d", f.ID, d.Pagesize) }
-				hx-get={ fmt.Sprintf("/mails?folder=%d&page=1&pagesize=%d", f.ID, d.Pagesize) }
-				hx-push-url="true"
-				hx-target="#mail-list" hx-indicator="#mail-loading">
+				if d.IsListPage {
+					hx-get={ fmt.Sprintf("/mails?folder=%d&page=1&pagesize=%d", f.ID, d.Pagesize) }
+					hx-push-url="true"
+					hx-target="#mail-list" hx-indicator="#mail-loading"
+				}
+				>
 				if f.Kind == "custom" {
 					<span class="ficon" aria-hidden="true">@templ.Raw(iconMailFolder)</span>
 				} else {
@@ -131,7 +140,7 @@ templ MailListFragment(d *MailListData) {
 			<form hx-get="/search" hx-target="#mail-list" hx-indicator="#mail-loading" action="/search" method="get">
 				<span class="search-box">
 					<span class="ic" aria-hidden="true">@templ.Raw(iconSearch)</span>
-					<input type="search" name="keyword" placeholder={ Tr(lang, "mail.searchHint") } value={ d.Keyword }/>
+					<input type="search" name="keyword" aria-label={ Tr(lang, "mail.searchHint") } placeholder={ Tr(lang, "mail.searchHint") } value={ d.Keyword }/>
 				</span>
 				<button class="secondary" type="submit">{ Tr(lang, "mail.search") }</button>
 			</form>
@@ -164,13 +173,20 @@ templ MailListFragment(d *MailListData) {
 				data-confirm-move-trash={ Tr(lang, "mail.confirmMoveTrash") }>
 				<input type="hidden" name="csrf_token" value={ d.CSRF }/>
 				<label class="inline"><input type="checkbox" name="all"/>{ Tr(lang, "mail.selectAll") }</label>
-				<select name="action" class="btn-sm">
-					<option value="mark-read">{ Tr(lang, "mail.markRead") }</option>
-					<option value="mark-unread">{ Tr(lang, "mail.markUnread") }</option>
-					<option value="mark-flag">{ Tr(lang, "mail.addFlag") }</option>
-					<option value="unmark-flag">{ Tr(lang, "mail.removeFlag") }</option>
-					<option value="move">{ Tr(lang, "mail.moveTo") }</option>
-					<option value="delete">{ Tr(lang, "common.delete") }</option>
+				// D11（批二）：读写/破坏动作 optgroup 分组；D1：select 程序化名称。
+				<select name="action" class="btn-sm" aria-label={ Tr(lang, "common.execute") }>
+					<optgroup label={ Tr(lang, "mail.markRead") }>
+						<option value="mark-read">{ Tr(lang, "mail.markRead") }</option>
+						<option value="mark-unread">{ Tr(lang, "mail.markUnread") }</option>
+						<option value="mark-flag">{ Tr(lang, "mail.addFlag") }</option>
+						<option value="unmark-flag">{ Tr(lang, "mail.removeFlag") }</option>
+					</optgroup>
+					<optgroup label={ Tr(lang, "mail.moveTo") }>
+						<option value="move">{ Tr(lang, "mail.moveTo") }</option>
+					</optgroup>
+					<optgroup label={ Tr(lang, "common.delete") }>
+						<option value="delete">{ Tr(lang, "common.delete") }</option>
+					</optgroup>
 				</select>
 				if len(d.Folders) > 0 {
 					<select name="target" class="btn-sm" aria-label={ Tr(lang, "mail.moveTo") }>
@@ -190,6 +206,12 @@ templ MailListFragment(d *MailListData) {
 				if d.IsSearch {
 					<h3>{ Tr(lang, "mail.noResultTitle") }</h3>
 					<p>{ Trf(lang, "mail.noMatchFmt", d.Keyword) }</p>
+				} else if d.UnreadOnly {
+					// C15（批二续接补齐）：未读筛选空态文案分叉+返回出口（原复用普通
+					// 空文案语义错位+空态无出路——清除筛选直达收件箱全量视图）。
+					<h3>{ Tr(lang, "mail.noResultTitle") }</h3>
+					<p>{ Tr(lang, "mail.emptyUnread") }</p>
+					<p><a class="btn-text" href={ fmt.Sprintf("/mails?folder=%d&unread=0&page=1&pagesize=%d", d.ActiveFolder, d.Pagesize) }>{ Tr(lang, "mail.backInbox") }</a></p>
 				} else {
 					<h3>{ Tr(lang, "mail.emptyTitle") }</h3>
 					<p>{ Tr(lang, "mail.emptyFolder") }</p>
@@ -199,23 +221,23 @@ templ MailListFragment(d *MailListData) {
 			<div class="table-wrap">
 				<table class="mails">
 					<thead>
-						<tr><th></th><th>{ Tr(lang, "mail.colStatus") }</th><th>{ Tr(lang, "mail.colSubject") }</th><th>{ Tr(lang, "mail.colFrom") }</th><th>{ Tr(lang, "mail.colTime") }</th></tr>
+						<tr><th scope="col"><span class="sr-only">{ Tr(lang, "common.selectAllCol") }</span></th><th scope="col">{ Tr(lang, "mail.colStatus") }</th><th scope="col">{ Tr(lang, "mail.colSubject") }</th><th scope="col">{ Tr(lang, "mail.colFrom") }</th><th scope="col">{ Tr(lang, "mail.colTime") }</th></tr>
 					</thead>
 					<tbody>
 						for _, m := range d.Items {
 							<tr class={ templ.KV("unread", !m.IsRead) }>
-								<td><input class="mail-id" type="checkbox" name="ids" value={ fmt.Sprintf("%d", m.ID) } form="batch-form" aria-label={ Tr(lang, "mail.colSubject") }/></td>
+								<td><input class="mail-id" type="checkbox" name="ids" value={ fmt.Sprintf("%d", m.ID) } form="batch-form" aria-label={ Trf(lang, "mail.selRowFmt", subjectOr(lang, m.Subject)) }/></td>
 								<td class="status-cell">
 									if m.IsFlagged {
-										<span class="flag" title={ Tr(lang, "mail.flagged") }>@templ.Raw(iconStar)</span>
+										<span class="flag" title={ Tr(lang, "mail.flagged") } role="img" aria-label={ Tr(lang, "mail.flagged") }>@templ.Raw(iconStar)</span>
 									}
 									if !m.IsRead {
-										<span class="dot" title={ Tr(lang, "mail.unreadDot") }></span>
+										<span class="dot" title={ Tr(lang, "mail.unreadDot") } role="img" aria-label={ Tr(lang, "mail.unreadDot") }></span>
 									}
 								</td>
 								<td class="cell-trunc"><a href={ fmt.Sprintf("/mails/%d", m.ID) } hx-get={ fmt.Sprintf("/mails/%d", m.ID) } hx-push-url="true" hx-target="#mail-list" title={ subjectOr(lang, m.Subject) }>{ subjectOr(lang, m.Subject) }</a></td>
 								<td class="cell-trunc"><span title={ m.FromAddr }>{ m.FromAddr }</span></td>
-								<td class="time-cell">{ m.SentAt }</td>
+								<td class="time-cell"><span title={ m.SentAtFull }>{ m.SentAt }</span></td>
 							</tr>
 						}
 					</tbody>
@@ -225,13 +247,13 @@ templ MailListFragment(d *MailListData) {
 				if d.Page > 1 {
 					<a href={ pageHref(d, d.Page-1) } hx-get={ pageHref(d, d.Page-1) } hx-push-url="true" hx-target="#mail-list" hx-indicator="#mail-loading">{ Tr(lang, "mail.prevPage") }</a>
 				}
-				<span>{ Trf(lang, "mail.pageFmt", d.Page, d.PageCount) }</span>
+				<span aria-current="page">{ Trf(lang, "mail.pageFmt", d.Page, d.PageCount) }</span>
 				if d.Page < d.PageCount {
 					<a href={ pageHref(d, d.Page+1) } hx-get={ pageHref(d, d.Page+1) } hx-push-url="true" hx-target="#mail-list" hx-indicator="#mail-loading">{ Tr(lang, "mail.nextPage") }</a>
 				}
 				<span class="pagesize">{ Tr(lang, "mail.pagesizeSelect") }
 					for _, n := range []int{15, 25, 50, 100} {
-						<a href={ pagesizeHref(d, n) } hx-get={ pagesizeHref(d, n) } hx-push-url="true" hx-target="#mail-list" class={ templ.KV("active", n == d.Pagesize) }>{ fmt.Sprintf("%d", n) }</a>
+						<a href={ pagesizeHref(d, n) } hx-get={ pagesizeHref(d, n) } hx-push-url="true" hx-target="#mail-list" class={ templ.KV("active", n == d.Pagesize) } aria-current={ templ.KV("page", n == d.Pagesize) }>{ fmt.Sprintf("%d", n) }</a>
 					}
 				</span>
 			</div>

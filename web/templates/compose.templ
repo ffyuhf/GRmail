@@ -44,25 +44,27 @@ templ ComposeView(d *ComposeData) {
 				<section class="compose-section">
 					<div class="section-label">{ Tr(lang, "compose.rcpt") }</div>
 					<div class="compose-rcpt-grid">
-						<label>{ Tr(lang, "compose.to") }<input type="text" name="to" id="f-to" value={ d.To } placeholder="user@example.com"/></label>
-						<label>{ Tr(lang, "compose.cc") }<input type="text" name="cc" id="f-cc" value={ d.Cc }/></label>
-						<label>{ Tr(lang, "compose.bcc") }<input type="text" name="bcc" id="f-bcc" value={ d.Bcc }/></label>
+						// D2（批二）：地址输入 email 语义（inputmode/autocapitalize/spellcheck）。
+						<label>{ Tr(lang, "compose.to") }<input type="text" name="to" id="f-to" value={ d.To } placeholder="user@example.com" inputmode="email" autocapitalize="none" spellcheck="false"/></label>
+						<label>{ Tr(lang, "compose.cc") }<input type="text" name="cc" id="f-cc" value={ d.Cc } inputmode="email" autocapitalize="none" spellcheck="false"/></label>
+						<label>{ Tr(lang, "compose.bcc") }<input type="text" name="bcc" id="f-bcc" value={ d.Bcc } inputmode="email" autocapitalize="none" spellcheck="false"/></label>
 					</div>
 					<details>
 						<summary>{ Tr(lang, "compose.csvImport") }</summary>
 						<div class="actions">
-							<input type="file" id="csv-file" accept=".csv,text/csv"/>
-							<select id="csv-target">
+							// D1（批二）：CSV file/select 程序化名称；G3：结果区 aria-live 播报。
+							<input type="file" id="csv-file" accept=".csv,text/csv" aria-label={ Tr(lang, "compose.csvImport") }/>
+							<select id="csv-target" aria-label={ Tr(lang, "compose.csvImport") }>
 								<option value="f-to">{ Tr(lang, "compose.to") }</option>
 								<option value="f-cc">{ Tr(lang, "compose.cc") }</option>
 								<option value="f-bcc">{ Tr(lang, "compose.bcc") }</option>
 							</select>
 							<button class="secondary" type="button" id="csv-parse-btn">{ Tr(lang, "compose.csvParse") }</button>
 						</div>
-						<div id="csv-result"></div>
+						<div id="csv-result" aria-live="polite"></div>
 					</details>
 					if d.IsAdmin {
-						<label>{ Tr(lang, "compose.from") }<input type="text" name="from" id="f-from" value={ d.From } placeholder={ Tr(lang, "compose.fromPh") } data-domain={ d.Domain } autocomplete="off"/></label>
+						<label>{ Tr(lang, "compose.from") }<input type="text" name="from" id="f-from" value={ d.From } placeholder={ Tr(lang, "compose.fromPh") } data-domain={ d.Domain } autocomplete="off" inputmode="email" autocapitalize="none" spellcheck="false"/></label>
 					}
 				</section>
 				<section class="compose-section">
@@ -160,9 +162,10 @@ templ ComposeView(d *ComposeData) {
 					<a class="btn-text" href="/">{ Tr(lang, "common.cancel") }</a>
 				</div>
 			</form>
-			<link rel="stylesheet" href={ StaticURL("/static/quill.snow.css") }/>
-			<script src={ StaticURL("/static/quill.js") }></script>
-			<script src={ StaticURL("/static/compose.js") }></script>
+		// H2（批二）：编辑器资源前置（原 body 尾容器内——FOUC/CLS 收口；defer 保序）。
+		<link rel="stylesheet" href={ StaticURL("/static/quill.snow.css") }/>
+		<script src={ StaticURL("/static/quill.js") } defer></script>
+		<script src={ StaticURL("/static/compose.js") } defer></script>
 		</div>
 	}
 }

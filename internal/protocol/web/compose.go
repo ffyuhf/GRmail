@@ -183,7 +183,13 @@ func (s *Server) composePOST(c *gin.Context) {
 	}
 	s.applyEditorConf(data) // D8#11：压缩参数快照注入（POST 重渲染路径同载）
 	if serr := s.composeValidate(c, data); serr != "" {
+		// D5（批二）：就地呈现+附件清空提示（multipart 重渲染 file input 必空——
+		// 提示用户重选；刷新重放零副作用——校验失败无写入，PRG 重定向代价为
+		// 表单内容全丢，计划书「就地呈现」分支承载）。
 		data.ErrText = serr
+		if readFormHasAttachments(c) {
+			data.ErrText += " " + templates.Tr(langOf(c), "compose.attachRePick")
+		}
 		renderPage(c, http.StatusBadRequest, templates.ComposeView(data))
 		return
 	}
@@ -429,6 +435,13 @@ func readFormAttachments(c *gin.Context) ([]mail.OutgoingAttachment, error) {
 
 // errAttachmentTooLarge 附件超限哨兵（35MiB——SIZE 缺省档同源）。
 var errAttachmentTooLarge = errors.New("附件总大小超限（35MiB）")
+
+// readFormHasAttachments 表单是否携带附件文件（D5——非空附件+校验失败场景提示
+// 「需重选」；读取失败按无附件保守口径——提示仅为增强）。
+func readFormHasAttachments(c *gin.Context) bool {
+	form, err := c.MultipartForm()
+	return err == nil && form != nil && len(form.File["attachments"]) > 0
+}
 
 // parseFormInt64 表单 int64 解析（空/非法 0）。
 func parseFormInt64(v string) int64 {

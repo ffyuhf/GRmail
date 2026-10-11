@@ -43,19 +43,29 @@ var iconShield = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" str
 // 参数：lang 界面语言；title 页面标题；label 主体呈现名；isAdmin admin 主体标记；csrf 会话绑定 token。
 templ AppLayout(lang Lang, title string, label string, isAdmin bool, csrf string) {
 	<!DOCTYPE html>
-	<html lang={ string(lang) } data-confirm-default={ Tr(lang, "common.confirm") }>
+	<html lang={ langAttrFor(lang) } data-confirm-default={ Tr(lang, "common.confirm") }>
 		<head>
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
 			<title>{ title } - GRmail</title>
-			<script src={ StaticURL("/static/htmx.min.js") }></script>
+			// H1（批二）：htmx defer——首屏解析并行（原阻塞；grmail.js defer 既有对齐）。
+			<script src={ StaticURL("/static/htmx.min.js") } defer></script>
 			<script src={ StaticURL("/static/grmail.js") } defer></script>
 			<link rel="stylesheet" href={ StaticURL("/static/app.css") }/>
+			// H3（批二）：favicon+manifest+theme-color（原每页 favicon.ico 404）。
+			<link rel="icon" href={ StaticURL("/static/favicon.svg") } type="image/svg+xml"/>
+			<link rel="manifest" href={ StaticURL("/static/manifest.webmanifest") }/>
+			<meta name="theme-color" content="#1976d2"/>
 		</head>
 		<body>
+			// G1（批二）：跳转链接（键盘用户跳过侧栏直达主内容）+H6 noscript 降级说明。
+			<a class="skip-link" href="#main-content">{ Tr(lang, "common.skipMain") }</a>
+			<noscript><p class="notice">{ Tr(lang, "common.nojs") }</p></noscript>
 			<input type="checkbox" id="nav-toggle" class="nav-toggle-input" checked hidden/>
 			<header class="app-bar">
-				<label class="nav-toggle" for="nav-toggle" aria-label="menu"><span class="ic" aria-hidden="true">@templ.Raw(iconMenu)</span></label>
+				// G2（批二）：抽屉开关键盘可达（label tabindex=0+role=button+Enter/Space
+				// 触发归 grmail.js；aria-label Tr 化——E5 硬编码 "menu" 收口）。
+				<label class="nav-toggle" for="nav-toggle" role="button" tabindex="0" aria-label={ Tr(lang, "top.menu") }><span class="ic" aria-hidden="true">@templ.Raw(iconMenu)</span></label>
 				<a class="app-bar-brand" href="/">GRmail<span class="app-bar-label">{ label }</span></a>
 				<div class="app-bar-actions">
 					<a class="primary" href="/compose">
@@ -63,30 +73,35 @@ templ AppLayout(lang Lang, title string, label string, isAdmin bool, csrf string
 						{ Tr(lang, "top.compose") }
 					</a>
 					if isAdmin {
+						// G12（批二）：summary 增 aria-haspopup（开合态 aria-expanded 由
+						// grmail.js details toggle 事件维护——纯静态无法反射）。
 						<details class="menu-host">
-							<summary>
+							<summary aria-haspopup="menu">
 								<span class="ic" aria-hidden="true">@templ.Raw(iconShield)</span>
 								{ Tr(lang, "top.manage") }
 								<span class="ic ic-caret" aria-hidden="true">@templ.Raw(iconCaret)</span>
 							</summary>
-							<div class="menu">
-								<a href="/admin/mailboxes">{ Tr(lang, "top.adminMail") }</a>
-								<a href="/admin/settings">{ Tr(lang, "top.settings") }</a>
-								<a href="/admin/2fa">{ Tr(lang, "hub.twofactor") }</a>
+							<div class="menu" role="menu">
+								<a href="/admin/mailboxes" role="menuitem">{ Tr(lang, "top.adminMail") }</a>
+								<a href="/admin/settings" role="menuitem">{ Tr(lang, "top.settings") }</a>
+								<a href="/admin/2fa" role="menuitem">{ Tr(lang, "hub.twofactor") }</a>
 							</div>
 						</details>
 					}
 					<details class="menu-host">
-						<summary aria-label={ Tr(lang, "top.account") }>
+						<summary aria-label={ Tr(lang, "top.account") } aria-haspopup="menu">
 							<span class="ic" aria-hidden="true">@templ.Raw(iconMore)</span>
 						</summary>
-						<div class="menu">
+						<div class="menu" role="menu">
 							if isAdmin {
-								<a href="/admin/password">{ Tr(lang, "top.password") }</a>
+								<a href="/admin/password" role="menuitem">{ Tr(lang, "top.password") }</a>
 							} else {
-								<a href="/settings">{ Tr(lang, "top.settingsHub") }</a>
+								<a href="/settings" role="menuitem">{ Tr(lang, "top.settingsHub") }</a>
+								// F6（批二）：mailbox 主体 2FA 直达入口（原仅 hub 页分区
+								// 可达——顶栏直达补齐；iconShield 复用）。
+								<a href="/settings/2fa" role="menuitem">{ Tr(lang, "top.twofactor") }</a>
 							}
-							<a href={ langSwitchHref(lang, "") }>
+							<a href={ langSwitchHref(lang, "") } role="menuitem">
 								<span class="ic" aria-hidden="true">@templ.Raw(iconLang)</span>
 								{ Tr(lang, "top.lang") }
 							</a>
@@ -116,10 +131,15 @@ templ AppLayout(lang Lang, title string, label string, isAdmin bool, csrf string
 // 字段子集——Items/Total 等列表域字段零值不消费）。
 templ AppFrame(lang Lang, title string, label string, isAdmin bool, csrf string, nav *MailListData) {
 	@AppLayout(lang, title, label, isAdmin, csrf) {
+		// G1（批二）：页面主地标 h1（sr-only——视觉保持顶栏品牌，语义地标齐备）。
+		<h1 class="sr-only">{ title }</h1>
 		if nav != nil {
 			<div class="layout">
 				@Sidebar(nav)
 				{ children... }
+				// C4（批二）：遮罩改真实 label（for=nav-toggle 点击可关——原 ::after
+				// 伪元素不可交互，移动端展开后唯一关闭路径残缺；样式接 .drawer-scrim）。
+				<label class="drawer-scrim" for="nav-toggle" aria-hidden="true"></label>
 			</div>
 		} else {
 			{ children... }

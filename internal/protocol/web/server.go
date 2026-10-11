@@ -290,7 +290,11 @@ func (s *Server) mountRoutes() {
 	auth.GET("/settings", s.settingsHubGET)
 	auth.GET("/settings/password", s.passwordFormGET)
 	auth.POST("/settings/password", s.passwordChangePOST)
-	s.engine.GET("/admin/password", requireAuth(), s.passwordFormGET)
+	// F9（Webmail前端缺陷修复批批二·D8-A——批一 G2 裁决归批二）：/admin/password
+	// 增 admin 门卫（mailbox 主体不再可达该 URL——域隔离显隐一致；原 GET 双主体
+	// 可达、页面自适应但写入域正确，呈现矛盾收口）。POST 侧 adminPasswordChangePOST
+	// 内置主体校验（403）既有保持。
+	s.engine.GET("/admin/password", requireAuth(), s.adminPasswordFormGET)
 	s.engine.POST("/admin/password", requireAuth(), s.adminPasswordChangePOST)
 
 	// admin（Q3-C 拆分：邮箱管理+聚合视图归 U9；/admin/settings 归 U10）
@@ -315,6 +319,18 @@ func (s *Server) mountRoutes() {
 	// Webmail管理职能批次（G6——D7）：插件只读状态页（admin 门卫在 handler 内；
 	// Plugins nil=503 渐进态——S3-W Q3-A 只读裁决，零进程管理扩展）
 	s.engine.GET("/admin/plugins", requireAuth(), s.adminPluginsGET)
+
+	// E1（Webmail前端缺陷修复批批二）：NoRoute 404 兜底——完成态渲染错误整页
+	// （ErrorPageView）；向导态 302 /setup/1（setupGate 中间件先行拦截未匹配路径，
+	// 本分支承载其放行面〔无——防御双保险〕与直配 404 语义）。
+	s.engine.NoRoute(func(c *gin.Context) {
+		if !s.setupCompleted() {
+			c.Redirect(http.StatusFound, "/setup/1")
+			return
+		}
+		lang := langOf(c)
+		renderPage(c, http.StatusNotFound, templates.ErrorPageView(lang, http.StatusNotFound, templates.Tr(lang, "err.page404")))
+	})
 }
 
 // entryMiddleware 入口中间件：每 HTTP 请求生成 LogID（架构 5.1：HTTP 入口义务）

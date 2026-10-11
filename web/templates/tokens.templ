@@ -47,7 +47,7 @@ func clientIPOf(lang Lang, ip string) string {
 // D3（2026-10-05 B 形态）：nav 为全站侧栏数据（AppFrame 承载；nil=无邮箱异常态降级）。
 templ TokensView(lang Lang, list []*storage.ApiToken, newToken string, errText string, csrf string, nav *MailListData) {
 	@AppFrame(lang, Tr(lang, "tokens.title"), Tr(lang, "home.adminKind"), true, csrf, nav) {
-		<div class="main content-page">
+		<main class="main content-page" id="main-content">
 			if errText != "" {
 				<p class="error" role="alert">{ errText }</p>
 			}
@@ -55,6 +55,7 @@ templ TokensView(lang Lang, list []*storage.ApiToken, newToken string, errText s
 				<div class="token-reveal">
 					<p><strong>{ Tr(lang, "tokens.generated") }</strong></p>
 					<code>{ newToken }</code>
+					<button type="button" class="btn-sm secondary" data-copy={ newToken }>{ Tr(lang, "common.copyAll") }</button>
 				</div>
 			}
 			<nav class="settings-nav"><a href="/admin/settings">{ Tr(lang, "nav.backSettings") }</a></nav>
@@ -73,7 +74,8 @@ templ TokensView(lang Lang, list []*storage.ApiToken, newToken string, errText s
 				</label>
 				<button class="primary" type="submit">{ Tr(lang, "common.create") }</button>
 			</form>
-			<nav class="settings-nav"><a href="/admin/settings">{ Tr(lang, "nav.backSettings") }</a></nav>
+			// C13（批二）：重复 settings-nav 移除（原两处——生成区/列表区各一，保留一处）；
+			// D7：Token 一次性明文增复制按钮（grmail.js data-copy 委托）。
 			<div class="page-head"><h2>{ Tr(lang, "tokens.h2List") }</h2></div>
 			<div class="table-wrap">
 				<table class="mails">
@@ -100,6 +102,6 @@ templ TokensView(lang Lang, list []*storage.ApiToken, newToken string, errText s
 				</table>
 			</div>
 			<p class="hint">{ Tr(lang, "tokens.progHead") } <code>{ "Authorization: Bearer <Token>" }</code> { Tr(lang, "tokens.progTail") }</p>
-		</div>
+			</main>
+		}
 	}
-}

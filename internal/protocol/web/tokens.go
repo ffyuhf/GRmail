@@ -49,7 +49,7 @@ func (s *Server) tokensListGET(c *gin.Context) {
 		return
 	}
 	if !s.tokensReady() {
-		c.Status(http.StatusServiceUnavailable)
+		s.errPage(c, http.StatusServiceUnavailable, "err.page503")
 		return
 	}
 	sess, _ := currentSession(c)
@@ -63,7 +63,7 @@ func (s *Server) tokensCreatePOST(c *gin.Context) {
 		return
 	}
 	if !s.tokensReady() {
-		c.Status(http.StatusServiceUnavailable)
+		s.errPage(c, http.StatusServiceUnavailable, "err.page503")
 		return
 	}
 	sess, _ := currentSession(c)
@@ -110,7 +110,7 @@ func (s *Server) tokensRevokePOST(c *gin.Context) {
 		return
 	}
 	if !s.tokensReady() {
-		c.Status(http.StatusServiceUnavailable)
+		s.errPage(c, http.StatusServiceUnavailable, "err.page503")
 		return
 	}
 	sess, _ := currentSession(c)
@@ -128,6 +128,12 @@ func (s *Server) tokensRevokePOST(c *gin.Context) {
 	}
 	sessLogger(c).Info("Token 已撤销", "user_id", sess.SubjectID, "id", id)
 	renderPage(c, http.StatusOK, templates.TokensView(langOf(c), s.tokenList(c, sess.SubjectID), "", "", sess.CSRFToken, s.sidebarDataFor(c)))
+}
+
+// errPage 错误整页统一呈现（E1 批二——空体状态码群收口；键族 err.page*）。
+func (s *Server) errPage(c *gin.Context, code int, key string) {
+	lang := langOf(c)
+	renderPage(c, code, templates.ErrorPageView(lang, code, templates.Tr(lang, key)))
 }
 
 // tokenList 列表查询辅助（查询失败返回空表——管理页可用性优先）。

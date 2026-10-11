@@ -39,7 +39,7 @@ func (s *Server) adminPluginsGET(c *gin.Context) {
 		return
 	}
 	if s.plugins == nil {
-		c.Status(http.StatusServiceUnavailable) // 渐进态（未注入——测试/裁剪部署形态）
+		s.errPage(c, http.StatusServiceUnavailable, "err.page503") // E1（批二）：空体状态码改错误整页
 		return
 	}
 	// 桥接转换：web 中性结构 → templates 视图模型（单向依赖 web→templates）
@@ -50,6 +50,7 @@ func (s *Server) adminPluginsGET(c *gin.Context) {
 	}
 	renderPage(c, http.StatusOK, templates.PluginsView(templates.PluginsData{
 		Lang:    string(langOf(c)),
+		CSRF:    s.csrfOf(c), // F8（批二）：AppFrame CSRF 传参一致化
 		Nav:     s.sidebarDataFor(c),
 		Plugins: rows,
 	}))

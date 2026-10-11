@@ -106,6 +106,8 @@ func mimeByExt(name string) string {
 		return "image/png"
 	case ".ico":
 		return "image/x-icon"
+	case ".webmanifest": // H3 补齐（批二续接）：PWA manifest 专用 MIME（原回落 octet-stream）
+		return "application/manifest+json"
 	default:
 		return "application/octet-stream"
 	}

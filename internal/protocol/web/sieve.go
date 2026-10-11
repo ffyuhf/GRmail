@@ -58,13 +58,16 @@ func (s *Server) sieveScriptsView(c *gin.Context) (storage.SieveScriptRepo, int6
 func (s *Server) sieveListGET(c *gin.Context) {
 	repo, mboxID, ok := s.sieveScriptsView(c)
 	if !ok {
-		c.String(http.StatusServiceUnavailable, templates.Tr(langOf(c), "sieve.errDisabled"))
+		s.errPage(c, http.StatusServiceUnavailable, "sieve.errDisabled")
 		return
 	}
-	data := &templates.SieveListData{Lang: langOf(c), CSRF: s.csrfOf(c), Scripts: []templates.SieveScriptRow{}, Nav: s.sidebarDataFor(c)}
+	// F7（批二）：主体标记填充（admin 直达管理枢纽返回链）。
+	data := &templates.SieveListData{Lang: langOf(c), CSRF: s.csrfOf(c), IsAdmin: s.sessionIsAdmin(c), Scripts: []templates.SieveScriptRow{}, Nav: s.sidebarDataFor(c)}
 	scripts, err := repo.ListScripts(c.Request.Context(), mboxID)
 	if err != nil {
-		data.Error = templates.Trf(langOf(c), "sieve.errList", err.Error())
+		// E2 补齐（批二续接）：列表失败原文入日志、界面模糊文案（errList 改非格式串）。
+		sessLogger(c).Error("脚本列举失败", "error", err)
+		data.Error = templates.Tr(langOf(c), "sieve.errList")
 	}
 	for _, sc := range scripts {
 		data.Scripts = append(data.Scripts, templates.SieveScriptRow{Name: sc.Name, Active: sc.IsActive})
@@ -76,19 +79,20 @@ func (s *Server) sieveListGET(c *gin.Context) {
 func (s *Server) sieveEditGET(c *gin.Context) {
 	repo, mboxID, ok := s.sieveScriptsView(c)
 	if !ok {
-		c.String(http.StatusServiceUnavailable, templates.Tr(langOf(c), "sieve.errDisabled"))
+		s.errPage(c, http.StatusServiceUnavailable, "sieve.errDisabled")
 		return
 	}
 	name := c.Param("name")
-	data := &templates.SieveEditData{Lang: langOf(c), CSRF: s.csrfOf(c), Name: name, NameEditable: name == "new", Nav: s.sidebarDataFor(c)}
+	data := &templates.SieveEditData{Lang: langOf(c), CSRF: s.csrfOf(c), Name: name, NameEditable: name == "new", IsAdmin: s.sessionIsAdmin(c), Nav: s.sidebarDataFor(c)}
 	if name != "new" {
 		sc, err := repo.GetScript(c.Request.Context(), mboxID, name)
 		if err != nil {
 			if errors.Is(err, storage.ErrSieveScriptNotFound) {
-				c.String(http.StatusNotFound, templates.Tr(langOf(c), "sieve.notFound"))
+				s.errPage(c, http.StatusNotFound, "sieve.notFound")
 				return
 			}
-			data.Error = templates.Trf(langOf(c), "sieve.errGet", err.Error())
+			sessLogger(c).Error("脚本读取失败", "error", err)
+			data.Error = templates.Tr(langOf(c), "sieve.errSave")
 		} else {
 			data.Content = sc.Content
 		}
@@ -110,7 +114,7 @@ func (s *Server) sieveEditPOST(c *gin.Context) {
 		name = formName
 	}
 	content := c.PostForm("content")
-	data := &templates.SieveEditData{Lang: langOf(c), CSRF: s.csrfOf(c), Name: name, NameEditable: isNewEntry, Content: content, Nav: s.sidebarDataFor(c)}
+	data := &templates.SieveEditData{Lang: langOf(c), CSRF: s.csrfOf(c), Name: name, NameEditable: isNewEntry, Content: content, IsAdmin: s.sessionIsAdmin(c), Nav: s.sidebarDataFor(c)}
 	if !validSieveScriptName(name) {
 		data.Error = templates.Tr(langOf(c), "sieve.errName")
 		renderPage(c, http.StatusBadRequest, templates.SieveEditView(data))
@@ -124,7 +128,8 @@ func (s *Server) sieveEditPOST(c *gin.Context) {
 	if err := repo.PutScript(c.Request.Context(), &storage.SieveScript{
 		MailboxID: mboxID, Name: name, Content: content,
 	}); err != nil {
-		data.Error = templates.Trf(langOf(c), "sieve.errSave", err.Error())
+		sessLogger(c).Error("脚本保存失败", "error", err)
+		data.Error = templates.Tr(langOf(c), "sieve.errSave")
 		renderPage(c, http.StatusInternalServerError, templates.SieveEditView(data))
 		return
 	}
@@ -135,11 +140,13 @@ func (s *Server) sieveEditPOST(c *gin.Context) {
 func (s *Server) sieveActivatePOST(c *gin.Context) {
 	repo, mboxID, ok := s.sieveScriptsView(c)
 	if !ok {
-		c.String(http.StatusServiceUnavailable, "Sieve 未启用")
+		s.errPage(c, http.StatusServiceUnavailable, "sieve.errDisabled")
 		return
 	}
 	if err := repo.SetActive(c.Request.Context(), mboxID, c.Param("name")); err != nil {
-		c.String(http.StatusBadRequest, "激活失败："+err.Error())
+		// E2（批二）：内部错误模糊化（原文入日志——sieve.errActivate 键承载）。
+		sessLogger(c).Error("脚本激活失败", "error", err)
+		s.errPage(c, http.StatusBadRequest, "sieve.errActivate")
 		return
 	}
 	c.Redirect(http.StatusSeeOther, "/sieve")
@@ -149,11 +156,12 @@ func (s *Server) sieveActivatePOST(c *gin.Context) {
 func (s *Server) sieveDeletePOST(c *gin.Context) {
 	repo, mboxID, ok := s.sieveScriptsView(c)
 	if !ok {
-		c.String(http.StatusServiceUnavailable, "Sieve 未启用")
+		s.errPage(c, http.StatusServiceUnavailable, "sieve.errDisabled")
 		return
 	}
 	if err := repo.DeleteScript(c.Request.Context(), mboxID, c.Param("name")); err != nil {
-		c.String(http.StatusBadRequest, "删除失败："+err.Error())
+		sessLogger(c).Error("脚本删除失败", "error", err)
+		s.errPage(c, http.StatusBadRequest, "sieve.errDelete")
 		return
 	}
 	c.Redirect(http.StatusSeeOther, "/sieve")
@@ -163,27 +171,35 @@ func (s *Server) sieveDeletePOST(c *gin.Context) {
 // 语义与协议侧 SETACTIVE ""（managesieve cmdSetActive 空名分支）对称；差异点：
 // 本端点带目标名，须先比对当前激活脚本名——仅目标为当前激活时清除（防误清
 // 其他脚本的激活态）；目标非激活=幂等成功 303；目标不存在=404。
+// sessionIsAdmin 当前会话主体是否 admin（F7 批二——Sieve 视图标记填充辅助）。
+func (s *Server) sessionIsAdmin(c *gin.Context) bool {
+	sess, ok := currentSession(c)
+	return ok && sess.SubjectType == storage.SubjectTypeAdmin
+}
+
 func (s *Server) sieveDeactivatePOST(c *gin.Context) {
 	repo, mboxID, ok := s.sieveScriptsView(c)
 	if !ok {
-		c.String(http.StatusServiceUnavailable, templates.Tr(langOf(c), "sieve.errDisabled"))
+		s.errPage(c, http.StatusServiceUnavailable, "sieve.errDisabled")
 		return
 	}
 	name := c.Param("name")
 	ctx := c.Request.Context()
 	if _, err := repo.GetScript(ctx, mboxID, name); err != nil {
 		if errors.Is(err, storage.ErrSieveScriptNotFound) {
-			c.String(http.StatusNotFound, templates.Tr(langOf(c), "sieve.notFound"))
+			s.errPage(c, http.StatusNotFound, "sieve.notFound")
 			return
 		}
-		c.String(http.StatusInternalServerError, templates.Trf(langOf(c), "sieve.errGet", err.Error()))
+		sessLogger(c).Error("脚本读取失败", "error", err)
+		s.errPage(c, http.StatusInternalServerError, "sieve.errSave")
 		return
 	}
 	if act, err := repo.GetActiveScript(ctx, mboxID); err == nil && act != nil && act.Name == name {
 		// 取消激活哨兵（与 managesieve SETACTIVE "" 同款 "\x00none"——清空且不置新；
 		// ErrSieveScriptNotFound 容忍同协议侧语义）
 		if err := repo.SetActive(ctx, mboxID, "\x00none"); err != nil && !errors.Is(err, storage.ErrSieveScriptNotFound) {
-			c.String(http.StatusBadRequest, templates.Trf(langOf(c), "sieve.errSave", err.Error()))
+			sessLogger(c).Error("取消激活失败", "error", err)
+			s.errPage(c, http.StatusBadRequest, "sieve.errSave")
 			return
 		}
 	}

@@ -33,9 +33,14 @@ package templates
 // 参数：data 步骤数据（SetupData——web 包 buildSetupData 装配；Lang 承载界面语言）。
 templ SetupView(data SetupData) {
 	{{ lang := NormalizeLang(data.Lang) }}
-	@Layout(lang, Tr(lang, "setup.title"), data.Error) {
+	@Layout(lang, Tr(lang, "setup.title"), "") {
 		<div class="card setup-card">
 		<h1>{ Trf(lang, "setup.h1", data.Step, data.Total, data.Title) }</h1>
+		// E11（批二）：向导错误统一卡片内呈现（原 Layout errText 位于卡片外 body 顶部
+		// ——步5 卡片内错误双位置层次不一收口）。
+		if data.Error != "" {
+			<p class="error" role="alert">{ data.Error }</p>
+		}
 		// P1 步骤条：六节点 SSR 静态呈现（完成勾/当前亮/未来灰——纯 CSS 零 JS）。
 		<ol class="steps-bar" aria-label={ Tr(lang, "setup.stepsNav") }>
 			{{ titles := setupStepTitles(lang) }}
@@ -43,7 +48,7 @@ templ SetupView(data SetupData) {
 				if i+1 < data.Step {
 					<li class="done"><span class="dot">✓</span><span class="lbl">{ s }</span></li>
 				} else if i+1 == data.Step {
-					<li class="cur"><span class="dot">{ strconvItoa(i + 1) }</span><span class="lbl">{ s }</span></li>
+					<li class="cur" aria-current="step"><span class="dot">{ strconvItoa(i + 1) }</span><span class="lbl">{ s }</span></li>
 				} else {
 					<li><span class="dot">{ strconvItoa(i + 1) }</span><span class="lbl">{ s }</span></li>
 				}
@@ -71,7 +76,9 @@ templ SetupView(data SetupData) {
 						</p>
 						<div class="dsn-basic">
 							<label>{ Tr(lang, "setup.dsnHost") } <input type="text" name="dbHost" value={ data.DSNHost } maxlength="255"/></label>
-							<label>{ Tr(lang, "setup.dsnPort") }{ Tr(lang, "setup.dsnPortM") }) <input type="text" name="dbPort" value={ data.DSNPort } maxlength="5" inputmode="numeric"/></label>
+							// E6（批二）：端口标签纯文案+placeholder 缺省提示（原「端口（空=」+拼接
+							// "3306)" 半角括号混排畸形——缺省档随库别示于占位）。
+							<label>{ Tr(lang, "setup.dsnPort") } <input type="text" name="dbPort" value={ data.DSNPort } maxlength="5" inputmode="numeric" placeholder="3306 / 5432"/></label>
 							<label>{ Tr(lang, "setup.dsnUser") } <input type="text" name="dbUser" value={ data.DSNUser } maxlength="128"/></label>
 							<label>{ Tr(lang, "setup.dsnPassword") } <input type="password" name="dbPassword" autocomplete="new-password"/></label>
 							<label>{ Tr(lang, "setup.dsnDBName") } <input type="text" name="dbName" value={ data.DSNDBName } maxlength="128"/></label>
@@ -95,9 +102,11 @@ templ SetupView(data SetupData) {
 			<form method="post" action="/setup/admin">
 				<fieldset>
 					<legend>{ Tr(lang, "setup.s2Legend") } <small class="ref">{ Tr(lang, "setup.s2Ref") }</small></legend>
-					<label>{ Tr(lang, "login.username") } <input type="text" name="username" value={ data.Username } required maxlength="64" { disabledAttrs(data.HadAdmin)... }/></label>
-					<label>{ Tr(lang, "login.password") } <input type="password" name="password" { disabledAttrs(data.HadAdmin)... }/></label>
-					<label>{ Tr(lang, "setup.confirm") } <input type="password" name="confirm" { disabledAttrs(data.HadAdmin)... }/></label>
+						<label>{ Tr(lang, "login.username") } <input type="text" name="username" value={ data.Username } required maxlength="64" { disabledAttrs(data.HadAdmin)... }/></label>
+						// D3（批二）：管理员密码 autocomplete="new-password"（原缺失——密码
+						// 管理器误回填管理员凭据至向导）。
+						<label>{ Tr(lang, "login.password") } <input type="password" name="password" autocomplete="new-password" minlength="8" { disabledAttrs(data.HadAdmin)... }/></label>
+						<label>{ Tr(lang, "setup.confirm") } <input type="password" name="confirm" autocomplete="new-password" minlength="8" { disabledAttrs(data.HadAdmin)... }/></label>
 					<label>{ Tr(lang, "setup.adminPrefix") } <input type="text" name="admin_prefix" value="postmaster" required maxlength="64" { disabledAttrs(data.HadAdmin)... }/></label>
 				</fieldset>
 				<button class="primary" type="submit" { disabledAttrs(data.HadAdmin)... }>{ Tr(lang, "setup.createGo") }</button>
@@ -138,11 +147,14 @@ templ SetupView(data SetupData) {
 				<fieldset>
 					<legend>{ Tr(lang, "setup.s4Legend") }</legend>
 					<div class="table-wrap">
+						// G11（批二）：表头结构规范（thead 包裹+scope=col——原 th 行隐式 tbody）。
 						<table>
-							<tr><th>{ Tr(lang, "setup.colType") }</th><th>{ Tr(lang, "setup.colHost") }</th><th>{ Tr(lang, "setup.colValue") }</th><th>{ Tr(lang, "setup.colTTL") }</th><th>{ Tr(lang, "setup.colNote") }</th></tr>
-							for _, r := range data.DNSRecords {
-								<tr><td>{ r.Type }</td><td>{ r.Name }</td><td><code>{ r.Value }</code></td><td>{ r.TTL }</td><td>{ r.Note }</td></tr>
-							}
+							<thead><tr><th scope="col">{ Tr(lang, "setup.colType") }</th><th scope="col">{ Tr(lang, "setup.colHost") }</th><th scope="col">{ Tr(lang, "setup.colValue") }</th><th scope="col">{ Tr(lang, "setup.colTTL") }</th><th scope="col">{ Tr(lang, "setup.colNote") }</th></tr></thead>
+							<tbody>
+								for _, r := range data.DNSRecords {
+									<tr><td>{ r.Type }</td><td>{ r.Name }</td><td><code>{ r.Value }</code></td><td>{ r.TTL }</td><td>{ r.Note }</td></tr>
+								}
+							</tbody>
 						</table>
 					</div>
 				</fieldset>
@@ -152,8 +164,9 @@ templ SetupView(data SetupData) {
 		if data.Step == 5 {
 			<p class="desc">{ Tr(lang, "setup.desc5") }</p>
 			if data.HTTPPort != 80 {
-				// P3 端口前置警告（-p 覆盖场景——含行动指引；呈现于证书模式选择前）。
-				<p class="error" role="alert"><strong>{ Tr(lang, "setup.portWarnTitle") }</strong>（: { strconvItoa(data.HTTPPort) }）——{ Tr(lang, "setup.portWarnBody") }</p>
+				// P3 端口前置警告；E6（批二）：标题-端口-正文结构重排（原「（: N）——」
+				// 标点畸形收口——冒号经 colonFor 随语言）。
+				<p class="error" role="alert"><strong>{ Tr(lang, "setup.portWarnTitle") }{ colonFor(lang) }{ strconvItoa(data.HTTPPort) }</strong> —— { Tr(lang, "setup.portWarnBody") }</p>
 			}
 			<form method="post" action="/setup/ssl">
 				<fieldset>
@@ -204,11 +217,14 @@ templ SetupView(data SetupData) {
 				<fieldset>
 					<legend>{ Tr(lang, "setup.clientLegend") }</legend>
 					<div class="table-wrap">
+						// G11（批二）：行头 scope=row（原 th 混排无 scope）。
 						<table>
-							<tr><th>{ Tr(lang, "setup.clientIMAP") }</th><td><code>imap.{ data.DomainFinal }</code> : 993（{ Tr(lang, "setup.clientSSL") }）</td></tr>
-							<tr><th>{ Tr(lang, "setup.clientPOP3") }</th><td><code>pop.{ data.DomainFinal }</code> : 995（{ Tr(lang, "setup.clientSSL") }）</td></tr>
-							<tr><th>{ Tr(lang, "setup.clientSMTP") }</th><td><code>smtp.{ data.DomainFinal }</code> : 465（{ Tr(lang, "setup.clientSSL") }）/ 587（{ Tr(lang, "setup.clientStartTLS") }）</td></tr>
-							<tr><th>{ Tr(lang, "setup.clientWebmail") }</th><td><code>https://{ data.DomainFinal }</code></td></tr>
+							<tbody>
+								<tr><th scope="row">{ Tr(lang, "setup.clientIMAP") }</th><td><code>imap.{ data.DomainFinal }</code> : 993（{ Tr(lang, "setup.clientSSL") }）</td></tr>
+								<tr><th scope="row">{ Tr(lang, "setup.clientPOP3") }</th><td><code>pop.{ data.DomainFinal }</code> : 995（{ Tr(lang, "setup.clientSSL") }）</td></tr>
+								<tr><th scope="row">{ Tr(lang, "setup.clientSMTP") }</th><td><code>smtp.{ data.DomainFinal }</code> : 465（{ Tr(lang, "setup.clientSSL") }）/ 587（{ Tr(lang, "setup.clientStartTLS") }）</td></tr>
+								<tr><th scope="row">{ Tr(lang, "setup.clientWebmail") }</th><td><code>https://{ data.DomainFinal }</code></td></tr>
+							</tbody>
 						</table>
 					</div>
 				</fieldset>

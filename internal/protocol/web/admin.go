@@ -20,11 +20,13 @@ import (
 	"GRmail/web/templates"
 )
 
-// adminGuard admin 端点门卫（403 非 admin 主体——FR-002 权限锚）。
+// adminGuard admin 端点门卫（403 非 admin 主体——FR-002 权限锚；
+// E1 批二：空体状态码改错误整页呈现——ErrorPageView 复用批一组件）。
 func (s *Server) adminGuard(c *gin.Context) bool {
 	sess, ok := currentSession(c)
 	if !ok || sess.SubjectType != storage.SubjectTypeAdmin {
-		c.Status(http.StatusForbidden)
+		lang := langOf(c)
+		renderPage(c, http.StatusForbidden, templates.ErrorPageView(lang, http.StatusForbidden, templates.Tr(lang, "err.page403")))
 		return false
 	}
 	return true
@@ -192,6 +194,8 @@ func adminErrText(lang templates.Lang, err error) string {
 		return templates.Tr(lang, "admin.errAddr")
 	case err == account.ErrEmptyPassword:
 		return templates.Tr(lang, "admin.errEmptyPass")
+	case err == account.ErrPasswordTooShort:
+		return templates.Tr(lang, "admin.errShortPass") // D10 批二：下限统一（哨兵→用户可读）
 	case err == account.ErrInvalidStatus:
 		return templates.Tr(lang, "admin.errStatus")
 	case err == storage.ErrMailboxExists:
@@ -199,5 +203,7 @@ func adminErrText(lang templates.Lang, err error) string {
 	case err == storage.ErrMailboxNotFound:
 		return templates.Tr(lang, "admin.errMissing")
 	}
-	return templates.Trf(lang, "admin.errOpFmt", err.Error())
+	// E2（批二）：内部错误原文模糊化（原 errOpFmt 直出 err.Error()——内部细节
+	// 泄露界面；原文入日志由调用方 sessLogger 承载，界面统一模糊提示）。
+	return templates.Tr(lang, "err.opFailed")
 }

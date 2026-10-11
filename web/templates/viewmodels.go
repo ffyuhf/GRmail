@@ -63,6 +63,10 @@ type MailListData struct {
 	IsSearch     bool
 	CSRF         string
 	Noticed      string // G3——D9：文件夹操作结果反馈（?noted=created|renamed|deleted 查询参）
+	// F1（Webmail前端缺陷修复批批二）：侧栏语境开关——列表页=true（文件夹项
+	// hx-get 局部更新）；设置族页/AppFrame 侧栏=false（仅 href 整页导航——原
+	// hx-target="#mail-list" 缺失语境下点击被 htmx preventDefault 吞掉无反应）。
+	IsListPage bool
 }
 
 // FolderEntry 侧边栏平铺行（FR-012：单层无嵌套渲染——REQ-021）。
@@ -76,12 +80,13 @@ type FolderEntry struct {
 
 // MailRow 列表行（G11 状态可视化：未读粗体/星标/时间；G15 精确 id 批量锚）。
 type MailRow struct {
-	ID        int64
-	Subject   string
-	FromAddr  string
-	SentAt    string // 已格式化呈现串
-	IsRead    bool
-	IsFlagged bool
+	ID         int64
+	Subject    string
+	FromAddr   string
+	SentAt     string // 已格式化呈现串
+	SentAtFull string // C17（批二）：完整时刻（秒级+时区偏移——time-cell title 悬停呈现）
+	IsRead     bool
+	IsFlagged  bool
 }
 
 // ComposeData 写信表单数据（Q5-A：纯文本+附件；草稿回填态；U16 增 Lang 双语渲染）。
@@ -202,4 +207,5 @@ type SettingsData struct {
 	StsPolicyURL string // https://mta-sts.<domain>/.well-known/mta-sts.txt
 	StsTXTRecord string // _mta-sts.<domain> TXT 记录值
 	TLSRPTRecord string // _smtp._tls.<domain> TXT 记录值（ReportEnabled=false 时空）
+	Domain       string // E9（批二）：真实主域（TXT 记录名渲染——替代「主域」占位词，用户照抄即合法记录名）
 }

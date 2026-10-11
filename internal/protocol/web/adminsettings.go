@@ -87,6 +87,8 @@ func (s *Server) buildSettingsData(c *gin.Context, cfg *config.Config, msg strin
 	data.TLSRPTEnabled = cfg.MTASts.ReportEnabled
 	data.TLSRPTRuaAddress = cfg.MTASts.RuaAddress
 	data.StsPolicyURL = "https://mta-sts." + cfg.Server.Domain + stsPolicyPath
+	// E9（批二）：真实主域注入（记录名渲染）；E6：停发提示改空串+模板键承载。
+	data.Domain = cfg.Server.Domain
 	data.StsTXTRecord = stsTXTSuggestion(cfg)
 	data.TLSRPTRecord = tlsrptTXTSuggestion(cfg)
 	if data.MaxMessageSizeMB <= 0 {
@@ -97,20 +99,21 @@ func (s *Server) buildSettingsData(c *gin.Context, cfg *config.Config, msg strin
 
 // stsTXTSuggestion _mta-sts TXT 记录建议值（rfc8461 §3.1——web 侧呈现形态；
 // 生成逻辑与 transport.STSTXTRecordValue 同源语义，id 取呈现时刻——部署者复制时
-// 即最新实例标识）。参数：cfg 配置快照。返回：记录值（MTA-STS 关闭时返回停发提示）。
+// 即最新实例标识）。参数：cfg 配置快照。返回：记录值（MTA-STS 关闭时空串——
+// 停发提示由模板键承载〔E6 批二：Go 侧中文串收口〕）。
 func stsTXTSuggestion(cfg *config.Config) string {
 	if !cfg.MTASts.Enabled {
-		return "（MTA-STS 已关闭——无需发布本记录；重新启用后此处呈现建议值）"
+		return ""
 	}
 	return "v=STSv1; id=" + time.Now().UTC().Format("20060102150405Z") + ";"
 }
 
 // tlsrptTXTSuggestion _smtp._tls TXT 记录建议值（rfc8460 §3——web 侧呈现形态；
 // rua 缺省 postmaster@<主域> 兜底同 transport.TLSRPTTXTRecordValue）。
-// 参数：cfg 配置快照。返回：记录值（TLS-RPT 关闭时返回停显提示）。
+// 参数：cfg 配置快照。返回：记录值（TLS-RPT 关闭时空串——停显提示模板键承载）。
 func tlsrptTXTSuggestion(cfg *config.Config) string {
 	if !cfg.MTASts.ReportEnabled {
-		return "（TLS-RPT 已关闭——建议移除已发布的 _smtp._tls 记录）"
+		return ""
 	}
 	rua := cfg.MTASts.RuaAddress
 	if rua == "" {

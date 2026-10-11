@@ -9,9 +9,11 @@
 package web
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -52,7 +54,8 @@ func (s *Server) adminLoginPOST(c *gin.Context) {
 		renderPage(c, http.StatusInternalServerError, templates.AdminLoginView(langOf(c), templates.Tr(langOf(c), "login.errInvalid")))
 		return
 	}
-	if locked { // 423：限流锁定（Q4-B 判定锚）
+	if locked { // 423：限流锁定（Q4-B 判定锚；E10 批二：Retry-After 头=限流窗口）
+		s.setRetryAfter(c)
 		renderPage(c, http.StatusLocked, templates.AdminLoginView(langOf(c), templates.Tr(langOf(c), "login.errLocked")))
 		return
 	}
@@ -139,6 +142,7 @@ func (s *Server) mailboxLoginPOST(c *gin.Context) {
 		return
 	}
 	if locked {
+		s.setRetryAfter(c) // E10 批二：Retry-After
 		renderPage(c, http.StatusLocked, templates.MailboxLoginView(langOf(c), templates.Tr(langOf(c), "login.errLocked")))
 		return
 	}
@@ -210,11 +214,26 @@ func (s *Server) recordFail(ctx context.Context, subjectKey, ip string) {
 	}
 }
 
+// setRetryAfter 423 锁定响应的 Retry-After 头（E10 批二——三轮评审三轮#4 承载：
+// 值=限流窗口秒数〔保守口径——最近失败时刻不可得，窗口全长为重试最短上界〕；
+// 消费点=登录双端点/2FA 二步/改密双通道全部 423 分支）。
+func (s *Server) setRetryAfter(c *gin.Context) {
+	window, _ := s.limitConf()
+	c.Header("Retry-After", strconv.FormatInt(int64(window/time.Second), 10))
+}
+
 // renderPage 渲染 templ 页面组件（SSR——CON-002 templ 范式）。
+// E8（Webmail前端缺陷修复批批二）：渲染先入缓冲、成功后一次性写出——原实现先
+// c.Status(code) 再流式渲染，渲染中途失败时状态码已提交、响应体半截（不可恢复
+// 页面）；本版渲染失败降级纯 500 状态码（零字节体——客户端可重试），半截页根除。
 // 参数：c Gin 上下文；code HTTP 状态码；component templ 组件。
 func renderPage(c *gin.Context, code int, component templ.Component) {
-	c.Status(code)
-	if err := component.Render(c.Request.Context(), c.Writer); err != nil {
-		sessLogger(c).Error("页面渲染失败", "error", err)
+	var buf bytes.Buffer
+	if err := component.Render(c.Request.Context(), &buf); err != nil {
+		sessLogger(c).Error("页面渲染失败（降级纯状态码）", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return
 	}
+	c.Status(code)
+	_, _ = c.Writer.Write(buf.Bytes())
 }

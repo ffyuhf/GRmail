@@ -11,6 +11,11 @@
 //   2026-10-05 23:42:00 | 新建 | 管理员主体增强与Webmail职能补全批次（G2 批准 2026-10-05 23:31:37）
 package templates
 
+import (
+	"net/url"
+	"strings"
+)
+
 // AdminTwoFactorView 管理员 2FA 绑定管理页（GET /admin/2fa 与三 POST 操作响应统一渲染；
 // 三态互斥：Bound=停用态/Pending=绑定确认态（二维码+密钥）/未发起=启用入口态；
 // RecoveryCodes 仅确认成功响应一次性非空）。
@@ -33,8 +38,9 @@ templ AdminTwoFactorView(d TwoFactorData) {
 		} else {
 			if d.Pending {
 				<p>{ Tr(d.Lang, "twofactor.qr") }</p>
+				// E5（批二）：alt 硬编码 Tr 化（原英文 "TOTP QR"）。
 				if d.QRDataURI != "" {
-					<span class="qr-box"><img src={ d.QRDataURI } alt="TOTP QR" width="256" height="256"/></span>
+					<span class="qr-box"><img src={ d.QRDataURI } alt={ Tr(d.Lang, "twofactor.qrAlt") } width="256" height="256"/></span>
 				}
 				<p>{ Tr(d.Lang, "twofactor.secret") }{ colonFor(d.Lang) } <code>{ d.Secret }</code></p>
 				<form method="post" action="/admin/2fa/confirm">
@@ -52,6 +58,12 @@ templ AdminTwoFactorView(d TwoFactorData) {
 		if len(d.RecoveryCodes) > 0 {
 			<h2>{ Tr(d.Lang, "twofactor.recovery") }</h2>
 			<p>{ Tr(d.Lang, "twofactor.recoveryTip") }</p>
+			// D7（批二）：复制全部+下载入口（data-copy 委托+data 下载链接——一次性
+			// 展示场景保存通道；下载 text/plain data 导航零 CSP 面）。
+			<div class="actions">
+				<button type="button" class="btn-sm secondary" data-copy={ strings.Join(d.RecoveryCodes, "\n") }>{ Tr(d.Lang, "common.copyAll") }</button>
+				<a class="btn-text" download="grmail-recovery-codes.txt" href={ "data:text/plain;charset=utf-8," + url.QueryEscape(strings.Join(d.RecoveryCodes, "\n")) }>{ Tr(d.Lang, "common.download") }</a>
+			</div>
 			<ul class="recovery-codes">
 				for _, code := range d.RecoveryCodes {
 					<li><code>{ code }</code></li>

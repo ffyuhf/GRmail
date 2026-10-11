@@ -502,6 +502,11 @@ func (s *Server) setupPostAdmin(c *gin.Context) error {
 	if password != confirm {
 		return &errSetupStep{msg: "两次输入的密码不一致"}
 	}
+	// D10（批二）：密码下限前置（服务端统一 8 字符——HashPassword 哨兵的向导态
+	// 用户可读呈现；errSetupStep 经 setupFail 重渲染当前步）。
+	if len(password) < 8 {
+		return &errSetupStep{msg: "密码长度至少 8 个字符"}
+	}
 	if _, err := s.users.FindByName(ctx, username); err == nil {
 		return &errSetupStep{msg: "用户名已存在（既有部署请使用下方跳过按钮）"}
 	} else if !errors.Is(err, storage.ErrUserNotFound) {

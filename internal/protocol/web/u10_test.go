@@ -245,8 +245,8 @@ func TestU10SetupAdminSkipPath(t *testing.T) {
 		t.Fatalf("跳过应 303，得 %d", resp.StatusCode)
 	}
 	// 跳过后仍可回步补设（全新部署误跳过闭环）
-	if resp := postForm(t, env.ts, "/setup/admin", url.Values{
-		"username": {"late"}, "password": {"p"}, "confirm": {"p"},
+	if resp := postForm(t, env.ts, "/setup/admin", url.Values{ // D10 形态适配：补设密码≥8
+		"username": {"late"}, "password": {"pw123456"}, "confirm": {"pw123456"},
 	}); resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("跳过后补设应 303，得 %d", resp.StatusCode)
 	}

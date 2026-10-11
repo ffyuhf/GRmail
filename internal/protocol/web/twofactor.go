@@ -132,6 +132,7 @@ func (s *Server) login2FAPost(c *gin.Context) {
 		c.Status(http.StatusInternalServerError)
 		return
 	} else if locked {
+		s.setRetryAfter(c) // E10 批二：Retry-After
 		renderPage(c, http.StatusLocked, templates.Login2FAView(lang, "", templates.Tr(lang, "login.errLocked")))
 		return
 	}

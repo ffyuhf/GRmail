@@ -18,7 +18,9 @@ templ HomeView(lang Lang, subjectLabel string, kindText string, csrfToken string
 				<input type="hidden" name="csrf_token" value={ csrfToken }/>
 				<button type="submit">{ Tr(lang, "common.logout") }</button>
 			</form>
-			<p><a href="/">{ Tr(lang, "home.goMail") }</a></p>
+			// F5（批二）：无邮箱视图降级态「进入邮箱」href="/" 构成自指循环——
+			// 改刷新语义（邮箱就绪后刷新自动进入——renderMailListPage 承载）。
+			<p><a href="/">{ Tr(lang, "common.reload") }</a></p>
 		</div>
 	}
 }

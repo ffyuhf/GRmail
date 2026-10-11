@@ -78,6 +78,7 @@ var messages = map[string][2]string{
 	"pw.submit":      {"修改密码", "Change password"},
 	"pw.errEmpty":    {"新密码不能为空。", "New password cannot be empty."},
 	"pw.errMismatch": {"两次输入的新密码不一致。", "The two new passwords do not match."},
+	"pw.errShort":    {"密码长度至少 8 个字符。", "Password must be at least 8 characters."}, // D10 批二：三入口下限统一
 	"pw.errWrongOld": {"当前密码验证失败。", "Current password verification failed."},
 	"pw.changed":     {"密码已修改，会话已重建。", "Password changed, session renewed."},
 	// 个人设置枢纽（hub.*——mailbox 主体四分区）
@@ -291,6 +292,7 @@ var messages = map[string][2]string{
 	"admin.shadowFmt":      {"影子邮箱 #%d", "Shadow mailbox #%d"},
 	"admin.errAddr":        {"邮箱地址非法", "Invalid mailbox address"},
 	"admin.errEmptyPass":   {"密码不能为空", "Password must not be empty"},
+	"admin.errShortPass":   {"密码长度至少 8 个字符", "Password must be at least 8 characters"}, // D10 批二
 	"admin.errStatus":      {"状态变更非法", "Invalid status change"},
 	"admin.errExists":      {"邮箱已存在", "Mailbox already exists"},
 	"admin.errMissing":     {"邮箱不存在（激活须先经来信建影子）", "Mailbox not found (activate requires a prior shadow)"},
@@ -312,7 +314,7 @@ var messages = map[string][2]string{
 	"sieve.errName":     {"脚本名无效", "Invalid script name"},
 	"sieve.errSyntax":   {"语法错误（未保存）：%s", "Syntax error (not saved): %s"},
 	"sieve.errSave":     {"保存失败：%s", "Save failed: %s"},
-	"sieve.errList":     {"脚本列举失败：%s", "List scripts failed: %s"},
+	"sieve.errList":     {"脚本列举失败，请刷新重试", "Failed to list scripts, please retry"},
 	"sieve.errGet":      {"脚本读取失败：%s", "Read script failed: %s"},
 	"sieve.notFound":    {"脚本不存在", "Script not found"},
 	"sieve.errDisabled": {"Sieve 未启用", "Sieve not enabled"},
@@ -453,37 +455,39 @@ var messages = map[string][2]string{
 	"setup.dsnModeBasic":    {"分字段填写（推荐）", "Field-by-field (recommended)"},
 	"setup.dsnModeAdvanced": {"直接填写连接串（高级）", "Raw DSN (advanced)"},
 	"setup.dsnHost":         {"数据库主机", "Database host"},
-	"setup.dsnPort":         {"端口（空=", "Port (blank = "},
-	"setup.dsnPortM":        {"3306", "3306"},
-	"setup.dsnPortP":        {"5432", "5432"},
-	"setup.dsnUser":         {"用户名", "Username"},
-	"setup.dsnPassword":     {"密码", "Password"},
-	"setup.dsnDBName":       {"数据库名", "Database name"},
-	"setup.dsnSwitch":       {"切换为直接填写连接串", "Switch to raw DSN input"},
-	"setup.dsnSwitchBack":   {"切换为分字段填写", "Switch back to field-by-field"},
-	"setup.visitTitle":      {"访问邮箱网页版", "Open the webmail"},
-	"setup.visitDesc":       {"浏览器打开", "Open in browser"},
-	"setup.loginTitle":      {"登录", "Sign in"},
-	"setup.loginAdmin":      {"管理员（本向导第二步设置的账号）经管理入口登录；邮箱账号创建后经邮箱入口登录。", "Admin (the account from step 2) signs in at the admin entrance; mailbox accounts sign in at the webmail entrance."},
-	"setup.restartTitle":    {"重启服务使全部功能生效", "Restart to activate all services"},
-	"setup.acmeWaitTitle":   {"证书申请等待期（自动证书）", "Certificate issuance wait (auto)"},
-	"setup.acmeWaitDesc":    {"证书在完成后数十秒至数分钟内自动签发，期间用 https:// 访问可能失败属正常——稍后刷新即可。", "The certificate is issued within seconds to minutes after finishing; https:// may fail during this window — refresh later."},
-	"setup.portLegend":      {"服务端口一览（重启后生效）", "Service ports (after restart)"},
-	"setup.port25":          {"25 — 接收外部来信", "25 — incoming mail"},
-	"setup.port465":         {"465 — 发信（SSL）", "465 — submission (SSL)"},
-	"setup.port587":         {"587 — 发信（STARTTLS）", "587 — submission (STARTTLS)"},
-	"setup.port993":         {"993 — IMAP 收件（SSL）", "993 — IMAP (SSL)"},
-	"setup.port995":         {"995 — POP3 收件（SSL）", "995 — POP3 (SSL)"},
-	"setup.port443":         {"443 — 网页版（HTTPS）", "443 — webmail (HTTPS)"},
-	"setup.clientLegend":    {"邮件客户端配置参数（域名即第三步所填）", "Email client settings (domain = step 3)"},
-	"setup.clientIMAP":      {"IMAP 收件服务器", "IMAP server"},
-	"setup.clientPOP3":      {"POP3 收件服务器", "POP3 server"},
-	"setup.clientSMTP":      {"SMTP 发信服务器", "SMTP server"},
-	"setup.clientSSL":       {"SSL/TLS", "SSL/TLS"},
-	"setup.clientStartTLS":  {"STARTTLS", "STARTTLS"},
-	"setup.clientWebmail":   {"网页版", "Webmail"},
-	"setup.techDetails":     {"技术细节", "Technical details"},
-	"setup.techCompleted":   {"完成本步将把 setupCompleted=true 写入 config.json（运行目录），随后由反向代理/服务管理器重启进程。", "Finishing writes setupCompleted=true into config.json (runtime directory); the process is then restarted via your service manager."},
+	// E6（批二·组E）：端口标签改纯文案（原「端口（空=」+模板拼接 "3306)" 半角括号
+	// 混排畸形——缺省值提示改由 placeholder 承载；dsnPortM/dsnPortP 键保留供占位）
+	"setup.dsnPort":        {"端口", "Port"},
+	"setup.dsnPortM":       {"3306", "3306"},
+	"setup.dsnPortP":       {"5432", "5432"},
+	"setup.dsnUser":        {"用户名", "Username"},
+	"setup.dsnPassword":    {"密码", "Password"},
+	"setup.dsnDBName":      {"数据库名", "Database name"},
+	"setup.dsnSwitch":      {"切换为直接填写连接串", "Switch to raw DSN input"},
+	"setup.dsnSwitchBack":  {"切换为分字段填写", "Switch back to field-by-field"},
+	"setup.visitTitle":     {"访问邮箱网页版", "Open the webmail"},
+	"setup.visitDesc":      {"浏览器打开", "Open in browser"},
+	"setup.loginTitle":     {"登录", "Sign in"},
+	"setup.loginAdmin":     {"管理员（本向导第二步设置的账号）经管理入口登录；邮箱账号创建后经邮箱入口登录。", "Admin (the account from step 2) signs in at the admin entrance; mailbox accounts sign in at the webmail entrance."},
+	"setup.restartTitle":   {"重启服务使全部功能生效", "Restart to activate all services"},
+	"setup.acmeWaitTitle":  {"证书申请等待期（自动证书）", "Certificate issuance wait (auto)"},
+	"setup.acmeWaitDesc":   {"证书在完成后数十秒至数分钟内自动签发，期间用 https:// 访问可能失败属正常——稍后刷新即可。", "The certificate is issued within seconds to minutes after finishing; https:// may fail during this window — refresh later."},
+	"setup.portLegend":     {"服务端口一览（重启后生效）", "Service ports (after restart)"},
+	"setup.port25":         {"25 — 接收外部来信", "25 — incoming mail"},
+	"setup.port465":        {"465 — 发信（SSL）", "465 — submission (SSL)"},
+	"setup.port587":        {"587 — 发信（STARTTLS）", "587 — submission (STARTTLS)"},
+	"setup.port993":        {"993 — IMAP 收件（SSL）", "993 — IMAP (SSL)"},
+	"setup.port995":        {"995 — POP3 收件（SSL）", "995 — POP3 (SSL)"},
+	"setup.port443":        {"443 — 网页版（HTTPS）", "443 — webmail (HTTPS)"},
+	"setup.clientLegend":   {"邮件客户端配置参数（域名即第三步所填）", "Email client settings (domain = step 3)"},
+	"setup.clientIMAP":     {"IMAP 收件服务器", "IMAP server"},
+	"setup.clientPOP3":     {"POP3 收件服务器", "POP3 server"},
+	"setup.clientSMTP":     {"SMTP 发信服务器", "SMTP server"},
+	"setup.clientSSL":      {"SSL/TLS", "SSL/TLS"},
+	"setup.clientStartTLS": {"STARTTLS", "STARTTLS"},
+	"setup.clientWebmail":  {"网页版", "Webmail"},
+	"setup.techDetails":    {"技术细节", "Technical details"},
+	"setup.techCompleted":  {"完成本步将把 setupCompleted=true 写入 config.json（运行目录），随后由反向代理/服务管理器重启进程。", "Finishing writes setupCompleted=true into config.json (runtime directory); the process is then restarted via your service manager."},
 	// ── Setup 步 3 DKIM 密钥区（向导占位符与布局修复批次——强度四档裁决三a）──
 	"setup.dkimLegend":   {"DKIM 签名密钥（自动生成——发信签名用）", "DKIM signing key (auto-generated)"},
 	"setup.dkimStrength": {"密钥强度", "Key strength"},
@@ -577,6 +581,35 @@ var messages = map[string][2]string{
 	// 批一附获（既有缺键补齐——CSV 候选片段标题原渲染键名回落「compose.csvTarget」
 	// 文本；B6 用例核验时发现，登记于 CHANGE5 实现偏差）
 	"compose.csvTarget": {"导入结果：勾选要导入的地址", "Import result: check addresses to import"},
+	// ── Webmail前端缺陷修复批·批二（组C~H 承载键——C15 空态出口/E2 模糊化/E5 硬编码
+	// Tr 化/F4 登录交叉链接/D5 附件提示/D7 复制下载/G1 跳转链/G3 loading/G11 列头/
+	// H6 noscript/E6 端口标签；G2 抽屉开关 aria 由 G12 承载静态属性+JS 维护） ──
+	"common.skipMain":      {"跳到主内容", "Skip to main content"},
+	"common.loading":       {"加载中…", "Loading…"},
+	"common.selectAllCol":  {"选择", "Select"},
+	"common.copyAll":       {"复制全部", "Copy all"},
+	"common.copied":        {"已复制", "Copied"},
+	"common.download":      {"下载", "Download"},
+	"common.reload":        {"刷新", "Reload"},
+	"common.nojs":          {"浏览器脚本已禁用：列表翻页等局部增强不可用，各链接可直接打开完整页面。", "Scripts are disabled: partial-refresh enhancements are unavailable; links open full pages directly."},
+	"top.menu":             {"菜单", "Menu"},
+	"mail.emptyUnread":     {"没有未读邮件。", "No unread messages."},
+	"mail.backInbox":       {"返回收件箱", "Back to Inbox"},
+	"compose.attachRePick": {"提交未成功：附件选择已被清空，重新发送前请重新选择附件。", "Submit failed: the attachment picker was reset — re-select attachments before retrying."},
+	"err.opFailed":         {"操作失败，请重试", "Operation failed, please retry"},
+	"sieve.errActivate":    {"激活失败", "Activation failed"},
+	"sieve.errDelete":      {"删除失败", "Deletion failed"},
+	"login.crossAdmin":     {"使用管理员账户登录", "Sign in as administrator"},
+	"login.crossMailbox":   {"使用邮箱账号登录", "Sign in with a mailbox account"},
+	"twofactor.qrAlt":      {"TOTP 绑定二维码", "TOTP binding QR code"},
+	"admin.detID":          {"邮箱 ID", "Mailbox ID"},
+	"admin.det2FA":         {"2FA 状态", "2FA status"},
+	"pw.hintID":            {"pw-hint", "pw-hint"}, // 结构锚（不呈现——G13 aria-describedby 接线键）
+	"csv.colAddr":          {"邮箱地址", "Address"},
+	"csv.colName":          {"姓名", "Name"},
+	"mail.selRowFmt":       {"选择 %s", "Select %s"},
+	"settings.stsOff":      {"（MTA-STS 已关闭——无需发布本记录；重新启用后此处呈现建议值）", "(MTA-STS disabled — no record needed; re-enable to see the suggestion here)"},
+	"settings.tlsrptOff":   {"（TLS-RPT 已关闭——建议移除已发布的 _smtp._tls 记录）", "(TLS-RPT disabled — consider removing the published _smtp._tls record)"},
 }
 
 // folderDisplayName 文件夹呈现名（D5——系统文件夹按 kind 本地化，custom/未知 kind 回退原 Name）。
@@ -625,6 +658,15 @@ func colonFor(lang Lang) string {
 		return ": "
 	}
 	return "："
+}
+
+// langAttrFor html lang 属性值（G7 批二——三轮评审二轮#49：zh 语区规范 BCP-47
+// 子标签 zh-CN；Lang 枚举值（cookie/判定键）保持 zh 零迁移——仅输出属性映射）。
+func langAttrFor(lang Lang) string {
+	if lang == LangEN {
+		return "en"
+	}
+	return "zh-CN"
 }
 
 // Trf 双语格式化文案取值（fmt.Sprintf 承载——%d/%s 占位由调用方给参）。

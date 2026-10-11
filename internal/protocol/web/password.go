@@ -15,6 +15,7 @@
 package web
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
@@ -25,26 +26,44 @@ import (
 	"GRmail/web/templates"
 )
 
-// passwordFormGET 改密表单页（GET /settings/password 与 /admin/password 共用——
-// action 按当前主体类型分派；admin 呈现 username 字段，mailbox 免输）。
+// passwordFormGET 邮箱用户改密表单页（GET /settings/password——mailbox 域恒定）。
+// F9（Webmail前端缺陷修复批批二·D8-A）：/admin/password 改挂独立 admin 门卫
+// handler（adminPasswordFormGET）后本表单恒 mailbox 形态；admin 主体直访本 URL
+// 302 至 /admin/password（域隔离直达——原双主体共用+自适应呈现矛盾收口）。
 func (s *Server) passwordFormGET(c *gin.Context) {
 	sess, ok := currentSession(c)
 	if !ok {
 		c.Status(http.StatusUnauthorized)
 		return
 	}
-	isAdmin := sess.SubjectType == storage.SubjectTypeAdmin
-	data := &templates.PasswordData{
+	if sess.SubjectType == storage.SubjectTypeAdmin {
+		c.Redirect(http.StatusFound, "/admin/password")
+		return
+	}
+	renderPage(c, http.StatusOK, templates.PasswordView(&templates.PasswordData{
 		Lang:      string(langOf(c)),
 		CSRFToken: sess.CSRFToken,
-		IsAdmin:   isAdmin,
+		IsAdmin:   false,
 		Action:    "/settings/password",
 		Nav:       s.sidebarDataFor(c), // D3 B 形态——全站侧栏
+	}))
+}
+
+// adminPasswordFormGET 管理员改密表单页（GET /admin/password——F9/D8-A：admin
+// 门卫先行，mailbox 主体 403〔域隔离显隐一致——原双主体可达+写入域正确的呈现
+// 矛盾收口，批一 G2 裁决 D8-A 归批二承载〕）。
+func (s *Server) adminPasswordFormGET(c *gin.Context) {
+	if !s.adminGuard(c) {
+		return
 	}
-	if isAdmin {
-		data.Action = "/admin/password"
-	}
-	renderPage(c, http.StatusOK, templates.PasswordView(data))
+	sess, _ := currentSession(c)
+	renderPage(c, http.StatusOK, templates.PasswordView(&templates.PasswordData{
+		Lang:      string(langOf(c)),
+		CSRFToken: sess.CSRFToken,
+		IsAdmin:   true,
+		Action:    "/admin/password",
+		Nav:       s.sidebarDataFor(c),
+	}))
 }
 
 // passwordChangePOST 邮箱用户个人改密（POST /settings/password——mailbox 主体）：
@@ -89,6 +108,7 @@ func (s *Server) passwordChangePOST(c *gin.Context) {
 		c.Status(http.StatusInternalServerError)
 		return
 	} else if locked {
+		s.setRetryAfter(c) // E10 批二：Retry-After
 		renderPage(c, http.StatusLocked, templates.PasswordView(&templates.PasswordData{
 			Lang: string(lang), CSRFToken: sess.CSRFToken, IsAdmin: false,
 			Action: "/settings/password", ErrText: templates.Tr(lang, "login.errLocked"), Nav: s.sidebarDataFor(c),
@@ -103,6 +123,10 @@ func (s *Server) passwordChangePOST(c *gin.Context) {
 		return
 	}
 	if err := s.accounts.SetMailboxPassword(ctx, m.Address, newPassword); err != nil {
+		if errors.Is(err, account.ErrPasswordTooShort) {
+			fail(templates.Tr(lang, "pw.errShort")) // D10 批二：下限统一（哨兵→用户可读）
+			return
+		}
 		sessLogger(c).Error("邮箱用户改密失败", "mailbox_id", sess.SubjectID, "error", err)
 		c.Status(http.StatusInternalServerError)
 		return
@@ -155,6 +179,7 @@ func (s *Server) adminPasswordChangePOST(c *gin.Context) {
 		c.Status(http.StatusInternalServerError)
 		return
 	} else if locked {
+		s.setRetryAfter(c) // E10 批二：Retry-After
 		renderPage(c, http.StatusLocked, templates.PasswordView(&templates.PasswordData{
 			Lang: string(lang), CSRFToken: sess.CSRFToken, IsAdmin: true,
 			Action: "/admin/password", ErrText: templates.Tr(lang, "login.errLocked"), Nav: s.sidebarDataFor(c),
@@ -181,6 +206,10 @@ func (s *Server) adminPasswordChangePOST(c *gin.Context) {
 	}
 	hash, err := account.HashPassword(newPassword)
 	if err != nil {
+		if errors.Is(err, account.ErrPasswordTooShort) {
+			fail(templates.Tr(lang, "pw.errShort")) // D10 批二：下限统一（哨兵→用户可读）
+			return
+		}
 		c.Status(http.StatusInternalServerError)
 		return
 	}

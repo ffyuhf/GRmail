@@ -94,7 +94,15 @@ func (s *Server) csvImportPOST(c *gin.Context) {
 	var b bytes.Buffer
 	b.WriteString(`<div class="csv-candidates"><p>`)
 	b.WriteString(templates.Tr(lang, "compose.csvTarget"))
-	b.WriteString(`</p><table>`)
+	// E3（Webmail前端缺陷修复批批二）：候选表补表头 th（scope=col——原无 thead 行
+	// 结构不规范）+勾选框程序化名称（aria-label=候选地址——读屏逐行可辨）。
+	b.WriteString(`</p><table><thead><tr><th scope="col"><span class="sr-only">`)
+	b.WriteString(templates.Tr(lang, "common.selectAllCol"))
+	b.WriteString(`</span></th><th scope="col">`)
+	b.WriteString(templates.Tr(lang, "csv.colAddr"))
+	b.WriteString(`</th><th scope="col">`)
+	b.WriteString(templates.Tr(lang, "csv.colName"))
+	b.WriteString(`</th></tr></thead><tbody>`)
 	for _, r := range rows {
 		// 安全原子性批 F8（2026-10-06）：地址/姓名列 HTML 转义（Go 标准库）——
 		// 该片段经 compose.templ innerHTML 消费，未转义姓名可注入标记/脚本语义
@@ -103,10 +111,10 @@ func (s *Server) csvImportPOST(c *gin.Context) {
 		// 转义（" → \"）非 HTML 属性转义，quoted-string 本地部合法地址
 		// （如 "<b>x</b>"@example.com——net/mail 接受）致属性断裂 DOM 注入
 		// （三轮评审三轮#25）；与文本列同一转义器对齐。
-		fmt.Fprintf(&b, `<tr><td><input type="checkbox" class="csv-addr" value="%s"/></td><td>%s</td><td>%s</td></tr>`,
-			html.EscapeString(r.Addr), html.EscapeString(r.Addr), html.EscapeString(r.Name))
+		fmt.Fprintf(&b, `<tr><td><input type="checkbox" class="csv-addr" aria-label="%s" value="%s"/></td><td>%s</td><td>%s</td></tr>`,
+			html.EscapeString(r.Addr), html.EscapeString(r.Addr), html.EscapeString(r.Addr), html.EscapeString(r.Name))
 	}
-	b.WriteString(`</table><p>`)
+	b.WriteString(`</tbody></table><p>`)
 	// B6：计数行 Trf 化（原硬编码英文 "%d rows, %d skipped"）。
 	fmt.Fprintf(&b, "%s", templates.Trf(lang, "csv.rowsFmt", len(rows), skipped))
 	b.WriteString(` <button type="button" id="csv-merge-btn">`)

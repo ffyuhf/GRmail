@@ -11,6 +11,7 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -28,7 +29,15 @@ const (
 	// passwordMaxLen 明文长度上限：拒绝超长输入防哈希 DoS（内存放大），工程防护基线，
 	// 非 SRS 密码策略（SRS 未定义复杂度规则，不自行发明）
 	passwordMaxLen = 1024
+	// passwordMinLen 明文长度下限（D10 批二——三入口下限统一：admin 行内设密/向导
+	// 步 2 与 /settings/password、/admin/password 既有 minlength=8 前端对齐；字节
+	// 口径与 passwordMaxLen 一致——G2 批准 2026-10-11 13:28:34 组D D10 项）
+	passwordMinLen = 8
 )
+
+// ErrPasswordTooShort 明文长度低于下限哨兵（D10 批二——web 层双语映射消费；
+// admin 行内设密/激活/创建/改密/向导步 2 全入口经 HashPassword 统一承载）。
+var ErrPasswordTooShort = errors.New("password: 明文长度低于下限")
 
 // HashPassword 生成 argon2id PHC 格式哈希串。
 // 参数：password 明文（非空且 ≤1024 字节）。
@@ -36,6 +45,9 @@ const (
 func HashPassword(password string) (string, error) {
 	if password == "" {
 		return "", fmt.Errorf("password: 明文不能为空")
+	}
+	if len(password) < passwordMinLen {
+		return "", ErrPasswordTooShort // D10 批二：服务端下限统一（哨兵→调用方用户可读映射）
 	}
 	if len(password) > passwordMaxLen {
 		return "", fmt.Errorf("password: 明文长度超上限 %d", passwordMaxLen)
