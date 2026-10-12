@@ -93,7 +93,7 @@ func DetailView(lang Lang, msg *storage.Detail, disp *mail.Display, safeBody str
 			var templ_7745c5c3_Var2 templ.SafeURL
 			templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinURLErrs(draftHref(msg.ID))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `detail.templ`, Line: 46, Col: 47}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/detail.templ`, Line: 46, Col: 47}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var2))
 			if templ_7745c5c3_Err != nil {
@@ -114,7 +114,7 @@ func DetailView(lang Lang, msg *storage.Detail, disp *mail.Display, safeBody str
 			var templ_7745c5c3_Var3 string
 			templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "detail.editDraft"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `detail.templ`, Line: 48, Col: 35}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/detail.templ`, Line: 48, Col: 35}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 			if templ_7745c5c3_Err != nil {
@@ -132,7 +132,7 @@ func DetailView(lang Lang, msg *storage.Detail, disp *mail.Display, safeBody str
 			var templ_7745c5c3_Var4 templ.SafeURL
 			templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinURLErrs(replyHref(msg.ID))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `detail.templ`, Line: 51, Col: 47}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/detail.templ`, Line: 51, Col: 47}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 			if templ_7745c5c3_Err != nil {
@@ -153,7 +153,7 @@ func DetailView(lang Lang, msg *storage.Detail, disp *mail.Display, safeBody str
 			var templ_7745c5c3_Var5 string
 			templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "detail.reply"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `detail.templ`, Line: 53, Col: 31}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/detail.templ`, Line: 53, Col: 31}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 			if templ_7745c5c3_Err != nil {
@@ -171,7 +171,7 @@ func DetailView(lang Lang, msg *storage.Detail, disp *mail.Display, safeBody str
 		var templ_7745c5c3_Var6 string
 		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.ResolveAttributeValue(backHref)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `detail.templ`, Line: 56, Col: 46}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/detail.templ`, Line: 56, Col: 46}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var6)
 		if templ_7745c5c3_Err != nil {
@@ -192,7 +192,7 @@ func DetailView(lang Lang, msg *storage.Detail, disp *mail.Display, safeBody str
 		var templ_7745c5c3_Var7 string
 		templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "common.back"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `detail.templ`, Line: 58, Col: 29}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/detail.templ`, Line: 58, Col: 29}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 		if templ_7745c5c3_Err != nil {
@@ -205,7 +205,7 @@ func DetailView(lang Lang, msg *storage.Detail, disp *mail.Display, safeBody str
 		var templ_7745c5c3_Var8 string
 		templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(subj(lang, msg.Subject))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `detail.templ`, Line: 62, Col: 32}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/detail.templ`, Line: 62, Col: 32}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 		if templ_7745c5c3_Err != nil {
@@ -218,7 +218,7 @@ func DetailView(lang Lang, msg *storage.Detail, disp *mail.Display, safeBody str
 		var templ_7745c5c3_Var9 string
 		templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(detailFromLine(lang, msg.FromAddr))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `detail.templ`, Line: 64, Col: 46}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/detail.templ`, Line: 64, Col: 46}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 		if templ_7745c5c3_Err != nil {
@@ -231,7 +231,7 @@ func DetailView(lang Lang, msg *storage.Detail, disp *mail.Display, safeBody str
 		var templ_7745c5c3_Var10 string
 		templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(detailToLine(lang, msg.ToAddrs))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `detail.templ`, Line: 65, Col: 43}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/detail.templ`, Line: 65, Col: 43}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 		if templ_7745c5c3_Err != nil {
@@ -244,7 +244,7 @@ func DetailView(lang Lang, msg *storage.Detail, disp *mail.Display, safeBody str
 		var templ_7745c5c3_Var11 string
 		templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(detailCcLine(lang, msg.CcAddrs))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `detail.templ`, Line: 66, Col: 43}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/detail.templ`, Line: 66, Col: 43}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 		if templ_7745c5c3_Err != nil {
@@ -257,7 +257,7 @@ func DetailView(lang Lang, msg *storage.Detail, disp *mail.Display, safeBody str
 		var templ_7745c5c3_Var12 string
 		templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(detailTimeLine(lang, fmtDateTime(msg.SentAt)))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `detail.templ`, Line: 69, Col: 57}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/detail.templ`, Line: 69, Col: 57}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 		if templ_7745c5c3_Err != nil {
@@ -270,7 +270,7 @@ func DetailView(lang Lang, msg *storage.Detail, disp *mail.Display, safeBody str
 		var templ_7745c5c3_Var13 string
 		templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(detailSizeLine(lang, msg.RawSize))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `detail.templ`, Line: 70, Col: 45}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/detail.templ`, Line: 70, Col: 45}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 		if templ_7745c5c3_Err != nil {
@@ -288,7 +288,7 @@ func DetailView(lang Lang, msg *storage.Detail, disp *mail.Display, safeBody str
 			var templ_7745c5c3_Var14 string
 			templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf("/mails/%d/body", msg.ID))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `detail.templ`, Line: 79, Col: 65}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/detail.templ`, Line: 79, Col: 65}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var14)
 			if templ_7745c5c3_Err != nil {
@@ -301,7 +301,7 @@ func DetailView(lang Lang, msg *storage.Detail, disp *mail.Display, safeBody str
 			var templ_7745c5c3_Var15 string
 			templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "detail.bodyFrame"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `detail.templ`, Line: 79, Col: 104}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/detail.templ`, Line: 79, Col: 104}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var15)
 			if templ_7745c5c3_Err != nil {
@@ -319,7 +319,7 @@ func DetailView(lang Lang, msg *storage.Detail, disp *mail.Display, safeBody str
 			var templ_7745c5c3_Var16 string
 			templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(safeBody)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `detail.templ`, Line: 81, Col: 18}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/detail.templ`, Line: 81, Col: 18}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 			if templ_7745c5c3_Err != nil {
@@ -338,7 +338,7 @@ func DetailView(lang Lang, msg *storage.Detail, disp *mail.Display, safeBody str
 			var templ_7745c5c3_Var17 string
 			templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "detail.attach"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `detail.templ`, Line: 84, Col: 34}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/detail.templ`, Line: 84, Col: 34}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 			if templ_7745c5c3_Err != nil {
@@ -356,7 +356,7 @@ func DetailView(lang Lang, msg *storage.Detail, disp *mail.Display, safeBody str
 				var templ_7745c5c3_Var18 templ.SafeURL
 				templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinURLErrs(fmt.Sprintf("/attachments/%d?part=%d", msg.ID, a.Part))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `detail.templ`, Line: 88, Col: 70}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/detail.templ`, Line: 88, Col: 70}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 				if templ_7745c5c3_Err != nil {
@@ -377,7 +377,7 @@ func DetailView(lang Lang, msg *storage.Detail, disp *mail.Display, safeBody str
 				var templ_7745c5c3_Var19 string
 				templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(attachLabel(lang, a.Filename, a.ContentType, a.Size))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `detail.templ`, Line: 90, Col: 61}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/detail.templ`, Line: 90, Col: 61}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
 				if templ_7745c5c3_Err != nil {

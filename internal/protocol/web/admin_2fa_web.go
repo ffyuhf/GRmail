@@ -95,20 +95,35 @@ func (s *Server) admin2faGuard(c *gin.Context) bool {
 
 // admin2faViewOf 会话主体状态快照→页面数据骨架（三 POST 响应复用；Label=admin
 // 用户名呈现——admin 主体无邮箱反查语义，UsernameLabel 沿 Label 字段承载）。
+// A1 admin 侧同源核对落地（批三——评审核查报告第五章强制并入项）：pending 态经
+// AdminTwoFactorService.RebuildBindingMaterial 重建二维码+密钥（/admin/2fa GET 与
+// mailbox 版同款死锁风险同修；label=admin@主域——admin2faSetupPOST 同源形态）。
 func (s *Server) admin2faViewOf(c *gin.Context) (*templates.TwoFactorData, error) {
 	sess, _ := currentSession(c)
 	st, err := s.adminTwoFactor.State(c.Request.Context(), sess.SubjectID)
 	if err != nil {
 		return nil, err
 	}
-	return &templates.TwoFactorData{
+	d := &templates.TwoFactorData{
 		Lang:    langOf(c),
 		Label:   templates.Tr(langOf(c), "home.adminKind"),
 		CSRF:    sess.CSRFToken,
 		Bound:   st.Bound(),
 		Pending: st.TotpSecret != "" && !st.Bound(), // F4/C5 改名（原 PendingSecret）
 		Nav:     s.sidebarDataFor(c),                // D3 B 形态——全站侧栏
-	}, nil
+	}
+	if d.Pending {
+		label := "admin@" + s.issuerDomain()
+		if mat, rerr := s.adminTwoFactor.RebuildBindingMaterial(c.Request.Context(), sess.SubjectID, label, s.issuerDomain()); rerr == nil {
+			d.Secret = mat.Secret
+			if png, qerr := goqrcode.Encode(mat.OtpauthURI, goqrcode.Medium, 256); qerr != nil {
+				sessLogger(c).Error("admin 2FA 重建二维码生成失败（密钥手动输入通道可用）", "error", qerr)
+			} else {
+				d.QRDataURI = "data:image/png;base64," + base64.StdEncoding.EncodeToString(png)
+			}
+		}
+	}
+	return d, nil
 }
 
 // admin2faGET 管理员 2FA 管理页（GET /admin/2fa——状态三态渲染）。

@@ -307,7 +307,10 @@ func TestFolderCRUDAndGuards(t *testing.T) {
 	if err := svc.CreateFolder(ctx, m.ID, "   "); !errors.Is(err, ErrEmptyFolderName) {
 		t.Fatalf("空白名应拒绝，got %v", err)
 	}
-	if err := svc.CreateFolder(ctx, m.ID, strings.Repeat("n", folderNameMaxLen+1)); !errors.Is(err, ErrEmptyFolderName) {
+	// B12/E-3-A（批三）形态适配：用户可见长度上限 255→64（folderNameUserMaxLen），
+	// 超长名自本批归 ErrFolderNameInvalid（字符集/长度/保留名统一哨兵——拒绝语义
+	// 保持，仅哨兵归类收窄；DDL 列宽 255 语义对齐的 folderNameMaxLen 常量保持）。
+	if err := svc.CreateFolder(ctx, m.ID, strings.Repeat("n", folderNameUserMaxLen+1)); !errors.Is(err, ErrFolderNameInvalid) {
 		t.Fatalf("超长名应拒绝，got %v", err)
 	}
 

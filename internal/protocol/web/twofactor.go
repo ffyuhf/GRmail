@@ -170,6 +170,11 @@ func (s *Server) redirectPostLogin(c *gin.Context, mailboxID int64) {
 // ───────────────────────── /settings/2fa 端点族（FR-018 判定①/停用） ─────────────────────────
 
 // twoFactorViewOf 主体邮箱反查+状态快照→页面数据骨架（三 POST 响应复用）。
+// A1/E-1-A（批三——G2 三组候选全 A 2026-10-12 22:21:32）：pending 态经 account 层
+// RebuildBindingMaterial 从持久化 TotpSecret 重建 otpauth URI+二维码+明文密钥
+// （契约 v1.42.1 3.2 三态渲染「pending=二维码+Base32 密钥双形态」GET 承载——
+// G1 Q2-A 裁决；密钥零变更：已导入 authenticator App 的条目保持有效）。重建失败
+// 降级为无码 pending 态（密钥手动输入通道仍可用——沿 setupPOST 二维码降级先例）。
 // 参数：c Gin 上下文。返回：数据与错误（错误时调用方 500——主体已认证，库故障语义）。
 func (s *Server) twoFactorViewOf(c *gin.Context) (*templates.TwoFactorData, error) {
 	sess, _ := currentSession(c)
@@ -182,7 +187,7 @@ func (s *Server) twoFactorViewOf(c *gin.Context) (*templates.TwoFactorData, erro
 	if err != nil {
 		return nil, err
 	}
-	return &templates.TwoFactorData{
+	d := &templates.TwoFactorData{
 		Lang:    langOf(c),
 		Label:   m.Address,
 		CSRF:    sess.CSRFToken,
@@ -190,7 +195,20 @@ func (s *Server) twoFactorViewOf(c *gin.Context) (*templates.TwoFactorData, erro
 		Pending: st.TotpSecret != "" && !st.Bound(), // F4/C5 改名（原 PendingSecret）
 		Forced:  c.Query("forced") == "1",
 		Nav:     s.sidebarDataFor(c), // D3 B 形态——全站侧栏
-	}, nil
+	}
+	if d.Pending {
+		if mat, rerr := s.twoFactor.RebuildBindingMaterial(ctx, sess.SubjectID, m.Address, s.issuerDomain()); rerr == nil {
+			d.Secret = mat.Secret
+			if png, qerr := goqrcode.Encode(mat.OtpauthURI, goqrcode.Medium, 256); qerr != nil {
+				sessLogger(c).Error("2FA 重建二维码生成失败（密钥手动输入通道可用）", "error", qerr)
+			} else {
+				d.QRDataURI = "data:image/png;base64," + base64.StdEncoding.EncodeToString(png)
+			}
+		} else if !errors.Is(rerr, account.ErrTwoFactorBound) && !errors.Is(rerr, account.ErrTwoFactorNotBound) {
+			sessLogger(c).Warn("2FA 绑定呈现物重建失败（降级为无码 pending 态）", "error", rerr)
+		}
+	}
+	return d, nil
 }
 
 // twoFactorErrText account 哨兵 → 双语提示（沿 adminErrText 先例）。

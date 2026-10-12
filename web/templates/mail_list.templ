@@ -145,23 +145,32 @@ templ MailListFragment(d *MailListData) {
 				<button class="secondary" type="submit">{ Tr(lang, "mail.search") }</button>
 			</form>
 			<!-- D2（2026-10-05）：筛选链接 hx-get 局部更新化——原裸 href 整页导航至片段端点
-			/mails（无布局无 htmx 运行时）致显示错误+后续交互失效；href 保留作降级锚 -->
-			if d.UnreadOnly {
-				<a class="filter-link" href={ fmt.Sprintf("/mails?folder=%d&unread=0&page=1&pagesize=%d", d.ActiveFolder, d.Pagesize) }
-					hx-get={ fmt.Sprintf("/mails?folder=%d&unread=0&page=1&pagesize=%d", d.ActiveFolder, d.Pagesize) }
-					hx-push-url="true"
-					hx-target="#mail-list" hx-indicator="#mail-loading">{ Tr(lang, "mail.clearUnread") }</a>
-			} else {
-				<a class="filter-link" href={ fmt.Sprintf("/mails?folder=%d&unread=1&page=1&pagesize=%d", d.ActiveFolder, d.Pagesize) }
-					hx-get={ fmt.Sprintf("/mails?folder=%d&unread=1&page=1&pagesize=%d", d.ActiveFolder, d.Pagesize) }
-					hx-push-url="true"
-					hx-target="#mail-list" hx-indicator="#mail-loading">{ Tr(lang, "mail.unreadOnly") }</a>
+			 /mails（无布局无 htmx 运行时）致显示错误+后续交互失效；href 保留作降级锚。
+			 A5（批三）：搜索态不渲染未读筛选——搜索态 ActiveFolder 恒零（搜索端点无
+			 folder/unread 维度），原链接拼非法零值 folder 入地址栏（与退出搜索同根因）；
+			 退出搜索为搜索态唯一出口（unread 清零回全量视图）。 -->
+			if !d.IsSearch {
+				if d.UnreadOnly {
+					<a class="filter-link" href={ fmt.Sprintf("/mails?folder=%d&unread=0&page=1&pagesize=%d", d.ActiveFolder, d.Pagesize) }
+						hx-get={ fmt.Sprintf("/mails?folder=%d&unread=0&page=1&pagesize=%d", d.ActiveFolder, d.Pagesize) }
+						hx-push-url="true"
+						hx-target="#mail-list" hx-indicator="#mail-loading">{ Tr(lang, "mail.clearUnread") }</a>
+				} else {
+					<a class="filter-link" href={ fmt.Sprintf("/mails?folder=%d&unread=1&page=1&pagesize=%d", d.ActiveFolder, d.Pagesize) }
+						hx-get={ fmt.Sprintf("/mails?folder=%d&unread=1&page=1&pagesize=%d", d.ActiveFolder, d.Pagesize) }
+						hx-push-url="true"
+						hx-target="#mail-list" hx-indicator="#mail-loading">{ Tr(lang, "mail.unreadOnly") }</a>
+				}
 			}
 			<span class="tool-spacer"></span>
 			<span class="tool-count">{ Trf(lang, "mail.totalFmt", d.Total) }</span>
 			if d.IsSearch {
-				<a class="filter-link" href={ fmt.Sprintf("/mails?folder=%d&page=1", d.ActiveFolder) }
-					hx-get={ fmt.Sprintf("/mails?folder=%d&page=1", d.ActiveFolder) }
+				// A5（批三——Webmail前端缺陷修复批三）：退出搜索回缺省全量视图——不拼
+				// ActiveFolder（搜索态不解析文件夹恒 0，原链接 folder=0 非法参数入地址栏；
+				// 服务端缺省回退收件箱〔resolveFolderID 既有隔离语义保持〕+unread 缺省
+				// 清零=全量视图语义）。pagesize 保留当前上下文。
+				<a class="filter-link" href={ fmt.Sprintf("/mails?page=1&pagesize=%d", d.Pagesize) }
+					hx-get={ fmt.Sprintf("/mails?page=1&pagesize=%d", d.Pagesize) }
 					hx-push-url="true"
 					hx-target="#mail-list">{ Tr(lang, "mail.exitSearch") }</a>
 			}

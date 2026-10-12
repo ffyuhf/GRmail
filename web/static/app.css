@@ -1018,6 +1018,34 @@ td.status-cell .flag { margin-right: var(--sp-1); }
 .actions a { color: var(--primary); text-decoration: none; font-size: var(--text-body); }
 .actions a:hover { text-decoration: underline; }
 
+/* ════════════ Webmail前端缺陷修复批三（G2 批准 2026-10-12 22:21:32）════════════ */
+
+/* A2：详情 .actions 内主按钮文字色定向提权——button.primary/a.primary（上方主按钮块）
+ * 与 .actions a 同为 (0,1,1) 特异性、后者声明在后胜出，致 .detail .actions 内
+ * a.primary（编辑草稿/回复）蓝底蓝字不可见（评审判定 A2 高危）。本规则 (0,2,1)
+ * 恢复 --primary-fg 白字；作用域限 .actions——顶栏「写信」等非 .actions 主按钮
+ * 与 .actions 内普通文字链（btn-text 等）零波及。 */
+.actions a.primary { color: var(--primary-fg); }
+.actions a.primary:hover { color: var(--primary-fg); text-decoration: none; }
+
+/* A3：admin 邮箱管理表专用布局——原三件套致 1024~1920 全宽度列崩坏：①表自动布局
+ * （table-layout:fixed 仅限 .list-area 邮件列表）②全局 table.mails min-width:36rem
+ * ③.table-wrap overflow:clip 裁切不滚动+操作列两内联表单（禁用/改密含密码框）内容
+ * 宽超列宽。修复：fixed 布局+显式列宽（地址列吃余量）+容器改横向滚动恢复+操作列
+ * 密码框紧凑定宽。作用域 admin-mailboxes 类（admin.templ 主表）——邮件列表
+ * .list-area/tokens/聚合视图表零波及。 */
+.table-wrap.admin-table-wrap { overflow-x: auto; }
+table.mails.admin-mailboxes { table-layout: fixed; }
+table.mails.admin-mailboxes th:nth-child(2) { width: 6.5rem; } /* 状态徽标列 */
+table.mails.admin-mailboxes th:nth-child(3) { width: 7rem; }   /* 2FA 态列 */
+table.mails.admin-mailboxes th:nth-child(4) { width: 9.5rem; } /* 创建时间列 */
+table.mails.admin-mailboxes th:nth-child(5) { width: 22rem; }  /* 操作列（内联表单组） */
+table.mails.admin-mailboxes td form input[type="password"] {
+	width: 7rem;
+	padding: var(--sp-1) var(--sp-2);
+	min-height: var(--btn-h-sm);
+}
+
 /* 分页（PaginationFooter——RadiusFrame 容器+rounded 项） */
 .pager {
 	display: flex;

@@ -45,20 +45,34 @@ func (s *Server) csrfOf(c *gin.Context) string {
 }
 
 // sieveScriptsView 当前主体的脚本视图（mailbox 主体=subject_id；admin=postmaster
-// 视图——U9 currentMailboxView 先例；未就绪返回 false）。
-func (s *Server) sieveScriptsView(c *gin.Context) (storage.SieveScriptRepo, int64, bool) {
+// 视图——U9 currentMailboxView 先例）。返回：repo/mailboxID/状态码（A4 批三：
+// 0=就绪；1=SieveScripts 未注入〔真·未启用〕；2=主体视图缺位〔admin 主邮箱实体
+// 未建立——原与未启用共用 errDisabled 误导文案，分键收口〕）。
+func (s *Server) sieveScriptsView(c *gin.Context) (storage.SieveScriptRepo, int64, int) {
 	view, err := s.currentMailboxView(c)
 	if err != nil || view == nil {
-		return nil, 0, false
+		return nil, 0, 2
 	}
-	return s.sieveScripts, view.MailboxID, true
+	if s.sieveScripts == nil {
+		return nil, 0, 1
+	}
+	return s.sieveScripts, view.MailboxID, 0
+}
+
+// sieveViewErrKey /sieve 族不可用态文案键（A4 批三——状态分键：视图缺位≠Sieve
+// 未启用，errNoView 如实呈现「主邮箱未建立」语义，配合 E-2-A 启动确保双防线）。
+func sieveViewErrKey(state int) string {
+	if state == 2 {
+		return "sieve.errNoView"
+	}
+	return "sieve.errDisabled"
 }
 
 // sieveListGET GET /sieve 列表页。
 func (s *Server) sieveListGET(c *gin.Context) {
-	repo, mboxID, ok := s.sieveScriptsView(c)
-	if !ok {
-		s.errPage(c, http.StatusServiceUnavailable, "sieve.errDisabled")
+	repo, mboxID, st := s.sieveScriptsView(c)
+	if st != 0 {
+		s.errPage(c, http.StatusServiceUnavailable, sieveViewErrKey(st))
 		return
 	}
 	// F7（批二）：主体标记填充（admin 直达管理枢纽返回链）。
@@ -77,9 +91,9 @@ func (s *Server) sieveListGET(c *gin.Context) {
 
 // sieveEditGET GET /sieve/:name 编辑页（new=新建空表单——#30：NameEditable 态承载名称输入框）。
 func (s *Server) sieveEditGET(c *gin.Context) {
-	repo, mboxID, ok := s.sieveScriptsView(c)
-	if !ok {
-		s.errPage(c, http.StatusServiceUnavailable, "sieve.errDisabled")
+	repo, mboxID, st := s.sieveScriptsView(c)
+	if st != 0 {
+		s.errPage(c, http.StatusServiceUnavailable, sieveViewErrKey(st))
 		return
 	}
 	name := c.Param("name")
@@ -103,9 +117,9 @@ func (s *Server) sieveEditGET(c *gin.Context) {
 // sieveEditPOST POST /sieve/:name 保存（编译期校验拒绝重渲染；#30：表单 name 字段
 // 优先于 URL :name 参数——new 态名称经输入框承载，编辑态表单无 name 字段=URL 名直用）。
 func (s *Server) sieveEditPOST(c *gin.Context) {
-	repo, mboxID, ok := s.sieveScriptsView(c)
-	if !ok {
-		c.String(http.StatusServiceUnavailable, templates.Tr(langOf(c), "sieve.errDisabled"))
+	repo, mboxID, st := s.sieveScriptsView(c)
+	if st != 0 {
+		c.String(http.StatusServiceUnavailable, templates.Tr(langOf(c), sieveViewErrKey(st)))
 		return
 	}
 	isNewEntry := c.Param("name") == "new" // 原入口态（重渲染保持 NameEditable——名称输入框不消失）
@@ -138,9 +152,9 @@ func (s *Server) sieveEditPOST(c *gin.Context) {
 
 // sieveActivatePOST POST /sieve/:name/activate 激活（互斥单激活）。
 func (s *Server) sieveActivatePOST(c *gin.Context) {
-	repo, mboxID, ok := s.sieveScriptsView(c)
-	if !ok {
-		s.errPage(c, http.StatusServiceUnavailable, "sieve.errDisabled")
+	repo, mboxID, st := s.sieveScriptsView(c)
+	if st != 0 {
+		s.errPage(c, http.StatusServiceUnavailable, sieveViewErrKey(st))
 		return
 	}
 	if err := repo.SetActive(c.Request.Context(), mboxID, c.Param("name")); err != nil {
@@ -154,9 +168,9 @@ func (s *Server) sieveActivatePOST(c *gin.Context) {
 
 // sieveDeletePOST POST /sieve/:name/delete 删除（激活脚本连带清激活）。
 func (s *Server) sieveDeletePOST(c *gin.Context) {
-	repo, mboxID, ok := s.sieveScriptsView(c)
-	if !ok {
-		s.errPage(c, http.StatusServiceUnavailable, "sieve.errDisabled")
+	repo, mboxID, st := s.sieveScriptsView(c)
+	if st != 0 {
+		s.errPage(c, http.StatusServiceUnavailable, sieveViewErrKey(st))
 		return
 	}
 	if err := repo.DeleteScript(c.Request.Context(), mboxID, c.Param("name")); err != nil {
@@ -178,9 +192,9 @@ func (s *Server) sessionIsAdmin(c *gin.Context) bool {
 }
 
 func (s *Server) sieveDeactivatePOST(c *gin.Context) {
-	repo, mboxID, ok := s.sieveScriptsView(c)
-	if !ok {
-		s.errPage(c, http.StatusServiceUnavailable, "sieve.errDisabled")
+	repo, mboxID, st := s.sieveScriptsView(c)
+	if st != 0 {
+		s.errPage(c, http.StatusServiceUnavailable, sieveViewErrKey(st))
 		return
 	}
 	name := c.Param("name")

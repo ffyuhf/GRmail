@@ -82,14 +82,24 @@ func BuildOutgoingMail(from, to, cc, subject, body, htmlBody string, attachments
 	if err != nil {
 		return nil, fmt.Errorf("发件地址非法: %w", err)
 	}
-	toHeader, err := formatAddressListHeader(to)
-	if err != nil {
-		return nil, fmt.Errorf("收件地址非法: %w", err)
+	// A6（Webmail前端缺陷修复批三——G2 批准 2026-10-12 22:21:32）：空收件人容忍
+	// （省略 To 头）——save_draft 半成品草稿无收件人可存（U9 Q5-A 草稿最小闭环语义
+	// 兑现）；send 路径双防线保持不变（web composeValidate 全量校验+composeSend
+	// SplitRecipients 空集拒绝——本容忍仅放行构造，不改提交链）。非空列表解析
+	// 语义零变化（任一非法即拒锚）。
+	toHeader := ""
+	if strings.TrimSpace(to) != "" {
+		toHeader, err = formatAddressListHeader(to)
+		if err != nil {
+			return nil, fmt.Errorf("收件地址非法: %w", err)
+		}
 	}
 
 	var buf bytes.Buffer
 	writeHeader(&buf, "From", fromHeader)
-	writeHeader(&buf, "To", toHeader)
+	if toHeader != "" {
+		writeHeader(&buf, "To", toHeader)
+	}
 	if strings.TrimSpace(cc) != "" {
 		ccHeader, cerr := formatAddressListHeader(cc)
 		if cerr != nil {

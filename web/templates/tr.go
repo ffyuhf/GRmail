@@ -318,8 +318,11 @@ var messages = map[string][2]string{
 	"sieve.errGet":      {"脚本读取失败：%s", "Read script failed: %s"},
 	"sieve.notFound":    {"脚本不存在", "Script not found"},
 	"sieve.errDisabled": {"Sieve 未启用", "Sieve not enabled"},
-	"sieve.newH2":       {"新建脚本", "New script"}, // Sieve编辑器缺口修复批次 #30——new 态独立标题
-	"sieve.nameLabel":   {"脚本名", "Script name"}, // #30——名称输入框 label（无 placeholder：label 文案承载指引）
+	// sieve.errNoView A4（批三）：主体视图缺位分键——主邮箱实体未建立（原与未启用
+	// 共键误导；E-2-A 启动确保后为防御性残余态文案）
+	"sieve.errNoView": {"邮箱视图未就绪（主邮箱未建立，重启服务或联系管理员）", "Mailbox view unavailable (primary mailbox missing; restart the service or contact the admin)"},
+	"sieve.newH2":     {"新建脚本", "New script"}, // Sieve编辑器缺口修复批次 #30——new 态独立标题
+	"sieve.nameLabel": {"脚本名", "Script name"}, // #30——名称输入框 label（无 placeholder：label 文案承载指引）
 	// ── 管理页·Token（U18——tokens.templ/tokens.go 深级双语收口）──
 	"tokens.title":     {"API Token 管理", "API tokens"},
 	"tokens.generated": {"Token 已生成（仅此一次展示，请立即复制保存）：", "Token generated (shown only once — copy it now):"},
@@ -572,12 +575,13 @@ var messages = map[string][2]string{
 	"csv.tooLarge":            {"CSV 文件超过 2MB 上限", "CSV exceeds the 2MB limit"},
 	"csv.readFailed":          {"CSV 读取失败", "CSV read failed"},
 	"csv.rowsFmt":             {"%d 行可导入，%d 行跳过", "%d rows, %d skipped"},
-	"err.folderNameInvalid":   {"文件夹名不能为空且不超过 255 字符", "Folder name required (max 255 chars)"},
-	"err.folderExists":        {"同名文件夹已存在", "A folder with this name already exists"},
-	"err.folderNotEmpty":      {"文件夹非空，请先清空邮件", "Folder is not empty; clear its messages first"},
-	"err.folderSystem":        {"系统文件夹不可操作", "System folders cannot be modified"},
-	"err.folderNotFound":      {"文件夹不存在", "Folder not found"},
-	"err.folderOp":            {"操作失败，请重试", "Operation failed, please retry"},
+	// B12/E-3-A（批三）：文案更新为白名单口径（可打印字符集+长度 64+保留系统名拒绝）
+	"err.folderNameInvalid": {"文件夹名仅支持常见文字与标点（不含 / \\ ? # & < > 引号），长度不超过 64 字符", "Folder name supports common letters/punctuation only (no / \\ ? # & < > quotes), max 64 chars"},
+	"err.folderExists":      {"同名文件夹已存在", "A folder with this name already exists"},
+	"err.folderNotEmpty":    {"文件夹非空，请先清空邮件", "Folder is not empty; clear its messages first"},
+	"err.folderSystem":      {"系统文件夹不可操作", "System folders cannot be modified"},
+	"err.folderNotFound":    {"文件夹不存在", "Folder not found"},
+	"err.folderOp":          {"操作失败，请重试", "Operation failed, please retry"},
 	// 批一附获（既有缺键补齐——CSV 候选片段标题原渲染键名回落「compose.csvTarget」
 	// 文本；B6 用例核验时发现，登记于 CHANGE5 实现偏差）
 	"compose.csvTarget": {"导入结果：勾选要导入的地址", "Import result: check addresses to import"},

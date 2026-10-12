@@ -13,6 +13,12 @@
 //	  F2/C3 otpauth URI 百分号编码（label 与 issuer——key-uri-format）+
 //	  F3/C4 verifyTOTP 增 nowSec 参数注入（纯函数化——时间可测）+
 //	  F4/C5 PendingSecret 改名 TotpSecret（与列名 totp_secret 对齐——契约 v1.40.0）
+//	2026-10-12 22:30:00 | 修正 | Webmail前端缺陷修复批三 A1/E-1-A（G2 批准
+//	  2026-10-12 22:21:32 三组候选全 A）：URI 构造公式提取为 buildOtpauthURI 纯函数
+//	  （InitiateBinding 与新增 RebuildBindingMaterial 共用——复用优先）+
+//	  RebuildBindingMaterial 从持久化 TotpSecret 重建绑定呈现物（GET pending 态
+//	  二维码/密钥重建出口——强制 2FA 绑定死锁收口；契约 v1.42.1 3.2 三态渲染
+//	  「pending=二维码+Base32 密钥双形态」GET 承载，G1 Q2-A 裁决）
 package account
 
 import (
@@ -112,14 +118,39 @@ func (s *TwoFactorService) InitiateBinding(ctx context.Context, mailboxID int64,
 	if err := s.mailboxes.SetTwoFactorSecret(ctx, mailboxID, secret); err != nil {
 		return nil, err
 	}
-	// otpauth URI（Google key-uri-format 事实标准——IR-009；参数显式化：SHA1/6 位/30s
-	// 与服务端验证参数一致，authenticator 导入即对齐）。
-	// F2/C3（2026-10-10 C级债务收尾批）：label（issuer:account）与 issuer 参数百分号
-	// 编码——含空格/`?`/`&` 等字符的发行方名不再破坏 URI 解析（纯字母数字与点号
-	// 发行方编码后输出不变——兼容锚）。
-	uri := fmt.Sprintf("otpauth://totp/%s:%s?secret=%s&issuer=%s&algorithm=SHA1&digits=%d&period=%d",
+	return &BindingMaterial{Secret: secret, OtpauthURI: buildOtpauthURI(issuer, accountAddr, secret)}, nil
+}
+
+// buildOtpauthURI otpauth URI 构造纯函数（批三 A1/E-1-A 提取——InitiateBinding 与
+// RebuildBindingMaterial 单源共用；Google key-uri-format 事实标准——IR-009；参数
+// 显式化：SHA1/6 位/30s 与服务端验证参数一致，authenticator 导入即对齐）。
+// F2/C3（2026-10-10）：label（issuer:account）与 issuer 参数百分号编码——含空格/
+// `?`/`&` 等字符的发行方名不再破坏 URI 解析（纯字母数字与点号发行方编码后输出
+// 不变——兼容锚）。
+func buildOtpauthURI(issuer, accountAddr, secret string) string {
+	return fmt.Sprintf("otpauth://totp/%s:%s?secret=%s&issuer=%s&algorithm=SHA1&digits=%d&period=%d",
 		url.PathEscape(issuer), url.PathEscape(accountAddr), secret, url.QueryEscape(issuer), totpDigits, totpPeriodSeconds)
-	return &BindingMaterial{Secret: secret, OtpauthURI: uri}, nil
+}
+
+// RebuildBindingMaterial 从持久化 TotpSecret 重建绑定呈现物（批三 A1/E-1-A——G2
+// 三组候选全 A 2026-10-12 22:21:32）。背景：原实现二维码与密钥仅 POST setup 响应
+// 注入，GET 恒无码——强制 2FA 账号 twoFactorGate 持续挡回形成绑定死锁（评审判定
+// 阻断级 A1）；pending 密钥已持久化（mailboxes.totp_secret），本出口零密钥变更
+// 重建 otpauth URI+明文密钥（已导入 authenticator App 的条目保持有效——E-1-A 能力
+// 影响披露的兑现）。语义哨兵：未发起（TotpSecret 空）=ErrTwoFactorNotBound；已绑定
+// =ErrTwoFactorBound（防已绑定态二维码重呈现）。
+func (s *TwoFactorService) RebuildBindingMaterial(ctx context.Context, mailboxID int64, accountAddr, issuer string) (*BindingMaterial, error) {
+	st, err := s.mailboxes.GetTwoFactor(ctx, mailboxID)
+	if err != nil {
+		return nil, err
+	}
+	if st.TotpSecret == "" {
+		return nil, ErrTwoFactorNotBound
+	}
+	if st.Bound() {
+		return nil, ErrTwoFactorBound
+	}
+	return &BindingMaterial{Secret: st.TotpSecret, OtpauthURI: buildOtpauthURI(issuer, accountAddr, st.TotpSecret)}, nil
 }
 
 // ConfirmBinding 绑定确认（FR-018 判定①后半）：校验用户输入的当前 TOTP 码通过后，

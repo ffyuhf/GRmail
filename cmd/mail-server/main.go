@@ -325,6 +325,21 @@ func main() {
 	mailboxRepo := storage.NewMailboxRepoFor(dbDriver, db)
 	folderRepo := storage.NewFolderRepoFor(dbDriver, db)
 	accounts := account.NewService(mailboxRepo, folderRepo)
+	// A4/E-2-A（Webmail前端缺陷修复批三——G2 三组候选全 A 2026-10-12 22:21:32）：
+	// 完成态启动确保 admin 主邮箱实体（幂等——EnsureAdminMailbox：向导态 accounts
+	// 未注入仅落盘 AdminMailbox 配置，实体原依赖收信/120s 回填触发且后者仅覆盖
+	// postmaster 前缀——自定义前缀主邮箱无来信场景永不建立，Webmail admin 视图
+	// 缺位〔/sieve 503/首页占位〕根除）。空域防御：域名未配置（异常完成态）跳过
+	// Warn 不阻断启动；失败 Warn 尽力（下次启动重试）。
+	ensureAdminMailboxAddr := strings.TrimSpace(cfg.Server.AdminMailbox)
+	if ensureAdminMailboxAddr == "" {
+		ensureAdminMailboxAddr = "postmaster@" + cfg.Server.Domain
+	}
+	if cfg.Server.Domain == "" || !strings.Contains(ensureAdminMailboxAddr, "@") || strings.HasSuffix(ensureAdminMailboxAddr, "@") {
+		logger.Warn("admin 主邮箱地址异常（域名未配置）——跳过启动确保", "addr", ensureAdminMailboxAddr)
+	} else if _, err = accounts.EnsureAdminMailbox(rootCtx, ensureAdminMailboxAddr); err != nil {
+		logger.Warn("admin 主邮箱启动确保失败（下次启动重试）", "addr", ensureAdminMailboxAddr, "error", err)
+	}
 	userRepo := storage.NewUserRepoFor(dbDriver, db) // U10 Q9-A：adminLookupAdapter 收敛数据源（与 web 同源）
 	messageRepo := storage.NewMessageRepoFor(dbDriver, db)
 	verifier := auth.NewVerifierService(auth.NewResolver(), cfg.Server.Domain, cfg.Auth)

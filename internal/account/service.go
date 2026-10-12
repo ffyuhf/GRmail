@@ -35,12 +35,51 @@ var (
 	ErrEmptyPassword = errors.New("account: 密码不能为空")
 	// ErrEmptyFolderName 文件夹名为空或超长（name ≤255，对齐 DDL VARCHAR 语义）
 	ErrEmptyFolderName = errors.New("account: 文件夹名不能为空")
+	// ErrFolderNameInvalid 文件夹名字符集非法（批三 B12/E-3-A——可打印字符集白名单：
+	// 拒控制符/路径分隔与查询锚点/HTML 尖括号/引号/保留系统名，长度 ≤64；原仅
+	// TrimSpace+非空致 "a/b" 与 HTML 标签串可创建——侧栏异常串+移动端溢出缺陷）
+	ErrFolderNameInvalid = errors.New("account: 文件夹名含非法字符或超过 64 字符")
 	// ErrInvalidStatus 非法状态值（未在 MailboxStatus 三态枚举内）
 	ErrInvalidStatus = errors.New("account: 非法邮箱状态")
 )
 
 // folderNameMaxLen 文件夹名长度上限（数据模型 3.3 name VARCHAR(255) 语义对齐）
 const folderNameMaxLen = 255
+
+// folderNameUserMaxLen 用户可见文件夹名长度上限（批三 B12/E-3-A——白名单口径
+// 候选 A：64 字符；域层统一防线，协议侧/未来入口共享）
+const folderNameUserMaxLen = 64
+
+// systemFolderCanonicalNames 系统文件夹规范行名映射（小写键→规范形态——folders.sql
+// InsertSystemFolders 行名；批三 B12/E-3-A）。保留字检查口径：**仅拒绝绕过行级
+// UNIQUE 防线的大小写变体**（如 "inbox"——不撞 "INBOX" 行但呈现层同名混淆）；
+// 与规范形态精确一致（如 "INBOX"）者放行，由 storage UNIQUE→ErrFolderExists
+// 既有语义承载（既有测试断言与防线语义零触碰）。
+var systemFolderCanonicalNames = map[string]string{
+	"inbox": "INBOX", "sent": "Sent", "drafts": "Drafts",
+	"junk": "Junk", "trash": "Trash", "unregistered": "Unregistered",
+}
+
+// validFolderName 文件夹名可打印字符集白名单（批三 B12/E-3-A——G2 三组候选全 A
+// 2026-10-12 22:21:32）。拒绝面：控制符（rune<0x20 或 0x7f）、路径分隔与查询锚点
+// （/\?#&）、HTML 尖括号（<>——侧栏直出防御纵深）、引号（"'`反引号）；长度
+// 1~64；系统名大小写变体（绕 UNIQUE 防线形态——精确规范形态由 storage UNIQUE
+// 既有 ErrFolderExists 语义拒绝）。合法 Unicode（中文/常规文字）通过——E-3-A
+// 兼容面（FR-012 无字符集限制的合理边界）。
+func validFolderName(name string) bool {
+	if name == "" || len(name) > folderNameUserMaxLen {
+		return false
+	}
+	if canonical, isSystem := systemFolderCanonicalNames[strings.ToLower(name)]; isSystem && name != canonical {
+		return false // 变体拒绝（如 "inbox"——不撞 "INBOX" 行的绕防线形态）
+	}
+	for _, r := range name {
+		if r < 0x20 || r == 0x7f {
+			return false
+		}
+	}
+	return !strings.ContainsAny(name, `\/?#&<>"'`+"`")
+}
 
 // Service 邮箱账号域服务（协议端点 U4/U6/U7/U8 经注入本服务访问账号域）
 type Service struct {
@@ -301,6 +340,37 @@ func (s *Service) EnsurePostmasterMailbox(ctx context.Context, domain string) (*
 	return m, nil
 }
 
+// EnsureAdminMailbox 幂等确保管理员主邮箱实体存在（批三 A4/E-2-A——G2 三组候选
+// 全 A 2026-10-12 22:21:32）。背景（A4 根因链，本轮 S1b 行号级定位）：向导态
+// setupmode.go accounts=nil 注入——向导仅落盘 AdminMailbox 配置不建实体；完成态
+// main 装配段原无任何启动期确保调用（EnsurePostmasterMailbox 仅 120s 错峰
+// runAggregateBackfill 内消费，且只确保 postmaster 前缀——自定义前缀主邮箱无
+// 来信场景实体永不建立），mailboxview admin 分支 GetMailbox 失败即 ErrNoMailboxView
+// （/sieve 503/首页占位/写信降级）。本方法幂等：已存在直返；不存在建影子邮箱
+// （管理员后续经管理页设密激活——架构 6.6-G1 注记「激活归管理页」语义承接）；
+// 并发 UNIQUE 冲突回读（沿 C级债务批 F5/C6 EnsurePostmasterMailbox 先例）。
+// 聚合文件夹确保不在此承载（归 EnsurePostmasterMailbox/backfill 既有职责——
+// postmaster 回退场景两者幂等双保险）。
+func (s *Service) EnsureAdminMailbox(ctx context.Context, addr string) (*storage.Mailbox, error) {
+	addr = strings.ToLower(strings.TrimSpace(addr))
+	m, err := s.GetMailbox(ctx, addr)
+	if err == nil {
+		return m, nil
+	}
+	if !errors.Is(err, storage.ErrMailboxNotFound) {
+		return nil, err
+	}
+	if m, err = s.CreateShadowMailbox(ctx, addr); err != nil {
+		if !errors.Is(err, storage.ErrMailboxExists) {
+			return nil, err
+		}
+		if m, err = s.GetMailbox(ctx, addr); err != nil {
+			return nil, err
+		}
+	}
+	return m, nil
+}
+
 // ───────────────────────── 文件夹管理（FR-012 单层模型） ─────────────────────────
 
 // ListFolders 列举邮箱全部文件夹（侧边栏序；含五系统文件夹）。
@@ -314,11 +384,15 @@ func (s *Service) UnreadCounts(ctx context.Context, mailboxID int64) (map[int64]
 }
 
 // CreateFolder 创建自定义文件夹（FR-012：自定义文件夹单层，无父子）。
-// 参数：name 非空且 ≤255。返回：ErrEmptyFolderName / storage.ErrFolderExists。
+// 参数：name 非空且 ≤64（B12/E-3-A 白名单）。返回：ErrEmptyFolderName /
+// ErrFolderNameInvalid（批三 B12）/ storage.ErrFolderExists。
 func (s *Service) CreateFolder(ctx context.Context, mailboxID int64, name string) error {
 	name = strings.TrimSpace(name)
-	if name == "" || len(name) > folderNameMaxLen {
+	if name == "" {
 		return ErrEmptyFolderName
+	}
+	if !validFolderName(name) {
+		return ErrFolderNameInvalid // 批三 B12/E-3-A：字符集/长度/保留名域层防线
 	}
 	return s.folders.CreateCustom(ctx, mailboxID, name)
 }
@@ -326,8 +400,11 @@ func (s *Service) CreateFolder(ctx context.Context, mailboxID int64, name string
 // RenameFolder 重命名自定义文件夹（系统文件夹拒绝，TC-012 判定）。
 func (s *Service) RenameFolder(ctx context.Context, folderID int64, name string) error {
 	name = strings.TrimSpace(name)
-	if name == "" || len(name) > folderNameMaxLen {
+	if name == "" {
 		return ErrEmptyFolderName
+	}
+	if !validFolderName(name) {
+		return ErrFolderNameInvalid // 批三 B12/E-3-A：与创建同口径（重命名绕道防线）
 	}
 	return s.folders.Rename(ctx, folderID, name)
 }

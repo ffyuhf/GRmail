@@ -14,6 +14,10 @@
 //	  F1/C2 VerifyLoginFactor 补齐 mailbox 版同款输入防御（TrimSpace+长度≤64——
 //	  超长恶意码先格式拒绝不走完整哈希链）+F2/C3 otpauth URI 编码+
 //	  F3/C4 verifyTOTP nowSec 注入+F4/C5 PendingSecret 改名 TotpSecret
+//	2026-10-12 22:30:00 | 修正 | Webmail前端缺陷修复批三 A1/E-1-A（G2 批准
+//	  2026-10-12 22:21:32）：admin 侧同源核对落地——InitiateBinding 改共用
+//	  buildOtpauthURI（mailbox 版同源单源化）+RebuildBindingMaterial admin 承载
+//	  （/admin/2fa GET pending 态重建出口——评审 §8.4 遗漏面强制并入核对）
 package account
 
 import (
@@ -23,7 +27,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"net/url"
 	"strings"
 	"time"
 
@@ -67,11 +70,27 @@ func (s *AdminTwoFactorService) InitiateBinding(ctx context.Context, userID int6
 	if err := s.users.SetTwoFactorSecret(ctx, userID, secret); err != nil {
 		return nil, err
 	}
-	// F2/C3（2026-10-10 C级债务收尾批）：label 与 issuer 百分号编码——含特殊字符
-	// 的用户名/发行方不再破坏 URI 解析（纯字母数字编码后输出不变——兼容锚）。
-	uri := fmt.Sprintf("otpauth://totp/%s:%s?secret=%s&issuer=%s&algorithm=SHA1&digits=%d&period=%d",
-		url.PathEscape(issuer), url.PathEscape(accountLabel), secret, url.QueryEscape(issuer), totpDigits, totpPeriodSeconds)
-	return &BindingMaterial{Secret: secret, OtpauthURI: uri}, nil
+	// 批三 A1/E-1-A：URI 构造单源化（mailbox 版 buildOtpauthURI 共用——复用优先；
+	// F2/C3 百分号编码语义经共用函数承载，输出逐字节等价）。
+	return &BindingMaterial{Secret: secret, OtpauthURI: buildOtpauthURI(issuer, accountLabel, secret)}, nil
+}
+
+// RebuildBindingMaterial 从持久化 TotpSecret 重建管理员绑定呈现物（批三 A1——
+// admin 侧同源核对落地：mailbox 版同款死锁风险〔/admin/2fa GET 恒无码〕同修；
+// users 表 2FA 三列同源，语义哨兵与 mailbox 版一致）。密钥零变更——已导入
+// authenticator App 的条目保持有效（E-1-A 能力影响披露的兑现）。
+func (s *AdminTwoFactorService) RebuildBindingMaterial(ctx context.Context, userID int64, accountLabel, issuer string) (*BindingMaterial, error) {
+	st, err := s.users.GetTwoFactor(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if st.TotpSecret == "" {
+		return nil, ErrTwoFactorNotBound
+	}
+	if st.Bound() {
+		return nil, ErrTwoFactorBound
+	}
+	return &BindingMaterial{Secret: st.TotpSecret, OtpauthURI: buildOtpauthURI(issuer, accountLabel, st.TotpSecret)}, nil
 }
 
 // ConfirmBinding 绑定确认（FR-018 判定①后半 admin 承载）：校验当前 TOTP 码通过后，

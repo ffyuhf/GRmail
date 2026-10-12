@@ -280,6 +280,8 @@ func (s *Server) folderErrResponse(c *gin.Context, err error) {
 		key = "err.folderNotFound"
 	case errors.Is(err, account.ErrEmptyFolderName):
 		key = "err.folderNameInvalid"
+	case errors.Is(err, account.ErrFolderNameInvalid):
+		key = "err.folderNameInvalid" // B12/E-3-A（批三）：字符集/保留名拒绝与空名共用用户可读键（文案已更新白名单口径）
 	}
 	if c.GetHeader("HX-Request") != "" {
 		c.Header("HX-Retarget", "#folder-hint")

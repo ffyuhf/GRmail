@@ -81,8 +81,8 @@ templ AdminMailboxesView(lang Lang, rows []*AdminMailboxRow, errText string, csr
 			if errText != "" {
 				<p class="error" role="alert">{ errText }</p>
 			}
-			<div class="table-wrap">
-				<table class="mails">
+			<div class="table-wrap admin-table-wrap">
+				<table class="mails admin-mailboxes">
 					<thead><tr>
 						<th>{ Tr(lang, "admin.colAddr") }</th>
 						<th>{ Tr(lang, "mail.colStatus") }</th>

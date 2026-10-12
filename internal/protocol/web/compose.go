@@ -182,16 +182,23 @@ func (s *Server) composePOST(c *gin.Context) {
 		DraftID: parseFormInt64(c.PostForm("draft_id")), CSRF: sess.CSRFToken,
 	}
 	s.applyEditorConf(data) // D8#11：压缩参数快照注入（POST 重渲染路径同载）
-	if serr := s.composeValidate(c, data); serr != "" {
-		// D5（批二）：就地呈现+附件清空提示（multipart 重渲染 file input 必空——
-		// 提示用户重选；刷新重放零副作用——校验失败无写入，PRG 重定向代价为
-		// 表单内容全丢，计划书「就地呈现」分支承载）。
-		data.ErrText = serr
-		if readFormHasAttachments(c) {
-			data.ErrText += " " + templates.Tr(langOf(c), "compose.attachRePick")
+	// A6（批三——Webmail前端缺陷修复批三）：校验按 action 分组——send 全量校验
+	// 保持；save_draft 仅基础承载（收件人允许空+主题/正文可存半成品——U9 Q5-A
+	// 草稿最小闭环语义兑现：原先行整体校验致无收件人草稿被「收件人不能为空」
+	// 拦截〔评审判定 A6 实测 400 证据〕；构造层与落库层自然承载草稿边界）。
+	action := c.PostForm("action")
+	if action == "send" {
+		if serr := s.composeValidate(c, data); serr != "" {
+			// D5（批二）：就地呈现+附件清空提示（multipart 重渲染 file input 必空——
+			// 提示用户重选；刷新重放零副作用——校验失败无写入，PRG 重定向代价为
+			// 表单内容全丢，计划书「就地呈现」分支承载）。
+			data.ErrText = serr
+			if readFormHasAttachments(c) {
+				data.ErrText += " " + templates.Tr(langOf(c), "compose.attachRePick")
+			}
+			renderPage(c, http.StatusBadRequest, templates.ComposeView(data))
+			return
 		}
-		renderPage(c, http.StatusBadRequest, templates.ComposeView(data))
-		return
 	}
 	attachments, aerr := readFormAttachments(c)
 	if aerr != nil {
@@ -222,7 +229,6 @@ func (s *Server) composePOST(c *gin.Context) {
 		return
 	}
 
-	action := c.PostForm("action")
 	switch action {
 	case "send":
 		if serr := s.composeSend(c, view, data, from, raw); serr != "" {
