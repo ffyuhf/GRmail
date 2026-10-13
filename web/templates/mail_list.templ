@@ -137,7 +137,10 @@ templ MailListFragment(d *MailListData) {
 			<p class="notice" role="status">{ Tr(lang, "mail.noticedDeleted") }</p>
 		}
 		<div class="tool-bar">
-			<form hx-get="/search" hx-target="#mail-list" hx-indicator="#mail-loading" action="/search" method="get">
+			<!-- B4（批四）：搜索表单补 hx-push-url（批一 D5-A 九锚清单覆盖缺口——第十锚）：
+				搜索提交后地址栏更新为 /search?keyword=…，刷新/分享保持结果（原停留 /mails
+				刷新丢结果）；action 降级锚既有保持。 -->
+			<form hx-get="/search" hx-target="#mail-list" hx-indicator="#mail-loading" hx-push-url="true" action="/search" method="get">
 				<span class="search-box">
 					<span class="ic" aria-hidden="true">@templ.Raw(iconSearch)</span>
 					<input type="search" name="keyword" aria-label={ Tr(lang, "mail.searchHint") } placeholder={ Tr(lang, "mail.searchHint") } value={ d.Keyword }/>
@@ -262,7 +265,14 @@ templ MailListFragment(d *MailListData) {
 				}
 				<span class="pagesize">{ Tr(lang, "mail.pagesizeSelect") }
 					for _, n := range []int{15, 25, 50, 100} {
-						<a href={ pagesizeHref(d, n) } hx-get={ pagesizeHref(d, n) } hx-push-url="true" hx-target="#mail-list" class={ templ.KV("active", n == d.Pagesize) } aria-current={ templ.KV("page", n == d.Pagesize) }>{ fmt.Sprintf("%d", n) }</a>
+						// B1（批四）：aria-current 条件输出——templ.KV 仅 class 属性有布尔语义，
+						// 用于其他属性被字符串化为字面量 {page false}（读屏无法识别当前每页条数）；
+						// 对齐同文件侧栏文件夹项条件输出形态（:75-78）。
+						<a href={ pagesizeHref(d, n) } hx-get={ pagesizeHref(d, n) } hx-push-url="true" hx-target="#mail-list" class={ templ.KV("active", n == d.Pagesize) }
+							if n == d.Pagesize {
+								aria-current="page"
+							}
+						>{ fmt.Sprintf("%d", n) }</a>
 					}
 				</span>
 			</div>
@@ -286,15 +296,21 @@ func pageHref(d *MailListData, page int) string {
 	return href
 }
 
-// pagesizeHref 每页条数切换链接（G12——切换重置回第 1 页；纯链接零 JS；组D：keyword 编码同 pageHref）。
+// pagesizeHref 每页条数切换链接（G12——切换重置回第 1 页；纯链接零 JS；组D：keyword 编码同 pageHref；
+// B2（批四）：非搜索分支补 unread 条件——未读筛选下切换每页条数保持筛选（原三分支均
+// 丢失回全量；与 pageHref 同语义：搜索分支不带 unread——搜索态无此维度，A5/批三口径）。
 func pagesizeHref(d *MailListData, pagesize int) string {
 	if d.IsSearch && d.Keyword != "" {
 		return fmt.Sprintf("/search?keyword=%s&page=1&pagesize=%d", url.QueryEscape(d.Keyword), pagesize)
 	}
-	if d.ActiveFolder > 0 {
-		return fmt.Sprintf("/mails?folder=%d&page=1&pagesize=%d", d.ActiveFolder, pagesize)
+	unread := ""
+	if d.UnreadOnly {
+		unread = "&unread=1"
 	}
-	return fmt.Sprintf("/mails?page=1&pagesize=%d", pagesize)
+	if d.ActiveFolder > 0 {
+		return fmt.Sprintf("/mails?folder=%d&page=1&pagesize=%d%s", d.ActiveFolder, pagesize, unread)
+	}
+	return fmt.Sprintf("/mails?page=1&pagesize=%d%s", pagesize, unread)
 }
 
 // subjectOr 空主题兜底（双语——U16）。

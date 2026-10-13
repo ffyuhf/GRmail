@@ -48,7 +48,7 @@ func (s *Server) mailsBatchPOST(c *gin.Context) {
 	idsRaw := c.PostFormArray("ids")
 	ids := parseIDList(idsRaw)
 	if len(ids) == 0 || action == "" {
-		c.Status(http.StatusBadRequest)
+		s.fragError(c, http.StatusBadRequest, "frag.errInvalid") // B9（批四）：空体改双态
 		return
 	}
 	ctx := c.Request.Context()
@@ -79,11 +79,11 @@ func (s *Server) mailsBatchPOST(c *gin.Context) {
 		// 对齐（原读隐藏域 "folder" 恒为当前文件夹，移动恒无效；SRS FR-013 判定项⑬）。
 		folderID, ferr := strconv.ParseInt(c.PostForm("target"), 10, 64)
 		if ferr != nil || folderID <= 0 {
-			c.Status(http.StatusBadRequest)
+			s.fragError(c, http.StatusBadRequest, "frag.errInvalid") // B9（批四）：空体改双态
 			return
 		}
 		if !s.ownsFolder(c, view, folderID) {
-			c.Status(http.StatusForbidden) // 跨账号 folder 防线
+			s.fragError(c, http.StatusForbidden, "frag.errDenied") // B9（批四）：跨账号 folder 防线（呈现双态化，语义不变）
 			return
 		}
 		for _, id := range ids {
@@ -98,11 +98,11 @@ func (s *Server) mailsBatchPOST(c *gin.Context) {
 		}
 	case batchDelete:
 		if serr := s.batchDelete(c, view, ids); serr != nil {
-			c.Status(http.StatusInternalServerError)
+			s.fragError(c, http.StatusInternalServerError, "frag.errServer") // B9（批四）：空体改双态
 			return
 		}
 	default:
-		c.Status(http.StatusBadRequest)
+		s.fragError(c, http.StatusBadRequest, "frag.errInvalid") // B9（批四）：空体改双态
 		return
 	}
 
@@ -212,11 +212,11 @@ func (s *Server) folderRenamePOST(c *gin.Context) {
 	}
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || id <= 0 {
-		c.Status(http.StatusBadRequest)
+		s.fragError(c, http.StatusBadRequest, "frag.errInvalid") // B9（批四）：空体改双态
 		return
 	}
 	if !s.ownsFolder(c, view, id) {
-		c.Status(http.StatusForbidden)
+		s.fragError(c, http.StatusForbidden, "frag.errDenied") // B9（批四）：空体改双态
 		return
 	}
 	name := strings.TrimSpace(c.PostForm("name"))
@@ -242,11 +242,11 @@ func (s *Server) folderDeletePOST(c *gin.Context) {
 	}
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || id <= 0 {
-		c.Status(http.StatusBadRequest)
+		s.fragError(c, http.StatusBadRequest, "frag.errInvalid") // B9（批四）：空体改双态
 		return
 	}
 	if !s.ownsFolder(c, view, id) {
-		c.Status(http.StatusForbidden)
+		s.fragError(c, http.StatusForbidden, "frag.errDenied") // B9（批四）：空体改双态
 		return
 	}
 	if err = s.accounts.DeleteFolder(c.Request.Context(), id); err != nil {

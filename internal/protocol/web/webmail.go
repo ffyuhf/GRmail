@@ -145,18 +145,12 @@ func (s *Server) loadMailListData(c *gin.Context, view *mailboxView, p listParam
 		}
 	}
 
-	if isSearch {
-		items, total, serr := s.messages.Search(ctx, storage.SearchQuery{
-			MailboxID: view.MailboxID, Keyword: keyword,
-			Limit: int32(p.Pagesize), Offset: int32((p.Page - 1) * p.Pagesize),
-		})
-		if serr != nil {
-			sessLogger(c).Error("搜索失败", "error", serr)
-			s.fragError(c, http.StatusInternalServerError, "frag.errServer")
-			return nil
-		}
-		appendItems(items, total)
-	} else {
+	// B3/E-1-A（批四——G2 候选 E-1-A 裁决 2026-10-13 04:27:33）：越界页码服务端钳制
+	// 末页。查询闭包化（文件夹解析/侧栏高亮先行一次），首查后 Page>PageCount 且
+	// Total>0 时钳制 Page=PageCount 重查一次（仅越界请求付出一次重查；URL 保留原页码、
+	// 内容呈现末页——原越界页码空集误报「此文件夹暂无邮件」且无出口的缺陷态收口；
+	// Total=0 空文件夹走既有普通空态渲染）。
+	if !isSearch {
 		folderID, ferr := s.resolveFolderID(c, folders, p.FolderID)
 		if ferr != nil {
 			return nil
@@ -165,22 +159,48 @@ func (s *Server) loadMailListData(c *gin.Context, view *mailboxView, p listParam
 		for i := range data.Folders {
 			data.Folders[i].Active = data.Folders[i].ID == folderID
 		}
+	}
+	query := func(page int) bool {
+		data.Items = data.Items[:0] // 钳制重查前清空（防首查结果残留追加）
+		offset := int32((page - 1) * p.Pagesize)
+		if isSearch {
+			items, total, serr := s.messages.Search(ctx, storage.SearchQuery{
+				MailboxID: view.MailboxID, Keyword: keyword,
+				Limit: int32(p.Pagesize), Offset: offset,
+			})
+			if serr != nil {
+				sessLogger(c).Error("搜索失败", "error", serr)
+				s.fragError(c, http.StatusInternalServerError, "frag.errServer")
+				return false
+			}
+			appendItems(items, total)
+			return true
+		}
 		items, total, lerr := s.messages.PageList(ctx, storage.ListQuery{
-			MailboxID: view.MailboxID, FolderID: folderID,
-			Limit: int32(p.Pagesize), Offset: int32((p.Page - 1) * p.Pagesize),
+			MailboxID: view.MailboxID, FolderID: data.ActiveFolder,
+			Limit: int32(p.Pagesize), Offset: offset,
 			UnreadOnly: p.UnreadOnly, FlaggedOnly: p.FlaggedOnly, ExcludeDeleted: true,
 		})
 		if lerr != nil {
 			sessLogger(c).Error("列表查询失败", "error", lerr)
 			s.fragError(c, http.StatusInternalServerError, "frag.errServer")
-			return nil
+			return false
 		}
 		appendItems(items, total)
+		return true
 	}
-
+	if !query(p.Page) {
+		return nil
+	}
 	data.PageCount = (int(data.Total) + data.Pagesize - 1) / data.Pagesize
 	if data.PageCount < 1 {
 		data.PageCount = 1
+	}
+	if data.Page > data.PageCount && data.Total > 0 {
+		data.Page = data.PageCount
+		if !query(data.Page) {
+			return nil
+		}
 	}
 	return data
 }

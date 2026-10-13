@@ -293,7 +293,10 @@ func redirectAfterLogin(c *gin.Context) string {
 // 语义：安全方法（GET/HEAD/OPTIONS）放行；匿名 POST（登录端点）放行——主防线为 SameSite=Strict
 // 与限流；已认证会话的非安全请求必须携带表单 token 且与 session.CSRFToken 常数时间相等，
 // 否则 403。
-func csrfProtect() gin.HandlerFunc {
+// B9（批四）：自包级函数方法化（持有 *Server 以消费 fragError 双态）——403 从空体
+// AbortWithStatus 改 fragError（HX=片段错误块/直访=错误整页，批一 A4 设施复用；状态码
+// 保持 403；文案 frag.errDenied 模糊化不暴露内部细节）。
+func (s *Server) csrfProtect() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		switch c.Request.Method {
 		case http.MethodGet, http.MethodHead, http.MethodOptions:
@@ -309,7 +312,8 @@ func csrfProtect() gin.HandlerFunc {
 		if subtle.ConstantTimeCompare([]byte(token), []byte(sess.CSRFToken)) != 1 {
 			logger := observability.LoggerFromContext(c.Request.Context())
 			logger.Warn("CSRF 校验拒绝", "method", c.Request.Method, "path", c.Request.URL.Path)
-			c.AbortWithStatus(http.StatusForbidden)
+			s.fragError(c, http.StatusForbidden, "frag.errDenied") // B9（批四）——双态呈现后显式中止
+			c.Abort()
 			return
 		}
 		c.Next()

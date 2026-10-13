@@ -53,10 +53,14 @@ templ DetailView(lang Lang, msg *storage.Detail, disp *mail.Display, safeBody st
 					{ Tr(lang, "detail.reply") }
 				</a>
 			}
-			<button class="secondary" hx-get={ backHref } hx-push-url="true" hx-target="#mail-list">
+			// C1（批四）：返回按钮 button→a 化——href 整页降级锚+hx-get 增强（沿侧栏 F1/
+			// v1.29.0 D8 a 化先例）：深链整页语境 #mail-list 容器不存在时 htmx 目标缺失
+			// 自动降级默认链接导航（原 button 无 href 点击无反应收口）；列表页语境局部更新
+			// +push-url 行为保持。a.secondary 视觉等价经 app.css 次要按钮选择器组扩展承载。
+			<a class="secondary" href={ backHref } hx-get={ backHref } hx-push-url="true" hx-target="#mail-list">
 				<span class="ic" aria-hidden="true">@templ.Raw(iconBack)</span>
 				{ Tr(lang, "common.back") }
-			</button>
+			</a>
 		</div>
 		<div class="detail-head">
 			<h2>{ subj(lang, msg.Subject) }</h2>

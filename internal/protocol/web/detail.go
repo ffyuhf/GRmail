@@ -73,7 +73,7 @@ func (s *Server) mailDetailGET(c *gin.Context) {
 	raw, err := s.blobs.Read(ctx, msg.BlobKey)
 	if err != nil {
 		sessLogger(c).Error("原始字节读取失败", "error", err)
-		c.Status(http.StatusInternalServerError)
+		s.fragError(c, http.StatusInternalServerError, "frag.errServer") // B9（批四）：空体改双态
 		return
 	}
 	display, err := mail.ParseDisplay(raw)
@@ -260,24 +260,27 @@ func htmlEscapeBody(s string) string {
 // attachmentGET 附件下载（GET /attachments/{id}?part=N 或 ?cid=<...>——二进制响应）。
 // 寻址双形态：part 序号（附件卡片 href）/ CID（HTML 正文 srcdoc 内联改写）。
 func (s *Server) attachmentGET(c *gin.Context) {
+	// B9/E-2-A（批四——G2 候选 E-2-A 裁决 2026-10-13 04:27:33）：附件/正文族错误
+	// 全并入 fragError 双态（人直访得可读错误页；img/iframe 消费者收 HTML 错误体——
+	// 呈现由状态码决定无变化；状态码语义与安全红线零变化）。
 	view, err := s.currentMailboxView(c)
 	if err != nil {
-		c.Status(http.StatusForbidden)
+		s.fragError(c, http.StatusForbidden, "frag.errDenied")
 		return
 	}
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || id <= 0 {
-		c.Status(http.StatusBadRequest)
+		s.fragError(c, http.StatusBadRequest, "frag.errInvalid")
 		return
 	}
 	ctx := c.Request.Context()
 	msg, err := s.messages.GetDetail(ctx, view.MailboxID, id) // 隔离锚：双重限定
 	if errors.Is(err, storage.ErrMessageNotFound) {
-		c.Status(http.StatusNotFound)
+		s.fragError(c, http.StatusNotFound, "frag.errMsgGone")
 		return
 	}
 	if err != nil {
-		c.Status(http.StatusInternalServerError)
+		s.fragError(c, http.StatusInternalServerError, "frag.errServer")
 		return
 	}
 	// 性能批 F7（D11，G2 批准 2026-10-08 10:13:49）：流式句柄替代整封 []byte 驻留——
@@ -286,7 +289,7 @@ func (s *Server) attachmentGET(c *gin.Context) {
 	rc, rerr := s.blobs.Open(ctx, msg.BlobKey)
 	if rerr != nil {
 		sessLogger(c).Error("原始字节打开失败", "error", rerr)
-		c.Status(http.StatusInternalServerError)
+		s.fragError(c, http.StatusInternalServerError, "frag.errServer") // B9/E-2-A（批四）
 		return
 	}
 	defer func() { _ = rc.Close() }()
@@ -297,23 +300,23 @@ func (s *Server) attachmentGET(c *gin.Context) {
 	case c.Query("part") != "":
 		part, perr := strconv.Atoi(c.Query("part"))
 		if perr != nil || part < 0 {
-			c.Status(http.StatusBadRequest)
+			s.fragError(c, http.StatusBadRequest, "frag.errInvalid") // B9/E-2-A（批四）
 			return
 		}
 		filename, contentType, data, err = mail.LoadAttachmentPart(rc, part)
 	case c.Query("cid") != "":
 		filename, contentType, data, err = mail.LoadAttachmentPartByCID(rc, c.Query("cid"))
 	default:
-		c.Status(http.StatusBadRequest)
+		s.fragError(c, http.StatusBadRequest, "frag.errInvalid") // B9/E-2-A（批四）
 		return
 	}
 	if errors.Is(err, mail.ErrPartNotFound) {
-		c.Status(http.StatusNotFound)
+		s.fragError(c, http.StatusNotFound, "frag.errMsgGone") // B9/E-2-A（批四）——part 不存在对齐消息不存在键
 		return
 	}
 	if err != nil {
 		sessLogger(c).Error("附件 part 读取失败", "error", err)
-		c.Status(http.StatusInternalServerError)
+		s.fragError(c, http.StatusInternalServerError, "frag.errServer") // B9/E-2-A（批四）
 		return
 	}
 

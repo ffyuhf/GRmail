@@ -609,7 +609,7 @@ func MailListFragment(d *MailListData) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 48, "<div class=\"tool-bar\"><form hx-get=\"/search\" hx-target=\"#mail-list\" hx-indicator=\"#mail-loading\" action=\"/search\" method=\"get\"><span class=\"search-box\"><span class=\"ic\" aria-hidden=\"true\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 48, "<div class=\"tool-bar\"><!-- B4（批四）：搜索表单补 hx-push-url（批一 D5-A 九锚清单覆盖缺口——第十锚）：\n\t\t\t\t搜索提交后地址栏更新为 /search?keyword=…，刷新/分享保持结果（原停留 /mails\n\t\t\t\t刷新丢结果）；action 降级锚既有保持。 --><form hx-get=\"/search\" hx-target=\"#mail-list\" hx-indicator=\"#mail-loading\" hx-push-url=\"true\" action=\"/search\" method=\"get\"><span class=\"search-box\"><span class=\"ic\" aria-hidden=\"true\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -624,7 +624,7 @@ func MailListFragment(d *MailListData) templ.Component {
 		var templ_7745c5c3_Var30 string
 		templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "mail.searchHint"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 143, Col: 81}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 146, Col: 81}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var30)
 		if templ_7745c5c3_Err != nil {
@@ -637,7 +637,7 @@ func MailListFragment(d *MailListData) templ.Component {
 		var templ_7745c5c3_Var31 string
 		templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "mail.searchHint"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 143, Col: 125}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 146, Col: 125}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var31)
 		if templ_7745c5c3_Err != nil {
@@ -650,7 +650,7 @@ func MailListFragment(d *MailListData) templ.Component {
 		var templ_7745c5c3_Var32 string
 		templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.ResolveAttributeValue(d.Keyword)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 143, Col: 145}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 146, Col: 145}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var32)
 		if templ_7745c5c3_Err != nil {
@@ -663,7 +663,7 @@ func MailListFragment(d *MailListData) templ.Component {
 		var templ_7745c5c3_Var33 string
 		templ_7745c5c3_Var33, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "mail.search"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 145, Col: 69}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 148, Col: 69}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var33))
 		if templ_7745c5c3_Err != nil {
@@ -682,7 +682,7 @@ func MailListFragment(d *MailListData) templ.Component {
 				var templ_7745c5c3_Var34 templ.SafeURL
 				templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.JoinURLErrs(fmt.Sprintf("/mails?folder=%d&unread=0&page=1&pagesize=%d", d.ActiveFolder, d.Pagesize))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 154, Col: 122}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 157, Col: 122}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var34))
 				if templ_7745c5c3_Err != nil {
@@ -695,7 +695,7 @@ func MailListFragment(d *MailListData) templ.Component {
 				var templ_7745c5c3_Var35 string
 				templ_7745c5c3_Var35, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf("/mails?folder=%d&unread=0&page=1&pagesize=%d", d.ActiveFolder, d.Pagesize))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 155, Col: 102}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 158, Col: 102}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var35)
 				if templ_7745c5c3_Err != nil {
@@ -708,7 +708,7 @@ func MailListFragment(d *MailListData) templ.Component {
 				var templ_7745c5c3_Var36 string
 				templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "mail.clearUnread"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 157, Col: 88}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 160, Col: 88}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var36))
 				if templ_7745c5c3_Err != nil {
@@ -726,7 +726,7 @@ func MailListFragment(d *MailListData) templ.Component {
 				var templ_7745c5c3_Var37 templ.SafeURL
 				templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.JoinURLErrs(fmt.Sprintf("/mails?folder=%d&unread=1&page=1&pagesize=%d", d.ActiveFolder, d.Pagesize))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 159, Col: 122}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 162, Col: 122}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var37))
 				if templ_7745c5c3_Err != nil {
@@ -739,7 +739,7 @@ func MailListFragment(d *MailListData) templ.Component {
 				var templ_7745c5c3_Var38 string
 				templ_7745c5c3_Var38, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf("/mails?folder=%d&unread=1&page=1&pagesize=%d", d.ActiveFolder, d.Pagesize))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 160, Col: 102}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 163, Col: 102}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var38)
 				if templ_7745c5c3_Err != nil {
@@ -752,7 +752,7 @@ func MailListFragment(d *MailListData) templ.Component {
 				var templ_7745c5c3_Var39 string
 				templ_7745c5c3_Var39, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "mail.unreadOnly"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 162, Col: 87}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 165, Col: 87}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var39))
 				if templ_7745c5c3_Err != nil {
@@ -771,7 +771,7 @@ func MailListFragment(d *MailListData) templ.Component {
 		var templ_7745c5c3_Var40 string
 		templ_7745c5c3_Var40, templ_7745c5c3_Err = templ.JoinStringErrs(Trf(lang, "mail.totalFmt", d.Total))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 166, Col: 65}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 169, Col: 65}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var40))
 		if templ_7745c5c3_Err != nil {
@@ -789,7 +789,7 @@ func MailListFragment(d *MailListData) templ.Component {
 			var templ_7745c5c3_Var41 templ.SafeURL
 			templ_7745c5c3_Var41, templ_7745c5c3_Err = templ.JoinURLErrs(fmt.Sprintf("/mails?page=1&pagesize=%d", d.Pagesize))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 172, Col: 86}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 175, Col: 86}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var41))
 			if templ_7745c5c3_Err != nil {
@@ -802,7 +802,7 @@ func MailListFragment(d *MailListData) templ.Component {
 			var templ_7745c5c3_Var42 string
 			templ_7745c5c3_Var42, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf("/mails?page=1&pagesize=%d", d.Pagesize))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 173, Col: 66}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 176, Col: 66}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var42)
 			if templ_7745c5c3_Err != nil {
@@ -815,7 +815,7 @@ func MailListFragment(d *MailListData) templ.Component {
 			var templ_7745c5c3_Var43 string
 			templ_7745c5c3_Var43, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "mail.exitSearch"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 175, Col: 57}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 178, Col: 57}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var43))
 			if templ_7745c5c3_Err != nil {
@@ -833,7 +833,7 @@ func MailListFragment(d *MailListData) templ.Component {
 		var templ_7745c5c3_Var44 string
 		templ_7745c5c3_Var44, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "mail.selectedFmt"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 179, Col: 66}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 182, Col: 66}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var44)
 		if templ_7745c5c3_Err != nil {
@@ -846,7 +846,7 @@ func MailListFragment(d *MailListData) templ.Component {
 		var templ_7745c5c3_Var45 string
 		templ_7745c5c3_Var45, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "mail.confirmBatchDelete"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 181, Col: 61}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 184, Col: 61}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var45)
 		if templ_7745c5c3_Err != nil {
@@ -859,7 +859,7 @@ func MailListFragment(d *MailListData) templ.Component {
 		var templ_7745c5c3_Var46 string
 		templ_7745c5c3_Var46, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "mail.confirmMoveTrash"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 182, Col: 63}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 185, Col: 63}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var46)
 		if templ_7745c5c3_Err != nil {
@@ -872,7 +872,7 @@ func MailListFragment(d *MailListData) templ.Component {
 		var templ_7745c5c3_Var47 string
 		templ_7745c5c3_Var47, templ_7745c5c3_Err = templ.ResolveAttributeValue(d.CSRF)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 183, Col: 57}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 186, Col: 57}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var47)
 		if templ_7745c5c3_Err != nil {
@@ -885,7 +885,7 @@ func MailListFragment(d *MailListData) templ.Component {
 		var templ_7745c5c3_Var48 string
 		templ_7745c5c3_Var48, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "mail.selectAll"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 184, Col: 89}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 187, Col: 89}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var48))
 		if templ_7745c5c3_Err != nil {
@@ -898,7 +898,7 @@ func MailListFragment(d *MailListData) templ.Component {
 		var templ_7745c5c3_Var49 string
 		templ_7745c5c3_Var49, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "common.execute"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 186, Col: 80}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 189, Col: 80}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var49)
 		if templ_7745c5c3_Err != nil {
@@ -911,7 +911,7 @@ func MailListFragment(d *MailListData) templ.Component {
 		var templ_7745c5c3_Var50 string
 		templ_7745c5c3_Var50, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "mail.markRead"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 187, Col: 48}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 190, Col: 48}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var50)
 		if templ_7745c5c3_Err != nil {
@@ -924,7 +924,7 @@ func MailListFragment(d *MailListData) templ.Component {
 		var templ_7745c5c3_Var51 string
 		templ_7745c5c3_Var51, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "mail.markRead"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 188, Col: 59}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 191, Col: 59}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var51))
 		if templ_7745c5c3_Err != nil {
@@ -937,7 +937,7 @@ func MailListFragment(d *MailListData) templ.Component {
 		var templ_7745c5c3_Var52 string
 		templ_7745c5c3_Var52, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "mail.markUnread"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 189, Col: 63}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 192, Col: 63}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var52))
 		if templ_7745c5c3_Err != nil {
@@ -950,7 +950,7 @@ func MailListFragment(d *MailListData) templ.Component {
 		var templ_7745c5c3_Var53 string
 		templ_7745c5c3_Var53, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "mail.addFlag"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 190, Col: 58}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 193, Col: 58}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var53))
 		if templ_7745c5c3_Err != nil {
@@ -963,7 +963,7 @@ func MailListFragment(d *MailListData) templ.Component {
 		var templ_7745c5c3_Var54 string
 		templ_7745c5c3_Var54, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "mail.removeFlag"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 191, Col: 63}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 194, Col: 63}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var54))
 		if templ_7745c5c3_Err != nil {
@@ -976,7 +976,7 @@ func MailListFragment(d *MailListData) templ.Component {
 		var templ_7745c5c3_Var55 string
 		templ_7745c5c3_Var55, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "mail.moveTo"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 193, Col: 46}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 196, Col: 46}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var55)
 		if templ_7745c5c3_Err != nil {
@@ -989,7 +989,7 @@ func MailListFragment(d *MailListData) templ.Component {
 		var templ_7745c5c3_Var56 string
 		templ_7745c5c3_Var56, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "mail.moveTo"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 194, Col: 52}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 197, Col: 52}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var56))
 		if templ_7745c5c3_Err != nil {
@@ -1002,7 +1002,7 @@ func MailListFragment(d *MailListData) templ.Component {
 		var templ_7745c5c3_Var57 string
 		templ_7745c5c3_Var57, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "common.delete"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 196, Col: 48}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 199, Col: 48}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var57)
 		if templ_7745c5c3_Err != nil {
@@ -1015,7 +1015,7 @@ func MailListFragment(d *MailListData) templ.Component {
 		var templ_7745c5c3_Var58 string
 		templ_7745c5c3_Var58, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "common.delete"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 197, Col: 56}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 200, Col: 56}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var58))
 		if templ_7745c5c3_Err != nil {
@@ -1033,7 +1033,7 @@ func MailListFragment(d *MailListData) templ.Component {
 			var templ_7745c5c3_Var59 string
 			templ_7745c5c3_Var59, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "mail.moveTo"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 201, Col: 78}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 204, Col: 78}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var59)
 			if templ_7745c5c3_Err != nil {
@@ -1052,7 +1052,7 @@ func MailListFragment(d *MailListData) templ.Component {
 					var templ_7745c5c3_Var60 string
 					templ_7745c5c3_Var60, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf("%d", f.ID))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 204, Col: 47}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 207, Col: 47}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var60)
 					if templ_7745c5c3_Err != nil {
@@ -1065,7 +1065,7 @@ func MailListFragment(d *MailListData) templ.Component {
 					var templ_7745c5c3_Var61 string
 					templ_7745c5c3_Var61, templ_7745c5c3_Err = templ.ResolveAttributeValue(f.Kind)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 204, Col: 68}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 207, Col: 68}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var61)
 					if templ_7745c5c3_Err != nil {
@@ -1078,7 +1078,7 @@ func MailListFragment(d *MailListData) templ.Component {
 					var templ_7745c5c3_Var62 string
 					templ_7745c5c3_Var62, templ_7745c5c3_Err = templ.JoinStringErrs(folderDisplayName(lang, f.Kind, f.Name))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 204, Col: 112}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 207, Col: 112}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var62))
 					if templ_7745c5c3_Err != nil {
@@ -1102,7 +1102,7 @@ func MailListFragment(d *MailListData) templ.Component {
 		var templ_7745c5c3_Var63 string
 		templ_7745c5c3_Var63, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "common.execute"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 209, Col: 77}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 212, Col: 77}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var63))
 		if templ_7745c5c3_Err != nil {
@@ -1125,7 +1125,7 @@ func MailListFragment(d *MailListData) templ.Component {
 				var templ_7745c5c3_Var64 string
 				templ_7745c5c3_Var64, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "mail.noResultTitle"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 216, Col: 41}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 219, Col: 41}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var64))
 				if templ_7745c5c3_Err != nil {
@@ -1138,7 +1138,7 @@ func MailListFragment(d *MailListData) templ.Component {
 				var templ_7745c5c3_Var65 string
 				templ_7745c5c3_Var65, templ_7745c5c3_Err = templ.JoinStringErrs(Trf(lang, "mail.noMatchFmt", d.Keyword))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 217, Col: 49}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 220, Col: 49}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var65))
 				if templ_7745c5c3_Err != nil {
@@ -1156,7 +1156,7 @@ func MailListFragment(d *MailListData) templ.Component {
 				var templ_7745c5c3_Var66 string
 				templ_7745c5c3_Var66, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "mail.noResultTitle"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 221, Col: 41}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 224, Col: 41}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var66))
 				if templ_7745c5c3_Err != nil {
@@ -1169,7 +1169,7 @@ func MailListFragment(d *MailListData) templ.Component {
 				var templ_7745c5c3_Var67 string
 				templ_7745c5c3_Var67, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "mail.emptyUnread"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 222, Col: 38}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 225, Col: 38}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var67))
 				if templ_7745c5c3_Err != nil {
@@ -1182,7 +1182,7 @@ func MailListFragment(d *MailListData) templ.Component {
 				var templ_7745c5c3_Var68 templ.SafeURL
 				templ_7745c5c3_Var68, templ_7745c5c3_Err = templ.JoinURLErrs(fmt.Sprintf("/mails?folder=%d&unread=0&page=1&pagesize=%d", d.ActiveFolder, d.Pagesize))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 223, Col: 122}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 226, Col: 122}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var68))
 				if templ_7745c5c3_Err != nil {
@@ -1195,7 +1195,7 @@ func MailListFragment(d *MailListData) templ.Component {
 				var templ_7745c5c3_Var69 string
 				templ_7745c5c3_Var69, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "mail.backInbox"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 223, Col: 153}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 226, Col: 153}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var69))
 				if templ_7745c5c3_Err != nil {
@@ -1213,7 +1213,7 @@ func MailListFragment(d *MailListData) templ.Component {
 				var templ_7745c5c3_Var70 string
 				templ_7745c5c3_Var70, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "mail.emptyTitle"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 225, Col: 38}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 228, Col: 38}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var70))
 				if templ_7745c5c3_Err != nil {
@@ -1226,7 +1226,7 @@ func MailListFragment(d *MailListData) templ.Component {
 				var templ_7745c5c3_Var71 string
 				templ_7745c5c3_Var71, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "mail.emptyFolder"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 226, Col: 38}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 229, Col: 38}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var71))
 				if templ_7745c5c3_Err != nil {
@@ -1249,7 +1249,7 @@ func MailListFragment(d *MailListData) templ.Component {
 			var templ_7745c5c3_Var72 string
 			templ_7745c5c3_Var72, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "common.selectAllCol"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 233, Col: 81}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 236, Col: 81}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var72))
 			if templ_7745c5c3_Err != nil {
@@ -1262,7 +1262,7 @@ func MailListFragment(d *MailListData) templ.Component {
 			var templ_7745c5c3_Var73 string
 			templ_7745c5c3_Var73, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "mail.colStatus"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 233, Col: 139}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 236, Col: 139}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var73))
 			if templ_7745c5c3_Err != nil {
@@ -1275,7 +1275,7 @@ func MailListFragment(d *MailListData) templ.Component {
 			var templ_7745c5c3_Var74 string
 			templ_7745c5c3_Var74, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "mail.colSubject"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 233, Col: 191}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 236, Col: 191}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var74))
 			if templ_7745c5c3_Err != nil {
@@ -1288,7 +1288,7 @@ func MailListFragment(d *MailListData) templ.Component {
 			var templ_7745c5c3_Var75 string
 			templ_7745c5c3_Var75, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "mail.colFrom"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 233, Col: 240}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 236, Col: 240}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var75))
 			if templ_7745c5c3_Err != nil {
@@ -1301,7 +1301,7 @@ func MailListFragment(d *MailListData) templ.Component {
 			var templ_7745c5c3_Var76 string
 			templ_7745c5c3_Var76, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "mail.colTime"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 233, Col: 289}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 236, Col: 289}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var76))
 			if templ_7745c5c3_Err != nil {
@@ -1337,7 +1337,7 @@ func MailListFragment(d *MailListData) templ.Component {
 				var templ_7745c5c3_Var79 string
 				templ_7745c5c3_Var79, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf("%d", m.ID))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 238, Col: 93}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 241, Col: 93}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var79)
 				if templ_7745c5c3_Err != nil {
@@ -1350,7 +1350,7 @@ func MailListFragment(d *MailListData) templ.Component {
 				var templ_7745c5c3_Var80 string
 				templ_7745c5c3_Var80, templ_7745c5c3_Err = templ.ResolveAttributeValue(Trf(lang, "mail.selRowFmt", subjectOr(lang, m.Subject)))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 238, Col: 182}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 241, Col: 182}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var80)
 				if templ_7745c5c3_Err != nil {
@@ -1368,7 +1368,7 @@ func MailListFragment(d *MailListData) templ.Component {
 					var templ_7745c5c3_Var81 string
 					templ_7745c5c3_Var81, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "mail.flagged"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 241, Col: 61}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 244, Col: 61}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var81)
 					if templ_7745c5c3_Err != nil {
@@ -1381,7 +1381,7 @@ func MailListFragment(d *MailListData) templ.Component {
 					var templ_7745c5c3_Var82 string
 					templ_7745c5c3_Var82, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "mail.flagged"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 241, Col: 112}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 244, Col: 112}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var82)
 					if templ_7745c5c3_Err != nil {
@@ -1408,7 +1408,7 @@ func MailListFragment(d *MailListData) templ.Component {
 					var templ_7745c5c3_Var83 string
 					templ_7745c5c3_Var83, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "mail.unreadDot"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 244, Col: 62}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 247, Col: 62}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var83)
 					if templ_7745c5c3_Err != nil {
@@ -1421,7 +1421,7 @@ func MailListFragment(d *MailListData) templ.Component {
 					var templ_7745c5c3_Var84 string
 					templ_7745c5c3_Var84, templ_7745c5c3_Err = templ.ResolveAttributeValue(Tr(lang, "mail.unreadDot"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 244, Col: 115}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 247, Col: 115}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var84)
 					if templ_7745c5c3_Err != nil {
@@ -1439,7 +1439,7 @@ func MailListFragment(d *MailListData) templ.Component {
 				var templ_7745c5c3_Var85 templ.SafeURL
 				templ_7745c5c3_Var85, templ_7745c5c3_Err = templ.JoinURLErrs(fmt.Sprintf("/mails/%d", m.ID))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 247, Col: 71}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 250, Col: 71}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var85))
 				if templ_7745c5c3_Err != nil {
@@ -1452,7 +1452,7 @@ func MailListFragment(d *MailListData) templ.Component {
 				var templ_7745c5c3_Var86 string
 				templ_7745c5c3_Var86, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf("/mails/%d", m.ID))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 247, Col: 113}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 250, Col: 113}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var86)
 				if templ_7745c5c3_Err != nil {
@@ -1465,7 +1465,7 @@ func MailListFragment(d *MailListData) templ.Component {
 				var templ_7745c5c3_Var87 string
 				templ_7745c5c3_Var87, templ_7745c5c3_Err = templ.ResolveAttributeValue(subjectOr(lang, m.Subject))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 247, Col: 192}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 250, Col: 192}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var87)
 				if templ_7745c5c3_Err != nil {
@@ -1478,7 +1478,7 @@ func MailListFragment(d *MailListData) templ.Component {
 				var templ_7745c5c3_Var88 string
 				templ_7745c5c3_Var88, templ_7745c5c3_Err = templ.JoinStringErrs(subjectOr(lang, m.Subject))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 247, Col: 223}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 250, Col: 223}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var88))
 				if templ_7745c5c3_Err != nil {
@@ -1491,7 +1491,7 @@ func MailListFragment(d *MailListData) templ.Component {
 				var templ_7745c5c3_Var89 string
 				templ_7745c5c3_Var89, templ_7745c5c3_Err = templ.ResolveAttributeValue(m.FromAddr)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 248, Col: 55}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 251, Col: 55}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var89)
 				if templ_7745c5c3_Err != nil {
@@ -1504,7 +1504,7 @@ func MailListFragment(d *MailListData) templ.Component {
 				var templ_7745c5c3_Var90 string
 				templ_7745c5c3_Var90, templ_7745c5c3_Err = templ.JoinStringErrs(m.FromAddr)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 248, Col: 70}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 251, Col: 70}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var90))
 				if templ_7745c5c3_Err != nil {
@@ -1517,7 +1517,7 @@ func MailListFragment(d *MailListData) templ.Component {
 				var templ_7745c5c3_Var91 string
 				templ_7745c5c3_Var91, templ_7745c5c3_Err = templ.ResolveAttributeValue(m.SentAtFull)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 249, Col: 56}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 252, Col: 56}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var91)
 				if templ_7745c5c3_Err != nil {
@@ -1530,7 +1530,7 @@ func MailListFragment(d *MailListData) templ.Component {
 				var templ_7745c5c3_Var92 string
 				templ_7745c5c3_Var92, templ_7745c5c3_Err = templ.JoinStringErrs(m.SentAt)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 249, Col: 69}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 252, Col: 69}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var92))
 				if templ_7745c5c3_Err != nil {
@@ -1553,7 +1553,7 @@ func MailListFragment(d *MailListData) templ.Component {
 				var templ_7745c5c3_Var93 templ.SafeURL
 				templ_7745c5c3_Var93, templ_7745c5c3_Err = templ.JoinURLErrs(pageHref(d, d.Page-1))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 257, Col: 36}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 260, Col: 36}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var93))
 				if templ_7745c5c3_Err != nil {
@@ -1566,7 +1566,7 @@ func MailListFragment(d *MailListData) templ.Component {
 				var templ_7745c5c3_Var94 string
 				templ_7745c5c3_Var94, templ_7745c5c3_Err = templ.ResolveAttributeValue(pageHref(d, d.Page-1))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 257, Col: 69}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 260, Col: 69}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var94)
 				if templ_7745c5c3_Err != nil {
@@ -1579,7 +1579,7 @@ func MailListFragment(d *MailListData) templ.Component {
 				var templ_7745c5c3_Var95 string
 				templ_7745c5c3_Var95, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "mail.prevPage"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 257, Col: 170}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 260, Col: 170}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var95))
 				if templ_7745c5c3_Err != nil {
@@ -1597,7 +1597,7 @@ func MailListFragment(d *MailListData) templ.Component {
 			var templ_7745c5c3_Var96 string
 			templ_7745c5c3_Var96, templ_7745c5c3_Err = templ.JoinStringErrs(Trf(lang, "mail.pageFmt", d.Page, d.PageCount))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 259, Col: 78}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 262, Col: 78}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var96))
 			if templ_7745c5c3_Err != nil {
@@ -1615,7 +1615,7 @@ func MailListFragment(d *MailListData) templ.Component {
 				var templ_7745c5c3_Var97 templ.SafeURL
 				templ_7745c5c3_Var97, templ_7745c5c3_Err = templ.JoinURLErrs(pageHref(d, d.Page+1))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 261, Col: 36}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 264, Col: 36}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var97))
 				if templ_7745c5c3_Err != nil {
@@ -1628,7 +1628,7 @@ func MailListFragment(d *MailListData) templ.Component {
 				var templ_7745c5c3_Var98 string
 				templ_7745c5c3_Var98, templ_7745c5c3_Err = templ.ResolveAttributeValue(pageHref(d, d.Page+1))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 261, Col: 69}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 264, Col: 69}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var98)
 				if templ_7745c5c3_Err != nil {
@@ -1641,7 +1641,7 @@ func MailListFragment(d *MailListData) templ.Component {
 				var templ_7745c5c3_Var99 string
 				templ_7745c5c3_Var99, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "mail.nextPage"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 261, Col: 170}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 264, Col: 170}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var99))
 				if templ_7745c5c3_Err != nil {
@@ -1659,7 +1659,7 @@ func MailListFragment(d *MailListData) templ.Component {
 			var templ_7745c5c3_Var100 string
 			templ_7745c5c3_Var100, templ_7745c5c3_Err = templ.JoinStringErrs(Tr(lang, "mail.pagesizeSelect"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 263, Col: 60}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 266, Col: 60}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var100))
 			if templ_7745c5c3_Err != nil {
@@ -1670,38 +1670,42 @@ func MailListFragment(d *MailListData) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			for _, n := range []int{15, 25, 50, 100} {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 145, "   ")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
 				var templ_7745c5c3_Var101 = []any{templ.KV("active", n == d.Pagesize)}
 				templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var101...)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 145, "<a href=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 146, "<a href=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var102 templ.SafeURL
 				templ_7745c5c3_Var102, templ_7745c5c3_Err = templ.JoinURLErrs(pagesizeHref(d, n))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 265, Col: 34}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 271, Col: 34}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var102))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 146, "\" hx-get=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 147, "\" hx-get=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var103 string
 				templ_7745c5c3_Var103, templ_7745c5c3_Err = templ.ResolveAttributeValue(pagesizeHref(d, n))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 265, Col: 64}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 271, Col: 64}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var103)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 147, "\" hx-push-url=\"true\" hx-target=\"#mail-list\" class=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 148, "\" hx-push-url=\"true\" hx-target=\"#mail-list\" class=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -1714,43 +1718,40 @@ func MailListFragment(d *MailListData) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 148, "\" aria-current=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 149, "\"")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				if n == d.Pagesize {
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 150, " aria-current=\"page\"")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 151, ">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var105 string
-				templ_7745c5c3_Var105, templ_7745c5c3_Err = templ.ResolveAttributeValue(templ.KV("page", n == d.Pagesize))
+				templ_7745c5c3_Var105, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d", n))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 265, Col: 203}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 275, Col: 29}
 				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var105)
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 149, "\">")
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var105))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var106 string
-				templ_7745c5c3_Var106, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d", n))
-				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/templates/mail_list.templ`, Line: 265, Col: 228}
-				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var106))
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 150, "</a>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 152, "</a>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 151, "</span></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 153, "</span></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 152, "</div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 154, "</div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1774,15 +1775,21 @@ func pageHref(d *MailListData, page int) string {
 	return href
 }
 
-// pagesizeHref 每页条数切换链接（G12——切换重置回第 1 页；纯链接零 JS；组D：keyword 编码同 pageHref）。
+// pagesizeHref 每页条数切换链接（G12——切换重置回第 1 页；纯链接零 JS；组D：keyword 编码同 pageHref；
+// B2（批四）：非搜索分支补 unread 条件——未读筛选下切换每页条数保持筛选（原三分支均
+// 丢失回全量；与 pageHref 同语义：搜索分支不带 unread——搜索态无此维度，A5/批三口径）。
 func pagesizeHref(d *MailListData, pagesize int) string {
 	if d.IsSearch && d.Keyword != "" {
 		return fmt.Sprintf("/search?keyword=%s&page=1&pagesize=%d", url.QueryEscape(d.Keyword), pagesize)
 	}
-	if d.ActiveFolder > 0 {
-		return fmt.Sprintf("/mails?folder=%d&page=1&pagesize=%d", d.ActiveFolder, pagesize)
+	unread := ""
+	if d.UnreadOnly {
+		unread = "&unread=1"
 	}
-	return fmt.Sprintf("/mails?page=1&pagesize=%d", pagesize)
+	if d.ActiveFolder > 0 {
+		return fmt.Sprintf("/mails?folder=%d&page=1&pagesize=%d%s", d.ActiveFolder, pagesize, unread)
+	}
+	return fmt.Sprintf("/mails?page=1&pagesize=%d%s", pagesize, unread)
 }
 
 // subjectOr 空主题兜底（双语——U16）。

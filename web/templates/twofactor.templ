@@ -51,9 +51,11 @@ templ TwoFactorView(d TwoFactorData) {
 		} else {
 			if d.Pending {
 				<p>{ Tr(d.Lang, "twofactor.qr") }</p>
-				if d.QRDataURI != "" {
-					<span class="qr-box"><img src={ d.QRDataURI } alt="TOTP QR" width="256" height="256"/></span>
-				}
+					if d.QRDataURI != "" {
+						// B14（批四）：alt Tr 化——批二 E5 双侧声明用户侧漏改收口（复用 admin
+						// 侧同一 twofactor.qrAlt 键，读屏播报随界面语言）。
+						<span class="qr-box"><img src={ d.QRDataURI } alt={ Tr(d.Lang, "twofactor.qrAlt") } width="256" height="256"/></span>
+					}
 				<p>{ Tr(d.Lang, "twofactor.secret") }{ colonFor(d.Lang) } <code>{ d.Secret }</code></p>
 				<form method="post" action="/settings/2fa/confirm">
 					<input type="hidden" name="csrf_token" value={ d.CSRF }/>

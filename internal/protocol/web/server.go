@@ -174,7 +174,8 @@ func NewServer(cfg ServerConfig, sessions storage.SessionRepo, users storage.Use
 	// U23：HTTP 请求摘要 debug 中间件（entryMiddleware 后——logid ctx 已建可取；Q2-A 摘要口径）
 	// B-S批 F2（裁决 A 2026-10-09 13:34）：securityHeadersMiddleware 次位注入——
 	// 四安全头全域生效（详情见函数注）
-	s.engine.Use(s.entryMiddleware(), s.securityHeadersMiddleware(), s.httpDebugMiddleware(), gin.Recovery(), s.sessionMiddleware(), csrfProtect(), s.setupGate())
+	// B9（批四）：csrfProtect 方法化挂载（403 空体改 fragError 双态——session.go 注）。
+	s.engine.Use(s.entryMiddleware(), s.securityHeadersMiddleware(), s.httpDebugMiddleware(), gin.Recovery(), s.sessionMiddleware(), s.csrfProtect(), s.setupGate())
 	s.mountRoutes()
 	s.httpSrv = &http.Server{
 		Handler:           s.engine,

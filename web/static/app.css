@@ -274,13 +274,14 @@ button.linklike {
 	min-height: auto; padding: 0 .25rem;
 	text-decoration: underline;
 }
-/* 次要按钮（outlined——描边形态） */
-.btn-secondary, button.secondary {
+/* 次要按钮（outlined——描边形态；C1 批四：选择器组增 a.secondary——详情返回按钮
+ * button→a 化（href 降级锚）后的视觉等价锚〔原 button.secondary 对新元素零覆盖〕） */
+.btn-secondary, button.secondary, a.secondary {
 	background: transparent;
 	color: var(--primary);
 	border: 1px solid var(--border);
 }
-.btn-secondary:hover, button.secondary:hover { background: var(--primary-soft); border-color: var(--primary); }
+.btn-secondary:hover, button.secondary:hover, a.secondary:hover { background: var(--primary-soft); border-color: var(--primary); } /* C1（批四） */
 /* 危险按钮 */
 .btn-danger, button.danger {
 	background: var(--danger);

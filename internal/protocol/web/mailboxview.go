@@ -17,14 +17,17 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"GRmail/internal/storage"
+	"GRmail/web/templates"
 )
 
 // ErrNoMailboxView 当前主体无可用的邮箱视图（admin 且 postmaster 邮箱不存在——部署
 // 引导期场景；提示引导而非 500）。
 var ErrNoMailboxView = errors.New("web: 主体无邮箱视图")
 
-// mailboxLabelMailbox mailbox 主体的通用显示文案（地址反查无契约方法，通用文案零歧义）。
-const mailboxLabelMailbox = "我的邮箱"
+// mailboxLabelMailboxKey mailbox 主体的通用显示文案键（B13 批四：原硬编码中文常量
+// Tr 化——英文界面呈现 "My Mailbox"、中文界面「我的邮箱」零变化；地址反查无契约
+// 方法，通用文案零歧义语义保持）。
+const mailboxLabelMailboxKey = "top.myMailbox"
 
 // mailboxView 主体解析产物（业务 handler 的统一数据定位输入）。
 type mailboxView struct {
@@ -40,7 +43,8 @@ func (s *Server) currentMailboxView(c *gin.Context) (*mailboxView, error) {
 	ctx := c.Request.Context()
 	switch sess.SubjectType {
 	case storage.SubjectTypeMailbox:
-		return &mailboxView{MailboxID: sess.SubjectID, Label: mailboxLabelMailbox, IsAdmin: false}, nil
+		// B13（批四）：Label 经 Tr 按请求语言解析（原硬编码中文——英文界面残留收口）。
+		return &mailboxView{MailboxID: sess.SubjectID, Label: templates.Tr(langOf(c), mailboxLabelMailboxKey), IsAdmin: false}, nil
 	case storage.SubjectTypeAdmin:
 		if s.accounts == nil {
 			return nil, ErrNoMailboxView

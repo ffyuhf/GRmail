@@ -606,6 +606,7 @@ var messages = map[string][2]string{
 	"login.crossAdmin":     {"使用管理员账户登录", "Sign in as administrator"},
 	"login.crossMailbox":   {"使用邮箱账号登录", "Sign in with a mailbox account"},
 	"twofactor.qrAlt":      {"TOTP 绑定二维码", "TOTP binding QR code"},
+	"top.myMailbox":        {"我的邮箱", "My Mailbox"}, // B13（批四）：mailbox 主体顶栏标签 Tr 化新键（原 mailboxview 硬编码中文——zh 键值=原文案零变化）
 	"admin.detID":          {"邮箱 ID", "Mailbox ID"},
 	"admin.det2FA":         {"2FA 状态", "2FA status"},
 	"pw.hintID":            {"pw-hint", "pw-hint"}, // 结构锚（不呈现——G13 aria-describedby 接线键）

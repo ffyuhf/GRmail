@@ -21,7 +21,6 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"GRmail/internal/config"
-	"GRmail/internal/storage"
 	"GRmail/web/templates"
 )
 
@@ -31,15 +30,13 @@ var dkimAlgorithms = map[string]bool{"rsa-sha256": true, "ed25519-sha256": true}
 
 // adminSettingsGET 设置页（GET /admin/settings：四节当前值呈现）。
 func (s *Server) adminSettingsGET(c *gin.Context) {
-	sess, ok := currentSession(c)
-	if !ok || sess.SubjectType != storage.SubjectTypeAdmin {
-		c.Status(http.StatusForbidden)
+	if !s.adminGuard(c) { // B9（批四）：内联 403 空体收口——adminGuard 复用（批二 E1 错误整页）
 		return
 	}
 	cfg := s.cfg.CfgSnapshot
 	if cfg == nil {
 		sessLogger(c).Error("CfgSnapshot 未注入：设置页不可用")
-		c.Status(http.StatusServiceUnavailable)
+		s.errPage(c, http.StatusServiceUnavailable, "err.page503") // B9（批四）：空体改错误整页（沿批二 E1/err.page* 键族先例）
 		return
 	}
 	// F01：保存成功反馈（303 回带 ?saved=1——成功态 notice 分型；Webmail界面精修批次 2026-10-03）
@@ -124,14 +121,12 @@ func tlsrptTXTSuggestion(cfg *config.Config) string {
 
 // adminSettingsPOST 设置保存（POST /admin/settings）：整体校验→原子读改写→303 回显。
 func (s *Server) adminSettingsPOST(c *gin.Context) {
-	sess, ok := currentSession(c)
-	if !ok || sess.SubjectType != storage.SubjectTypeAdmin {
-		c.Status(http.StatusForbidden)
+	if !s.adminGuard(c) { // B9（批四）：内联 403 空体收口——adminGuard 复用（批二 E1 错误整页）
 		return
 	}
 	if s.cfg.CfgSnapshot == nil || s.cfg.SaveConfig == nil {
 		sessLogger(c).Error("配置读写未注入：设置保存不可用")
-		c.Status(http.StatusServiceUnavailable)
+		s.errPage(c, http.StatusServiceUnavailable, "err.page503") // B9（批四）：空体改错误整页
 		return
 	}
 
