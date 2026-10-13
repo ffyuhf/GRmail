@@ -69,26 +69,31 @@ templ AdminMailboxesView(lang Lang, rows []*AdminMailboxRow, errText string, csr
 			</nav>
 			<div class="page-head">
 				<h2>{ Tr(lang, "admin.h2") }（{ fmt.Sprintf("%d", len(rows)) }）</h2>
-				<select id="admin-status-filter" class="filter-input">
+				// C4（批五）：状态筛选/地址过滤补 aria-label（原 placeholder/option 文案弱关联——
+				// 读屏控件名直达；新键 admin.filterStatus/admin.filterAddr）。
+				<select id="admin-status-filter" class="filter-input" aria-label={ Tr(lang, "admin.filterStatus") }>
 					<option value="">{ Tr(lang, "mail.colStatus") }：{ Tr(lang, "admin.filterAll") }</option>
 					<option value="active">{ Tr(lang, "admin.statusActive") }</option>
 					<option value="shadow">{ Tr(lang, "admin.statusShadow") }</option>
 					<option value="disabled">{ Tr(lang, "admin.statusDisabled") }</option>
 				</select>
 				<input type="search" id="admin-filter" class="filter-input"
-					placeholder={ Tr(lang, "admin.searchPh") } autocomplete="off"/>
+					placeholder={ Tr(lang, "admin.searchPh") } aria-label={ Tr(lang, "admin.filterAddr") } autocomplete="off"/>
 			</div>
 			if errText != "" {
 				<p class="error" role="alert">{ errText }</p>
 			}
 			<div class="table-wrap admin-table-wrap">
+				// B11（批五）：th scope=col 补齐+sr-only caption（读屏表头关联与表用途播报——
+				// 视觉零变化；对照 mail_list.templ 既有形态）。
 				<table class="mails admin-mailboxes">
+					<caption class="sr-only">{ Tr(lang, "admin.h2") }</caption>
 					<thead><tr>
-						<th>{ Tr(lang, "admin.colAddr") }</th>
-						<th>{ Tr(lang, "mail.colStatus") }</th>
-						<th>2FA</th>
-						<th>{ Tr(lang, "admin.colCreated") }</th>
-						<th>{ Tr(lang, "admin.colAction") }</th>
+						<th scope="col">{ Tr(lang, "admin.colAddr") }</th>
+						<th scope="col">{ Tr(lang, "mail.colStatus") }</th>
+						<th scope="col">2FA</th>
+						<th scope="col">{ Tr(lang, "admin.colCreated") }</th>
+						<th scope="col">{ Tr(lang, "admin.colAction") }</th>
 					</tr></thead>
 					<tbody id="admin-rows">
 						for _, m := range rows {
@@ -133,12 +138,14 @@ templ AdminMailboxesView(lang Lang, rows []*AdminMailboxRow, errText string, csr
 						}
 					</tbody>
 				</table>
-				// C10（批二）：过滤零行空态（rows 非空但过滤无匹配——grmail.js 计数联动
-				// 显隐 #admin-empty；rows 全空服务端直达呈现）。
+				// C10（批二）+B8（批五）：过滤零行空态（rows 非空但过滤无匹配——grmail.js
+				// grmailApplyAdminFilter 联动显隐 #admin-empty 本批真实落码；rows 全空服务端
+				// 直达呈现）。B8①：空态文案专用键 admin.emptyMailboxes（原错用聚合视图键
+				// admin.aggEmptyTitle——语义错位收口）。
 				if len(rows) == 0 {
-					<div class="empty-state" id="admin-empty"><h3>{ Tr(lang, "mail.emptyTitle") }</h3><p>{ Tr(lang, "admin.aggEmptyTitle") }</p></div>
+					<div class="empty-state" id="admin-empty"><h3>{ Tr(lang, "mail.emptyTitle") }</h3><p>{ Tr(lang, "admin.emptyMailboxes") }</p></div>
 				} else {
-					<div class="empty-state" id="admin-empty" hidden><h3>{ Tr(lang, "mail.emptyTitle") }</h3><p>{ Tr(lang, "admin.aggEmptyTitle") }</p></div>
+					<div class="empty-state" id="admin-empty" hidden><h3>{ Tr(lang, "mail.emptyTitle") }</h3><p>{ Tr(lang, "admin.emptyMailboxes") }</p></div>
 				}
 			</div>
 			<h3>{ Tr(lang, "admin.createMailbox") }</h3>
@@ -151,7 +158,8 @@ templ AdminMailboxesView(lang Lang, rows []*AdminMailboxRow, errText string, csr
 			<h3>{ Tr(lang, "admin.2faSection") }</h3>
 			<form method="post" action="/admin/mailboxes" class="actions">
 				<input type="hidden" name="csrf_token" value={ csrf }/>
-				<input type="text" name="address" required maxlength="320" placeholder={ Tr(lang, "admin.2faAddr") }/>
+				// C4（批五）：2FA 强制策略地址输入补 aria-label（复用既有键——原 placeholder 弱关联）。
+				<input type="text" name="address" required maxlength="320" aria-label={ Tr(lang, "admin.2faAddr") } placeholder={ Tr(lang, "admin.2faAddr") }/>
 				<button class="secondary" type="submit" name="action" value="require2fa">{ Tr(lang, "admin.require2fa") }</button>
 				<button class="secondary" type="submit" name="action" value="unrequire2fa">{ Tr(lang, "admin.unrequire2fa") }</button>
 			</form>
@@ -181,7 +189,9 @@ templ AdminMailboxesView(lang Lang, rows []*AdminMailboxRow, errText string, csr
 // D3（2026-10-05 B 形态）：nav 同 AdminMailboxesView。
 templ AdminUnregisteredView(lang Lang, list []*AdminMailboxRow, csrf string, nav *MailListData) {
 	@AppFrame(lang, Tr(lang, "admin.aggTitle"), Tr(lang, "home.adminKind"), true, csrf, nav) {
-		<div class="main content-page">
+		// B10（批五）：main 地标+id 补齐（skip-link 跳转目标——批二 G1 实施不完整收尾；
+		// 对照 AdminMailboxesView 既有形态）。
+		<main class="main content-page" id="main-content">
 			<nav class="settings-nav" aria-label={ Tr(lang, "settings.navTitle") }>
 				<a href="/admin/settings">{ Tr(lang, "nav.backSettings") }</a>
 			</nav>
@@ -193,8 +203,10 @@ templ AdminUnregisteredView(lang Lang, list []*AdminMailboxRow, csrf string, nav
 				</div>
 			} else {
 				<div class="table-wrap">
+					// B11（批五）：聚合视图表同款 scope+caption。
 					<table class="mails">
-						<thead><tr><th>{ Tr(lang, "admin.colAddr") }</th><th>{ Tr(lang, "mail.colStatus") }</th><th>{ Tr(lang, "admin.aggArchived") }</th></tr></thead>
+						<caption class="sr-only">{ Tr(lang, "admin.aggH2") }</caption>
+						<thead><tr><th scope="col">{ Tr(lang, "admin.colAddr") }</th><th scope="col">{ Tr(lang, "mail.colStatus") }</th><th scope="col">{ Tr(lang, "admin.aggArchived") }</th></tr></thead>
 						<tbody>
 							for _, m := range list {
 								<tr>
@@ -207,6 +219,6 @@ templ AdminUnregisteredView(lang Lang, list []*AdminMailboxRow, csrf string, nav
 					</table>
 				</div>
 			}
-		</div>
+		</main>
+		}
 	}
-}

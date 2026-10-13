@@ -57,6 +57,12 @@
 		root.querySelectorAll(".sel-count").forEach(function (el) {
 			el.textContent = el.getAttribute("data-fmt").replace("%d", String(n));
 		});
+		/* E-4-A（批五——G2 批准 2026-10-13 08:42:57 五组候选全 A）：.batch-active 兜底
+		 * 类——批量条常驻半透明形态下，无 :has 浏览器（Safari≤15.3）经 JS 恢复全交互
+		 * （:has 命中时与 CSS 双通道一致）；事件委托覆盖 HTMX 交换后新列表。 */
+		root.querySelectorAll(".batch-bar").forEach(function (bar) {
+			bar.classList.toggle("batch-active", n > 0);
+		});
 		/* 全选框状态同步（半选态）——仅行变更后的回写（全选框自身事件归 ⑤b） */
 		var allBox = root.querySelector("#batch-form input[name=all]") ||
 			root.querySelector(".tool-bar input[name=all]");
@@ -274,13 +280,20 @@
 	 *     script-src 'self' 配套——原模板 onclick/onchange/oninput 清除） ── */
 
 	/* ⑤a admin 邮箱管理页复合过滤（迁自 admin.templ 内联脚本——G4/D3
-	 *     地址+状态双条件与语义零变化；元素不存在页面零动作） */
+	 * 地址+状态双条件与语义零变化；元素不存在页面零动作）。
+	 * B8②（批五）：C10 联动落码——admin.templ 注释声称的「过滤零行空态显隐
+	 * #admin-empty」自本批真实承载（原 grmail.js 零实现——过滤零行页面空白无反馈）。 */
 	function grmailApplyAdminFilter(q, status) {
+		var anyVisible = false;
 		document.querySelectorAll("#admin-rows tr[data-addr]").forEach(function (r) {
 			var addrOk = r.getAttribute("data-addr").indexOf(q) >= 0;
 			var statusOk = !status || r.getAttribute("data-status") === status;
-			r.style.display = (addrOk && statusOk) ? "" : "none";
+			var show = addrOk && statusOk;
+			r.style.display = show ? "" : "none";
+			if (show) { anyVisible = true; }
 		});
+		var empty = document.getElementById("admin-empty");
+		if (empty) { empty.hidden = anyVisible; }
 	}
 	document.addEventListener("change", function (e) {
 		if (e.target && e.target.id === "admin-status-filter") {
@@ -305,6 +318,62 @@
 			var checked = e.target.checked;
 			document.querySelectorAll("input.mail-id").forEach(function (b) { b.checked = checked; });
 			updateSelCount(document);
+		}
+	});
+
+	/* ── C3（批五）：菜单键盘导航（↑↓/Home/End 项间遍历）与移动端抽屉焦点管理——
+	 *     增强档纯新增（既有外点/ESC 关闭与禁 JS 降级保持；role=menu 键盘模型补齐）。 ── */
+	document.addEventListener("keydown", function (e) {
+		if (e.key !== "ArrowDown" && e.key !== "ArrowUp" && e.key !== "Home" && e.key !== "End") { return; }
+		var host = e.target.closest && e.target.closest("details.menu-host");
+		if (!host || !host.open) { return; }
+		var items = Array.prototype.slice.call(host.querySelectorAll(".menu a, .menu button"));
+		if (!items.length) { return; }
+		var idx = items.indexOf(document.activeElement);
+		e.preventDefault();
+		if (e.key === "Home") { idx = 0; }
+		else if (e.key === "End") { idx = items.length - 1; }
+		else if (e.key === "ArrowDown") { idx = (idx + 1 + items.length) % items.length; }
+		else { idx = (idx - 1 + items.length) % items.length; }
+		items[idx].focus();
+	});
+	/* C3：移动端抽屉 ESC 关闭+焦点返还触发器（沿 F16 焦点恢复先例——键盘关闭路径完整化）。 */
+	document.addEventListener("keydown", function (e) {
+		if (e.key !== "Escape") { return; }
+		var toggle = document.getElementById("nav-toggle");
+		if (!toggle || !toggle.checked) { return; }
+		if (!window.matchMedia("(max-width: 767.98px)").matches) { return; }
+		toggle.checked = false;
+		var label = document.querySelector("label.nav-toggle");
+		if (label) { label.focus(); }
+	});
+	/* C3：开抽屉焦点入抽屉首项（移动视口——焦点随面板转移，读屏/键盘用户不滞留触发器）。 */
+	document.addEventListener("change", function (e) {
+		if (!e.target || e.target.id !== "nav-toggle") { return; }
+		if (!e.target.checked || !window.matchMedia("(max-width: 767.98px)").matches) { return; }
+		var first = document.querySelector(".sidebar .folder-item, .sidebar summary");
+		if (first) { first.focus(); }
+	});
+
+	/* ── D2（批五——干系人指示逐字「D2 回车误发缓解 Ctrl+回车发送 直接回车是换行处理。」
+	 *     2026-10-13 08:42:57 随 G2 批准一体）：写信表单回车语义——①Ctrl/Cmd+Enter 显式
+	 *     触发发送提交；②直接 Enter 于单行输入框 preventDefault 不触发表单隐式提交
+	 *     （单行框换行物理不适用——语义为不提交；Quill 编辑器 contenteditable 不在
+	 *     拦截面，Enter 保持换行默认）。与 E-3-A 草稿按钮 DOM 前置（compose.templ）
+	 *     构成三层防线。 ── */
+	document.addEventListener("keydown", function (e) {
+		if (e.key !== "Enter") { return; }
+		var form = e.target.closest && e.target.closest("#compose-form");
+		if (!form || e.target.tagName === "BUTTON" || e.target.tagName === "A") { return; }
+		if (e.ctrlKey || e.metaKey) {
+			e.preventDefault();
+			var send = form.querySelector('button[name="action"][value="send"]');
+			if (send && !send.disabled) { send.click(); }
+			return;
+		}
+		if (e.target.matches && e.target.matches(
+			'input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="submit"]):not([type="button"])')) {
+			e.preventDefault();
 		}
 	});
 })();

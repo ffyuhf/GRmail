@@ -219,6 +219,12 @@ func (s *Server) mailBodyGET(c *gin.Context) {
 	// 独立 CSP（覆盖 securityHeadersMiddleware 的全域头——gin Header.Set 后设胜出）
 	c.Header("Content-Security-Policy",
 		"default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; media-src 'self'; frame-ancestors 'self'")
+	// C8（批五——G2 批准 2026-10-13 08:42:57 例外修订）：本端点 XFO 覆盖 SAMEORIGIN
+	// （正文 iframe 同源消费通道——旧浏览器〔不支持 CSP frame-ancestors 仅认 XFO〕
+	// 被全域 DENY 拦截的呈现缺陷收口；跨站嵌入仍拒——SAMEORIGIN 语义；现代浏览器
+	// CSP frame-ancestors 'self' 优先行为零变化；全域其余端点 DENY 零变化——B-S 批
+	// F2 修订面经 G2 显式裁决限定本端点与 attachmentGET 两例外）。
+	c.Header("X-Frame-Options", "SAMEORIGIN")
 	c.Data(http.StatusOK, contentType, []byte(body))
 }
 
@@ -333,6 +339,10 @@ func (s *Server) attachmentGET(c *gin.Context) {
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
+	// C8（批五——G2 批准 2026-10-13 08:42:57 例外修订）：附件端点同款 XFO 覆盖
+	// SAMEORIGIN（正文 CID 内联资源与浏览器直嵌消费通道——旧浏览器 XFO 兼容收口；
+	// 全域其余端点 DENY 零变化）。
+	c.Header("X-Frame-Options", "SAMEORIGIN")
 	c.Header("Content-Disposition", disposition+"; filename*=UTF-8''"+url.PathEscape(filename))
 	c.Data(http.StatusOK, contentType, data)
 }

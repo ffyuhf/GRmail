@@ -21,7 +21,8 @@ type SettingsHubData struct {
 templ SettingsHubView(d *SettingsHubData) {
 	{{ lang := NormalizeLang(d.Lang) }}
 	@AppFrame(lang, Tr(lang, "hub.title"), Tr(lang, "home.mailKind"), false, d.CSRFToken, d.Nav) {
-		<div class="main content-page">
+		// B10（批五）：main 地标+id 补齐（skip-link 跳转目标——批二 G1 实施不完整收尾）。
+		<main class="main content-page" id="main-content">
 			<div class="page-head"><h2>{ Tr(lang, "hub.title") }</h2></div>
 			if d.PWChanged {
 				<p class="notice" role="status">{ Tr(lang, "pw.changed") }</p>
@@ -51,6 +52,6 @@ templ SettingsHubView(d *SettingsHubData) {
 					<span class="hub-desc">{ Tr(lang, "hub.mailsDesc") }</span>
 				</a>
 			</div>
-		</div>
+		</main>
 	}
 }

@@ -78,28 +78,36 @@ templ TokensView(lang Lang, list []*storage.ApiToken, newToken string, errText s
 			// D7：Token 一次性明文增复制按钮（grmail.js data-copy 委托）。
 			<div class="page-head"><h2>{ Tr(lang, "tokens.h2List") }</h2></div>
 			<div class="table-wrap">
+				// B11（批五）：th scope=col 补齐+sr-only caption（读屏表头关联与表用途播报——
+				// 视觉零变化；对照 mail_list.templ 既有形态）。
 				<table class="mails">
-					<thead><tr><th>{ Tr(lang, "tokens.colCreate") }</th><th>{ Tr(lang, "tokens.colExp") }</th><th>{ Tr(lang, "tokens.colIP") }</th><th>{ Tr(lang, "tokens.colUsed") }</th><th>{ Tr(lang, "admin.colAction") }</th></tr></thead>
-					<tbody>
-						if len(list) == 0 {
-							<tr><td colspan="5" class="empty-cell">{ Tr(lang, "tokens.empty") }</td></tr>
-						}
-						for _, t := range list {
-							<tr>
-								<td>{ formatTokenTime(t.CreatedAt) }</td>
-								<td>{ formatTokenExpiry(lang, t.ExpiresAt) }</td>
-								<td>{ clientIPOf(lang, t.ClientIP) }</td>
-								<td>{ formatTokenTime(t.LastUsedAt) }</td>
-								<td>
-									<form method="post" action={ "/admin/tokens/" + fmt.Sprintf("%d", t.ID) + "/revoke" } class="inline">
-										<input type="hidden" name="csrf_token" value={ csrf }/>
-										<button class="btn-sm danger" type="submit">{ Tr(lang, "tokens.revoke") }</button>
-									</form>
-								</td>
-							</tr>
-						}
-					</tbody>
+					<caption class="sr-only">{ Tr(lang, "tokens.h2List") }</caption>
+					<thead><tr><th scope="col">{ Tr(lang, "tokens.colCreate") }</th><th scope="col">{ Tr(lang, "tokens.colExp") }</th><th scope="col">{ Tr(lang, "tokens.colIP") }</th><th scope="col">{ Tr(lang, "tokens.colUsed") }</th><th scope="col">{ Tr(lang, "admin.colAction") }</th></tr></thead>
+				<tbody>
+					for _, t := range list {
+						<tr>
+							<td>{ formatTokenTime(t.CreatedAt) }</td>
+							<td>{ formatTokenExpiry(lang, t.ExpiresAt) }</td>
+							<td>{ clientIPOf(lang, t.ClientIP) }</td>
+							<td>{ formatTokenTime(t.LastUsedAt) }</td>
+							<td>
+								<form method="post" action={ "/admin/tokens/" + fmt.Sprintf("%d", t.ID) + "/revoke" } class="inline">
+									<input type="hidden" name="csrf_token" value={ csrf }/>
+									<button class="btn-sm danger" type="submit">{ Tr(lang, "tokens.revoke") }</button>
+								</form>
+							</td>
+						</tr>
+					}
+				</tbody>
 				</table>
+				// C6/E-2-A（批五——G2 批准 2026-10-13 08:42:57 五组候选全 A）：空态归一
+				// empty-state 组件（admin 页同语言——原 empty-cell 表格空行与组件两套并存
+				// 收口；既有键复用零新增）。
+				if len(list) == 0 {
+					<div class="empty-state">
+						<h3>{ Tr(lang, "tokens.empty") }</h3>
+					</div>
+				}
 			</div>
 			<p class="hint">{ Tr(lang, "tokens.progHead") } <code>{ "Authorization: Bearer <Token>" }</code> { Tr(lang, "tokens.progTail") }</p>
 			</main>

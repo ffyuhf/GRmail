@@ -22,7 +22,8 @@ import (
 // 参数：d 2FA 页数据（Label=admin 用户名呈现——admin 主体无邮箱反查语义）。
 templ AdminTwoFactorView(d TwoFactorData) {
 	@AppFrame(d.Lang, Tr(d.Lang, "twofactor.title"), Tr(d.Lang, "home.adminKind"), true, d.CSRF, d.Nav) {
-		<div class="main content-page">
+		// B10（批五）：main 地标+id 补齐（skip-link 跳转目标——批二 G1 实施不完整收尾）。
+		<main class="main content-page" id="main-content">
 		<div class="page-head"><h2>{ Tr(d.Lang, "twofactor.title") }</h2></div>
 		<p>{ Tr(d.Lang, "twofactor.intro") }</p>
 		if d.ErrText != "" {
@@ -70,7 +71,7 @@ templ AdminTwoFactorView(d TwoFactorData) {
 				}
 			</ul>
 		}
-		</div>
+		</main>
 	}
 }
 

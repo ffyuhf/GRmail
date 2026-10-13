@@ -949,6 +949,15 @@ section table, .card table { border-radius: var(--radius-sm); overflow: hidden; 
 }
 .tool-bar a.filter-link:hover { background: var(--hover); color: var(--fg); text-decoration: none; }
 
+/* B6/E-1-A（批五——G2 批准 2026-10-13 08:42:57 五组候选全 A）：列表区视口内滚动容器
+ * ——.list-area 自此为滚动容器（th sticky 的滚动参照恢复：批二 C2 的 overflow:clip 与
+ * hidden 同为非 visible 溢出形态、均不产生滚动容器致 sticky 失效——B6 根因收口）。
+ * 高度=视口减应用栏与上下留量（工具条/分页随列表区滚动；表头吸容器顶——E-1-A 批准
+ * 形态）。作用域仅列表片段容器——admin/tokens/sieve 表零波及（无 .list-area 消费）。 */
+.list-area {
+	max-height: calc(100vh - var(--topbar-h) - 7rem);
+	overflow-y: auto;
+}
 /* 邮件表（table.mails 结构保留——断言锚；行 44px/未读加粗+主色圆点/选中 alpha） */
 /* C3 补齐（批二续接）：列表页邮件表 table-layout:fixed——td.cell-trunc max-width:0
  * 截断依赖固定布局算法（原自动布局下该写法列宽塌陷）；作用域限定 .list-area（邮件
@@ -995,9 +1004,15 @@ table.mails a:hover { color: var(--primary); text-decoration: none; }
 }
 td.status-cell { white-space: nowrap; width: 3.5rem; }
 td.status-cell .flag { margin-right: var(--sp-1); }
-/* 批量上下文条（选中即显——CSS :has 驱动；未选中隐藏不占位） */
+/* 批量上下文条（E-4-A 批五——G2 批准 2026-10-13 08:42:57 五组候选全 A：常驻呈现+JS
+ * 兜底——Safari≤15.3 无 :has 支持时批量条不可见与全选可发现性弱两呈现问题收口）。
+ * 常驻半透明置底（未选中占一行视觉空间——批准面 1.4 已披露接受）；选中态经 :has
+ * （现代浏览器零 JS）与 .batch-active（grmail.js updateSelCount 兜底——无 :has 浏览器）
+ * 双通道恢复全交互。 */
 .batch-bar {
-	display: none;
+	display: flex;
+	opacity: .5;
+	pointer-events: none;
 	align-items: center;
 	gap: var(--sp-2);
 	flex-wrap: wrap;
@@ -1009,7 +1024,8 @@ td.status-cell .flag { margin-right: var(--sp-1); }
 	animation: gr-slide-up var(--dur-fast) var(--ease-out);
 }
 .batch-bar form { margin: 0; flex-direction: row; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
-.list-area:has(.mail-id:checked) .batch-bar { display: flex; }
+.list-area:has(.mail-id:checked) .batch-bar,
+.batch-bar.batch-active { opacity: 1; pointer-events: auto; }
 .batch-bar .sel-count { font-size: var(--text-label); color: var(--primary); font-weight: var(--text-label-weight); white-space: nowrap; }
 
 /* 通用动作条（行内操作组——CSV 区/详情/管理页共用） */
@@ -1166,6 +1182,11 @@ table.mails.admin-mailboxes td form input[type="password"] {
 	flex-wrap: wrap;
 }
 .compose-actions .spacer { flex: 1; }
+/* D2/E-3-A（批五——干系人指示 2026-10-13 08:42:57 逐字「D2 回车误发缓解 Ctrl+回车
+ * 发送 直接回车是换行处理。」+G2 五组候选全 A 草稿前置）：save_draft DOM 序在前
+ * （回车隐式提交兜底命中草稿——误发变误存），发送按钮视觉主位经 flex order 恢复
+ * （视觉主次零变化锚——send 恒显示在先）。 */
+.compose-actions button[name="action"][value="send"] { order: -1; }
 
 /* F25：file 控件令牌化（::file-selector-button 对齐按钮体系——Webmail界面精修批次） */
 input[type="file"]::file-selector-button {
@@ -1345,7 +1366,13 @@ input[type="file"]::file-selector-button:hover { background: var(--primary-soft)
 	.drawer-scrim { display: none; }
 	/* C16（批二）：移动端 .main 圆角缺口（sidebar 浮层布局下左上圆角拼接残留）收口 */
 	.main { border-radius: 0; padding: var(--sp-2); overflow-x: visible; }
-	table.mails { display: block; overflow-x: auto; white-space: nowrap; }
+	/* B5（批五）：撤 table display:block——表格语义恢复（行/列结构与 th 定宽生效——
+	 * 时间列 8rem 恢复可见；批二 C19 收口后残留语义问题根治）；横向滚动改由
+	 * .table-wrap 外层容器承载（admin-table-wrap 同款先例）；white-space:nowrap 同撤
+	 * （cell-trunc ellipsis 截断语义回归）；.list-area 视口内滚动撤销（移动端整页
+	 * 滚动惯例——嵌套滚动反模式规避）。 */
+	.table-wrap { overflow-x: auto; }
+	.list-area { max-height: none; overflow-y: visible; }
 	.card { margin: 4vh auto 0; padding: var(--sp-4); }
 	.tool-bar .search-box input[type="search"] { min-width: 0; width: 100%; }
 	.detail iframe { min-height: 16rem; }

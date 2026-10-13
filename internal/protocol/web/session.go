@@ -153,6 +153,24 @@ func (s *sessionService) issueSession(c *gin.Context, subjectType storage.Subjec
 		HttpOnly: true,
 		SameSite: http.SameSiteStrictMode,
 	})
+	// E-5-A（批五——G2 批准 2026-10-13 08:42:57 五组候选全 A）：登录主体种类记忆
+	// cookie——requireAuth 会话失效落点按主体区分（mailbox→/webmail/login、admin→
+	// /login；无 cookie 场景主体未知回契约缺省 /login 保持）。低敏感呈现偏好态非
+	// 凭据（值仅 admin/mailbox 二值枚举）；Secure 按请求 scheme 动态沿 D4-B 先例
+	// （明文部署可写）；MaxAge 1 年沿 lang cookie 口径。
+	loginKind := "admin"
+	if subjectType == storage.SubjectTypeMailbox {
+		loginKind = "mailbox"
+	}
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     loginKindCookie,
+		Value:    loginKind,
+		Path:     "/",
+		Secure:   c.Request.TLS != nil,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   365 * 24 * 3600,
+	})
 	logger := observability.LoggerFromContext(ctx)
 	logger.Info("会话签发", "log_id", c.GetString(ctxKeyLogID), "session", s.logHashOf(raw),
 		"subject_type", string(subjectType), "subject_id", subjectID)
@@ -239,8 +257,13 @@ func (s *Server) sessionMiddleware() gin.HandlerFunc {
 func requireAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if _, ok := currentSession(c); !ok {
+			// E-5-A（批五——G2 批准 2026-10-13 08:42:57 五组候选全 A）：落点按登录
+			// 主体种类记忆区分（mailbox→/webmail/login/admin 与未知→/login 契约缺省；
+			// 原恒 /login——mailbox 用户超时落错入口须点互链。契约 v1.44.0 3.4 注记
+			// 承载；Bearer 401 纯状态码通道零触及）。
+			redirect := loginRedirectTarget(c)
 			if c.GetHeader("HX-Request") == "true" {
-				c.Header("HX-Redirect", "/login")
+				c.Header("HX-Redirect", redirect)
 				c.AbortWithStatus(http.StatusUnauthorized)
 				return
 			}
@@ -252,12 +275,26 @@ func requireAuth() gin.HandlerFunc {
 				c.SetCookie(loginRedirectCookie, c.Request.URL.Path, 300, "/", "",
 					c.Request.TLS != nil, true) // 5min 窗口 HttpOnly+SameSite=Strict（站内回跳临时态）
 			}
-			c.Redirect(http.StatusFound, "/login")
+			c.Redirect(http.StatusFound, redirect)
 			c.Abort()
 			return
 		}
 		c.Next()
 	}
+}
+
+// loginKindCookie 登录主体种类记忆 cookie 名（E-5-A 批五——issueSession 写入/
+// requireAuth 读取的超时落点区分通道；值域 admin|mailbox 二值枚举）。
+const loginKindCookie = "grmail_login_kind"
+
+// loginRedirectTarget 会话失效落点（E-5-A 批五：按登录主体种类记忆区分——mailbox→
+// /webmail/login、admin/未知/无 cookie→/login 契约缺省保持〔契约 v1.4.0 3.4 原文
+// 「默认重定向入口 /login（主体未知场景）」的批五增量注记承载〕）。
+func loginRedirectTarget(c *gin.Context) string {
+	if v, err := c.Cookie(loginKindCookie); err == nil && v == "mailbox" {
+		return "/webmail/login"
+	}
+	return "/login"
 }
 
 // loginRedirectCookie 登录回跳临时 cookie 名（G6——D15：会话超时 302 登录后回原页）。

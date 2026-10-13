@@ -137,9 +137,11 @@ templ MailListFragment(d *MailListData) {
 			<p class="notice" role="status">{ Tr(lang, "mail.noticedDeleted") }</p>
 		}
 		<div class="tool-bar">
-			<!-- B4（批四）：搜索表单补 hx-push-url（批一 D5-A 九锚清单覆盖缺口——第十锚）：
-				搜索提交后地址栏更新为 /search?keyword=…，刷新/分享保持结果（原停留 /mails
-				刷新丢结果）；action 降级锚既有保持。 -->
+			// B4（批四）：搜索表单补 hx-push-url（批一 D5-A 九锚清单覆盖缺口——第十锚）：
+			// 搜索提交后地址栏更新为 /search?keyword=…，刷新/分享保持结果（原停留 /mails
+			// 刷新丢结果）；action 降级锚既有保持。
+			// D4（批五）：本注释原为 HTML 注释形态（渲染输出至页面源码——英文界面输出
+			// 中文注释），转 Go 注释零输出。
 			<form hx-get="/search" hx-target="#mail-list" hx-indicator="#mail-loading" hx-push-url="true" action="/search" method="get">
 				<span class="search-box">
 					<span class="ic" aria-hidden="true">@templ.Raw(iconSearch)</span>
@@ -147,11 +149,12 @@ templ MailListFragment(d *MailListData) {
 				</span>
 				<button class="secondary" type="submit">{ Tr(lang, "mail.search") }</button>
 			</form>
-			<!-- D2（2026-10-05）：筛选链接 hx-get 局部更新化——原裸 href 整页导航至片段端点
-			 /mails（无布局无 htmx 运行时）致显示错误+后续交互失效；href 保留作降级锚。
-			 A5（批三）：搜索态不渲染未读筛选——搜索态 ActiveFolder 恒零（搜索端点无
-			 folder/unread 维度），原链接拼非法零值 folder 入地址栏（与退出搜索同根因）；
-			 退出搜索为搜索态唯一出口（unread 清零回全量视图）。 -->
+			// D2（2026-10-05）：筛选链接 hx-get 局部更新化——原裸 href 整页导航至片段端点
+			// /mails（无布局无 htmx 运行时）致显示错误+后续交互失效；href 保留作降级锚。
+			// A5（批三）：搜索态不渲染未读筛选——搜索态 ActiveFolder 恒零（搜索端点无
+			// folder/unread 维度），原链接拼非法零值 folder 入地址栏（与退出搜索同根因）；
+			// 退出搜索为搜索态唯一出口（unread 清零回全量视图）。
+			// D4（批五）：本注释原为 HTML 注释形态（渲染输出至页面源码），转 Go 注释零输出。
 			if !d.IsSearch {
 				if d.UnreadOnly {
 					<a class="filter-link" href={ fmt.Sprintf("/mails?folder=%d&unread=0&page=1&pagesize=%d", d.ActiveFolder, d.Pagesize) }
@@ -172,6 +175,7 @@ templ MailListFragment(d *MailListData) {
 				// ActiveFolder（搜索态不解析文件夹恒 0，原链接 folder=0 非法参数入地址栏；
 				// 服务端缺省回退收件箱〔resolveFolderID 既有隔离语义保持〕+unread 缺省
 				// 清零=全量视图语义）。pagesize 保留当前上下文。
+				// D4（批五）：本注释块原含 HTML 注释形态（渲染输出），统一 Go 注释零输出。
 				<a class="filter-link" href={ fmt.Sprintf("/mails?page=1&pagesize=%d", d.Pagesize) }
 					hx-get={ fmt.Sprintf("/mails?page=1&pagesize=%d", d.Pagesize) }
 					hx-push-url="true"

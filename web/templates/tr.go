@@ -542,8 +542,13 @@ var messages = map[string][2]string{
 	"login2fa.stepChip":   {"第二步验证", "Step 2"},
 	"admin.aggEmptyTitle": {"暂无未注册来信", "No unregistered mail"},
 	"sieve.emptyTitle":    {"暂无脚本", "No scripts"},
-	"sieve.backList":      {"返回列表", "Back to list"},
-	"home.goMail":         {"进入邮箱", "Go to mailbox"},
+	// 批五（G2 批准 2026-10-13 08:42:57）：B8① 邮箱列表空态专用键（原错用聚合视图键
+	// admin.aggEmptyTitle——语义错位收口）+C4 admin 过滤控件 aria-label 两键。
+	"admin.emptyMailboxes": {"暂无邮箱（在下方创建第一行开始管理）", "No mailboxes yet (create the first one below to manage)"},
+	"admin.filterStatus":   {"按状态筛选", "Filter by status"},
+	"admin.filterAddr":     {"按地址筛选", "Filter by address"},
+	"sieve.backList":       {"返回列表", "Back to list"},
+	"home.goMail":          {"进入邮箱", "Go to mailbox"},
 	// ── 侧栏交互缺陷修复批次（D5——系统文件夹名 i18n；folders.name 列存英文规范名，
 	// 呈现层按 kind 经 Tr 映射；custom 与未知 kind 回退原 Name——DB 零改动）──
 	"folder.inbox":        {"收件箱", "INBOX"},

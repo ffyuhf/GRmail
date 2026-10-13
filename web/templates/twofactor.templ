@@ -32,7 +32,8 @@ type TwoFactorData struct {
 // TwoFactorView 2FA 绑定管理页（GET /settings/2fa 与三 POST 操作响应统一渲染）。
 templ TwoFactorView(d TwoFactorData) {
 	@appLayout2FA(d) {
-		<div class="main content-page">
+		// B10（批五）：main 地标+id 补齐（skip-link 跳转目标——批二 G1 实施不完整收尾）。
+		<main class="main content-page" id="main-content">
 		<div class="page-head"><h2>{ Tr(d.Lang, "twofactor.title") }</h2></div>
 		<p>{ Tr(d.Lang, "twofactor.intro") }</p>
 		if d.Forced {
@@ -78,7 +79,7 @@ templ TwoFactorView(d TwoFactorData) {
 				}
 			</ul>
 		}
-		</div>
+		</main>
 	}
 }
 

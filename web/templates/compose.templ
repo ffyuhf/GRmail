@@ -32,7 +32,9 @@ import "fmt"
 templ ComposeView(d *ComposeData) {
 	{{ lang := NormalizeLang(d.Lang) }}
 	@AppFrame(lang, Tr(lang, "compose.title"), Tr(lang, "compose.title"), d.IsAdmin, d.CSRF, d.Nav) {
-		<div class="main" id="compose-page" data-img-max-edge={ fmt.Sprintf("%d", d.ImgMaxEdgeAttr()) } data-jpeg-quality={ fmt.Sprintf("%g", d.JpegQualityAttr()) } data-csv-err={ Tr(lang, "compose.csvErr") }>
+		// B10（批五）：main 地标补齐（#compose-page id 保持——JS 依赖锚；skip-link
+		// 跳转目标 #main-content 经 main 标签+既有 id 双锚承载）。
+		<main class="main" id="compose-page" data-img-max-edge={ fmt.Sprintf("%d", d.ImgMaxEdgeAttr()) } data-jpeg-quality={ fmt.Sprintf("%g", d.JpegQualityAttr()) } data-csv-err={ Tr(lang, "compose.csvErr") }>
 			<form method="post" action="/compose" enctype="multipart/form-data" id="compose-form">
 				<input type="hidden" name="csrf_token" value={ d.CSRF }/>
 				if d.DraftID > 0 {
@@ -69,7 +71,9 @@ templ ComposeView(d *ComposeData) {
 				</section>
 				<section class="compose-section">
 					<div class="section-label">{ Tr(lang, "compose.subject") }</div>
-					<label><input type="text" name="subject" value={ d.Subject } placeholder={ Tr(lang, "compose.subjectPh") }/></label>
+					// C2（批五）：空 label 补 sr-only 文本（原 label 内仅 input——读屏「未命名
+					// 编辑框」；既有键复用零新增）。
+					<label><span class="sr-only">{ Tr(lang, "compose.subject") }</span><input type="text" name="subject" value={ d.Subject } placeholder={ Tr(lang, "compose.subjectPh") }/></label>
 				</section>
 				<section class="compose-section">
 					<div class="section-label">
@@ -80,12 +84,14 @@ templ ComposeView(d *ComposeData) {
 								data-exit={ Tr(lang, "compose.exitFullscreen") }>{ Tr(lang, "compose.fullscreen") }</button>
 					</div>
 					<input type="hidden" name="body" id="f-body" value=""/>
+					// C2（批五）：工具栏 20 控件补 aria-label（title 保留桌面 tooltip；aria-label
+					// 读屏直达——title 对读屏支持有限；既有键族复用零新增）。
 					<div id="compose-toolbar">
-							<button type="button" class="ql-bold" title={ Tr(lang, "compose.tb.bold") }></button>
-							<button type="button" class="ql-italic" title={ Tr(lang, "compose.tb.italic") }></button>
-							<button type="button" class="ql-underline" title={ Tr(lang, "compose.tb.underline") }></button>
-							<button type="button" class="ql-strike" title={ Tr(lang, "compose.tb.strike") }></button>
-							<select class="ql-color" title={ Tr(lang, "compose.tb.color") }>
+							<button type="button" class="ql-bold" title={ Tr(lang, "compose.tb.bold") } aria-label={ Tr(lang, "compose.tb.bold") }></button>
+							<button type="button" class="ql-italic" title={ Tr(lang, "compose.tb.italic") } aria-label={ Tr(lang, "compose.tb.italic") }></button>
+							<button type="button" class="ql-underline" title={ Tr(lang, "compose.tb.underline") } aria-label={ Tr(lang, "compose.tb.underline") }></button>
+							<button type="button" class="ql-strike" title={ Tr(lang, "compose.tb.strike") } aria-label={ Tr(lang, "compose.tb.strike") }></button>
+							<select class="ql-color" title={ Tr(lang, "compose.tb.color") } aria-label={ Tr(lang, "compose.tb.color") }>
 								<option value=""></option>
 								<option value="#000000"></option>
 								<option value="#374151"></option>
@@ -100,7 +106,7 @@ templ ComposeView(d *ComposeData) {
 								<option value="#7c3aed"></option>
 								<option value="#db2777"></option>
 							</select>
-							<select class="ql-background" title={ Tr(lang, "compose.tb.background") }>
+							<select class="ql-background" title={ Tr(lang, "compose.tb.background") } aria-label={ Tr(lang, "compose.tb.background") }>
 								<option value=""></option>
 								<option value="#000000"></option>
 								<option value="#374151"></option>
@@ -115,49 +121,54 @@ templ ComposeView(d *ComposeData) {
 								<option value="#7c3aed"></option>
 								<option value="#db2777"></option>
 							</select>
-							<select class="ql-size" title={ Tr(lang, "compose.tb.size") }>
+							<select class="ql-size" title={ Tr(lang, "compose.tb.size") } aria-label={ Tr(lang, "compose.tb.size") }>
 								<option value="small">{ Tr(lang, "compose.tb.sizeSmall") }</option>
 								<option value="" selected="selected">{ Tr(lang, "compose.tb.sizeNormal") }</option>
 								<option value="large">{ Tr(lang, "compose.tb.sizeLarge") }</option>
 								<option value="huge">{ Tr(lang, "compose.tb.sizeHuge") }</option>
 							</select>
-							<select class="ql-font" title={ Tr(lang, "compose.tb.font") }>
+							<select class="ql-font" title={ Tr(lang, "compose.tb.font") } aria-label={ Tr(lang, "compose.tb.font") }>
 								<option value="" selected="selected">{ Tr(lang, "compose.tb.fontDefault") }</option>
 								<option value="serif">{ Tr(lang, "compose.tb.fontSerif") }</option>
 								<option value="monospace">{ Tr(lang, "compose.tb.fontMono") }</option>
 							</select>
-							<select class="ql-header" title={ Tr(lang, "compose.tb.h1") }>
+							<select class="ql-header" title={ Tr(lang, "compose.tb.h1") } aria-label={ Tr(lang, "compose.tb.h1") }>
 								<option value="1">{ Tr(lang, "compose.tb.h1") }</option>
 								<option value="2">{ Tr(lang, "compose.tb.h2") }</option>
 								<option value="" selected="selected">{ Tr(lang, "compose.tb.headerNormal") }</option>
 							</select>
-							<button type="button" class="ql-blockquote" title={ Tr(lang, "compose.tb.blockquote") }></button>
-							<button type="button" class="ql-code-block" title={ Tr(lang, "compose.tb.codeBlock") }></button>
-							<button type="button" class="ql-table" title={ Tr(lang, "compose.tb.table") }></button>
-							<button type="button" class="ql-list" value="ordered" title={ Tr(lang, "compose.tb.listOrdered") }></button>
-							<button type="button" class="ql-list" value="bullet" title={ Tr(lang, "compose.tb.listBullet") }></button>
-							<button type="button" class="ql-align" value="" title={ Tr(lang, "compose.tb.alignLeft") }></button>
-							<button type="button" class="ql-align" value="center" title={ Tr(lang, "compose.tb.alignCenter") }></button>
-							<button type="button" class="ql-align" value="right" title={ Tr(lang, "compose.tb.alignRight") }></button>
-							<button type="button" class="ql-align" value="justify" title={ Tr(lang, "compose.tb.alignJustify") }></button>
-							<button type="button" class="ql-indent" value="-1" title={ Tr(lang, "compose.tb.indentLess") }></button>
-							<button type="button" class="ql-indent" value="+1" title={ Tr(lang, "compose.tb.indentMore") }></button>
-							<button type="button" class="ql-undo" title={ Tr(lang, "compose.tb.undo") }></button>
-							<button type="button" class="ql-redo" title={ Tr(lang, "compose.tb.redo") }></button>
-							<button type="button" class="ql-link" title={ Tr(lang, "compose.tb.link") }></button>
-							<button type="button" class="ql-image" title={ Tr(lang, "compose.tb.image") }></button>
-							<button type="button" class="ql-clean" title={ Tr(lang, "compose.tb.clean") }></button>
+							<button type="button" class="ql-blockquote" title={ Tr(lang, "compose.tb.blockquote") } aria-label={ Tr(lang, "compose.tb.blockquote") }></button>
+							<button type="button" class="ql-code-block" title={ Tr(lang, "compose.tb.codeBlock") } aria-label={ Tr(lang, "compose.tb.codeBlock") }></button>
+							<button type="button" class="ql-table" title={ Tr(lang, "compose.tb.table") } aria-label={ Tr(lang, "compose.tb.table") }></button>
+							<button type="button" class="ql-list" value="ordered" title={ Tr(lang, "compose.tb.listOrdered") } aria-label={ Tr(lang, "compose.tb.listOrdered") }></button>
+							<button type="button" class="ql-list" value="bullet" title={ Tr(lang, "compose.tb.listBullet") } aria-label={ Tr(lang, "compose.tb.listBullet") }></button>
+							<button type="button" class="ql-align" value="" title={ Tr(lang, "compose.tb.alignLeft") } aria-label={ Tr(lang, "compose.tb.alignLeft") }></button>
+							<button type="button" class="ql-align" value="center" title={ Tr(lang, "compose.tb.alignCenter") } aria-label={ Tr(lang, "compose.tb.alignCenter") }></button>
+							<button type="button" class="ql-align" value="right" title={ Tr(lang, "compose.tb.alignRight") } aria-label={ Tr(lang, "compose.tb.alignRight") }></button>
+							<button type="button" class="ql-align" value="justify" title={ Tr(lang, "compose.tb.alignJustify") } aria-label={ Tr(lang, "compose.tb.alignJustify") }></button>
+							<button type="button" class="ql-indent" value="-1" title={ Tr(lang, "compose.tb.indentLess") } aria-label={ Tr(lang, "compose.tb.indentLess") }></button>
+							<button type="button" class="ql-indent" value="+1" title={ Tr(lang, "compose.tb.indentMore") } aria-label={ Tr(lang, "compose.tb.indentMore") }></button>
+							<button type="button" class="ql-undo" title={ Tr(lang, "compose.tb.undo") } aria-label={ Tr(lang, "compose.tb.undo") }></button>
+							<button type="button" class="ql-redo" title={ Tr(lang, "compose.tb.redo") } aria-label={ Tr(lang, "compose.tb.redo") }></button>
+							<button type="button" class="ql-link" title={ Tr(lang, "compose.tb.link") } aria-label={ Tr(lang, "compose.tb.link") }></button>
+							<button type="button" class="ql-image" title={ Tr(lang, "compose.tb.image") } aria-label={ Tr(lang, "compose.tb.image") }></button>
+							<button type="button" class="ql-clean" title={ Tr(lang, "compose.tb.clean") } aria-label={ Tr(lang, "compose.tb.clean") }></button>
 						</div>
 					<div class="compose-editor" id="editor-container"></div>
 					<textarea id="editor-initial" hidden>{ d.Body }</textarea>
 				</section>
 				<section class="compose-section">
 					<div class="section-label">{ Tr(lang, "compose.attach") }</div>
-					<label><input type="file" name="attachments" multiple="multiple"/></label>
+					// C2（批五）：空 label 补 sr-only 文本（同主题行——读屏控件名直达）。
+					<label><span class="sr-only">{ Tr(lang, "compose.attach") }</span><input type="file" name="attachments" multiple="multiple"/></label>
 				</section>
 				<div class="compose-actions">
-					<button class="primary" type="submit" name="action" value="send">{ Tr(lang, "compose.send") }</button>
+					// D2/E-3-A（批五——干系人指示 2026-10-13 08:42:57 逐字「D2 回车误发缓解
+					// Ctrl+回车发送 直接回车是换行处理。」+G2 五组候选全 A）：save_draft DOM 序
+					// 前置（回车隐式提交兜底命中草稿——误发变误存）；发送按钮视觉主位经 CSS
+					// order 恢复（app.css D2 块——send 恒显示在先，视觉主次零变化锚）。
 					<button class="secondary" type="submit" name="action" value="save_draft">{ Tr(lang, "compose.saveDraft") }</button>
+					<button class="primary" type="submit" name="action" value="send">{ Tr(lang, "compose.send") }</button>
 					<span class="spacer"></span>
 					<a class="btn-text" href="/">{ Tr(lang, "common.cancel") }</a>
 				</div>
@@ -166,6 +177,6 @@ templ ComposeView(d *ComposeData) {
 		<link rel="stylesheet" href={ StaticURL("/static/quill.snow.css") }/>
 		<script src={ StaticURL("/static/quill.js") } defer></script>
 		<script src={ StaticURL("/static/compose.js") } defer></script>
-		</div>
+		</main>
 	}
 }
