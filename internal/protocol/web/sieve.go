@@ -77,6 +77,10 @@ func (s *Server) sieveListGET(c *gin.Context) {
 	}
 	// F7（批二）：主体标记填充（admin 直达管理枢纽返回链）。
 	data := &templates.SieveListData{Lang: langOf(c), CSRF: s.csrfOf(c), IsAdmin: s.sessionIsAdmin(c), Scripts: []templates.SieveScriptRow{}, Nav: s.sidebarDataFor(c)}
+	// B2/E-1-A（α 批）：操作成功反馈（noticed 303 回带——键映射后注入 Notice 呈现）。
+	if k := sieveNoticedKey(c.Query("noted")); k != "" {
+		data.Notice = templates.Tr(langOf(c), k)
+	}
 	scripts, err := repo.ListScripts(c.Request.Context(), mboxID)
 	if err != nil {
 		// E2 补齐（批二续接）：列表失败原文入日志、界面模糊文案（errList 改非格式串）。
@@ -114,12 +118,29 @@ func (s *Server) sieveEditGET(c *gin.Context) {
 	renderPage(c, http.StatusOK, templates.SieveEditView(data))
 }
 
+// sieveNoticedKey 操作反馈查询参→文案键（B2/E-1-A——α 批；未知值返回空串零呈现）。
+func sieveNoticedKey(noted string) string {
+	switch noted {
+	case "saved":
+		return "sieve.noticedSaved"
+	case "activated":
+		return "sieve.noticedActivated"
+	case "deactivated":
+		return "sieve.noticedDeactivated"
+	case "deleted":
+		return "sieve.noticedDeleted"
+	}
+	return ""
+}
+
 // sieveEditPOST POST /sieve/:name 保存（编译期校验拒绝重渲染；#30：表单 name 字段
 // 优先于 URL :name 参数——new 态名称经输入框承载，编辑态表单无 name 字段=URL 名直用）。
 func (s *Server) sieveEditPOST(c *gin.Context) {
 	repo, mboxID, st := s.sieveScriptsView(c)
 	if st != 0 {
-		c.String(http.StatusServiceUnavailable, templates.Tr(langOf(c), sieveViewErrKey(st)))
+		// B7（α 批）：裸 c.String 收口入 errPage 双态（同族 listGET 形态一致化；
+		// 状态码语义保持 503）。
+		s.errPage(c, http.StatusServiceUnavailable, sieveViewErrKey(st))
 		return
 	}
 	isNewEntry := c.Param("name") == "new" // 原入口态（重渲染保持 NameEditable——名称输入框不消失）
@@ -147,7 +168,7 @@ func (s *Server) sieveEditPOST(c *gin.Context) {
 		renderPage(c, http.StatusInternalServerError, templates.SieveEditView(data))
 		return
 	}
-	c.Redirect(http.StatusSeeOther, "/sieve")
+	c.Redirect(http.StatusSeeOther, "/sieve?noted=saved") // B2/E-1-A（α 批）：成功反馈
 }
 
 // sieveActivatePOST POST /sieve/:name/activate 激活（互斥单激活）。
@@ -163,7 +184,7 @@ func (s *Server) sieveActivatePOST(c *gin.Context) {
 		s.errPage(c, http.StatusBadRequest, "sieve.errActivate")
 		return
 	}
-	c.Redirect(http.StatusSeeOther, "/sieve")
+	c.Redirect(http.StatusSeeOther, "/sieve?noted=activated") // B2/E-1-A（α 批）：成功反馈
 }
 
 // sieveDeletePOST POST /sieve/:name/delete 删除（激活脚本连带清激活）。
@@ -178,7 +199,7 @@ func (s *Server) sieveDeletePOST(c *gin.Context) {
 		s.errPage(c, http.StatusBadRequest, "sieve.errDelete")
 		return
 	}
-	c.Redirect(http.StatusSeeOther, "/sieve")
+	c.Redirect(http.StatusSeeOther, "/sieve?noted=deleted") // B2/E-1-A（α 批）：成功反馈
 }
 
 // sieveDeactivatePOST POST /sieve/:name/deactivate 取消激活（#31——契约 v1.24.0）。
@@ -217,5 +238,5 @@ func (s *Server) sieveDeactivatePOST(c *gin.Context) {
 			return
 		}
 	}
-	c.Redirect(http.StatusSeeOther, "/sieve")
+	c.Redirect(http.StatusSeeOther, "/sieve?noted=deactivated") // B2/E-1-A（α 批）：成功反馈
 }

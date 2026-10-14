@@ -232,4 +232,52 @@
 	document.getElementById('csv-result').addEventListener('click', function (e) {
 		if (e.target && e.target.id === 'csv-merge-btn') { grmailCsvMerge(); }
 	});
+
+	// ── B3（α 批——G2 批准 2026-10-14 20:37）：附件前端大小预检（服务端 35MiB 防线
+	// 之外的即时反馈——超限提交前 toast 提示+清空 input，消除「提交→报错→重选」
+	// 二次伤害；限值与服务端 readFormAttachments limit 同源 36700160）。
+	document.querySelector('#compose-form input[name="attachments"]').addEventListener('change', function () {
+		var limit = 36700160;
+		var total = 0;
+		for (var i = 0; i < this.files.length; i++) { total += this.files[i].size; }
+		if (total > limit) {
+			var pageEl = document.getElementById('compose-page');
+			var msg = pageEl && pageEl.dataset ? pageEl.dataset.attachErr : '';
+			if (window.grmailShowToast) { window.grmailShowToast(msg || 'Attachments exceed limit (35MiB)', 'err'); }
+			this.value = '';
+		}
+	});
+
+	// ── B4/E-2-A（α 批——非阻断提示）：收件人地址失焦校验（服务端 err.rcptInvalid
+	// 防线保持；逗号分隔逐项最小形态判定：含 @ 且前后非空且不含空格；提示就地
+	// label 内追加 p.hint，输入修正后失焦自动清除——role=status 播报）。
+	function grmailRcptLooksInvalid(v) {
+		var parts = v.split(',');
+		for (var i = 0; i < parts.length; i++) {
+			var s = parts[i].trim();
+			if (!s) { continue; }
+			var at = s.indexOf('@');
+			if (at <= 0 || at === s.length - 1 || /\s/.test(s)) { return true; }
+		}
+		return false;
+	}
+	function grmailRcptHint(el) {
+		var hintId = el.id + '-hint';
+		var old = document.getElementById(hintId);
+		if (old) { old.remove(); }
+		var v = el.value.trim();
+		if (v === '' || !grmailRcptLooksInvalid(v)) { return; }
+		var pageEl = document.getElementById('compose-page');
+		var msg = pageEl && pageEl.dataset ? pageEl.dataset.rcptErr : '';
+		var p = document.createElement('p');
+		p.id = hintId;
+		p.className = 'hint';
+		p.setAttribute('role', 'status');
+		p.textContent = msg || 'Recipient address format may be invalid';
+		el.closest('label').appendChild(p);
+	}
+	['f-to', 'f-cc', 'f-bcc'].forEach(function (id) {
+		var el = document.getElementById(id);
+		if (el) { el.addEventListener('blur', function () { grmailRcptHint(el); }); }
+	});
 })();

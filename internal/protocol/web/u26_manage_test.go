@@ -243,8 +243,10 @@ func TestU26AdminSetPasswordAction(t *testing.T) {
 	resp := u26Post(t, c, e.ts.URL+"/admin/mailboxes", url.Values{
 		"action": {"setpassword"}, "address": {"u26@test.local"}, "password": {"adm-set-zz!"},
 	}, csrf)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("行内改密应 200 重渲染列表: %d", resp.StatusCode)
+	// α 批适配（2026-10-14）：成功响应 200→303 noted=password（E-1-A——G2 批准行为
+	// 变化；改密成功语义由后续新密码登录验证链保持）。
+	if resp.StatusCode != http.StatusSeeOther || !strings.Contains(resp.Header.Get("Location"), "noted=password") {
+		t.Fatalf("行内改密应 303 noted=password: %d %s", resp.StatusCode, resp.Header.Get("Location"))
 	}
 
 	c2 := u26Client(t)

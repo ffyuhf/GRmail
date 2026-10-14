@@ -12,6 +12,9 @@
 // 修改历史：
 //
 //	2026-10-05 15:20:00 | 新建 | Webmail管理职能批次（计划书阶段 2/3，G2 批准 2026-10-05 15:15:22）
+//	2026-10-14 20:45:00 | 修正 | Webmail前端可用性收口批 B7：审计点名四点空体收口入
+//	errPage（passwordFormGET 401/passwordChangePOST 403+locked 500+SetMailboxPassword 500；
+//	状态码语义保持——G2 批准 2026-10-14 20:37）
 package web
 
 import (
@@ -33,7 +36,7 @@ import (
 func (s *Server) passwordFormGET(c *gin.Context) {
 	sess, ok := currentSession(c)
 	if !ok {
-		c.Status(http.StatusUnauthorized)
+		s.errPage(c, http.StatusUnauthorized, "err.page401") // B7（α 批）：空体收口（err.page401 本批新增键）
 		return
 	}
 	if sess.SubjectType == storage.SubjectTypeAdmin {
@@ -76,7 +79,8 @@ func (s *Server) passwordChangePOST(c *gin.Context) {
 		return
 	}
 	if sess.SubjectType != storage.SubjectTypeMailbox {
-		c.Status(http.StatusForbidden) // admin 主体请走 /admin/password（分域承载）
+		// B7（α 批）：空体收口（admin 主体请走 /admin/password——分域承载语义注释保持）。
+		s.errPage(c, http.StatusForbidden, "err.page403")
 		return
 	}
 	ctx := c.Request.Context()
@@ -105,7 +109,7 @@ func (s *Server) passwordChangePOST(c *gin.Context) {
 	// 消费闭环（沿 login 限流母版 s.locked；阈值内零影响，超限 423 防爆破）。
 	if locked, lerr := s.locked(ctx, "mailbox:"+m.Address); lerr != nil {
 		sessLogger(c).Error("改密限流查询故障", "error", lerr)
-		c.Status(http.StatusInternalServerError)
+		s.errPage(c, http.StatusInternalServerError, "err.page500") // B7（α 批）：空体收口
 		return
 	} else if locked {
 		s.setRetryAfter(c) // E10 批二：Retry-After
@@ -128,7 +132,7 @@ func (s *Server) passwordChangePOST(c *gin.Context) {
 			return
 		}
 		sessLogger(c).Error("邮箱用户改密失败", "mailbox_id", sess.SubjectID, "error", err)
-		c.Status(http.StatusInternalServerError)
+		s.errPage(c, http.StatusInternalServerError, "err.page500") // B7（α 批）：空体收口
 		return
 	}
 	// 会话重建（OWASP 第 4 条：特权变化 Renew the Session ID——内置旧会话删除）

@@ -7,6 +7,8 @@
 // 修改历史：
 //
 //	2026-09-19 10:44:00 | 新建 | U9 Webmail 核心（计划书步骤 10，G2 批准 2026-09-19 10:00:41）
+//	2026-10-14 20:45:00 | 修正 | Webmail前端可用性收口批 B7（GET/POST rows 故障 500 空体
+//	收口入 errPage）+B2/E-1-A（五~七操作成功反馈 noticed 303——G2 批准 2026-10-14 20:37 E-1-A）
 package web
 
 import (
@@ -40,11 +42,15 @@ func (s *Server) adminMailboxesGET(c *gin.Context) {
 	}
 	rows, err := s.adminMailboxRows(c)
 	if err != nil {
-		c.Status(http.StatusInternalServerError)
+		s.errPage(c, http.StatusInternalServerError, "err.page500") // B7（α 批）：空体收口
 		return
 	}
 	sess, _ := currentSession(c)
-	renderPage(c, http.StatusOK, templates.AdminMailboxesView(langOf(c), rows, "", sess.CSRFToken, s.sidebarDataFor(c)))
+	notice := ""
+	if k := adminNoticedKey(c.Query("noted")); k != "" { // B2/E-1-A（α 批）：成功反馈
+		notice = templates.Tr(langOf(c), k)
+	}
+	renderPage(c, http.StatusOK, templates.AdminMailboxesView(langOf(c), rows, "", notice, sess.CSRFToken, s.sidebarDataFor(c)))
 }
 
 // adminMailboxesPOST 邮箱管理操作（POST /admin/mailboxes——action 五态）：
@@ -93,17 +99,64 @@ func (s *Server) adminMailboxesPOST(c *gin.Context) {
 		return
 	}
 
-	errText := ""
 	if opErr != nil {
-		errText = adminErrText(langOf(c), opErr)
-	}
-	rows, err := s.adminMailboxRows(c)
-	if err != nil {
-		c.Status(http.StatusInternalServerError)
+		// 失败路径：就地重渲染+错误提示（既有形态保持——计划书 1.4 E-1-A 失败零变化）。
+		rows, err := s.adminMailboxRows(c)
+		if err != nil {
+			s.errPage(c, http.StatusInternalServerError, "err.page500") // B7（α 批）：空体收口
+			return
+		}
+		sess, _ := currentSession(c)
+		renderPage(c, http.StatusOK, templates.AdminMailboxesView(langOf(c), rows, adminErrText(langOf(c), opErr), "", sess.CSRFToken, s.sidebarDataFor(c)))
 		return
 	}
-	sess, _ := currentSession(c)
-	renderPage(c, http.StatusOK, templates.AdminMailboxesView(langOf(c), rows, errText, sess.CSRFToken, s.sidebarDataFor(c)))
+	// B2/E-1-A（α 批——G2 批准 2026-10-14 20:37）：管理操作成功反馈 noticed 303 扩展
+	//（沿文件夹族先例——303 回带 ?noted= 查询参，列表整页刷新+notice 呈现；原成功
+	// 静默重渲染无文字反馈收口）。
+	c.Redirect(http.StatusSeeOther, "/admin/mailboxes?noted="+adminNoticedParam(action))
+}
+
+// adminNoticedParam 操作→反馈查询参（B2/E-1-A——α 批；default 分支已前置 400 拒绝，
+// 到达此处的 action 必属七操作集；空串防御回退无参跳转）。
+func adminNoticedParam(action string) string {
+	switch action {
+	case "create":
+		return "created"
+	case "activate":
+		return "activated"
+	case "disable":
+		return "disabled"
+	case "enable":
+		return "enabled"
+	case "setpassword":
+		return "password"
+	case "require2fa":
+		return "2faon"
+	case "unrequire2fa":
+		return "2faoff"
+	}
+	return ""
+}
+
+// adminNoticedKey 反馈查询参→文案键（B2/E-1-A——α 批；未知值返回空串零呈现）。
+func adminNoticedKey(noted string) string {
+	switch noted {
+	case "created":
+		return "admin.noticedCreated"
+	case "activated":
+		return "admin.noticedActivated"
+	case "disabled":
+		return "admin.noticedDisabled"
+	case "enabled":
+		return "admin.noticedEnabled"
+	case "password":
+		return "admin.noticedPassword"
+	case "2faon":
+		return "admin.noticed2FAOn"
+	case "2faoff":
+		return "admin.noticed2FAOff"
+	}
+	return ""
 }
 
 // adminMailboxRows 管理列表增强行装配（G4——D4：2FA 绑定/强制态+创建时间列；

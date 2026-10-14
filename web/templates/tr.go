@@ -620,6 +620,26 @@ var messages = map[string][2]string{
 	"mail.selRowFmt":       {"选择 %s", "Select %s"},
 	"settings.stsOff":      {"（MTA-STS 已关闭——无需发布本记录；重新启用后此处呈现建议值）", "(MTA-STS disabled — no record needed; re-enable to see the suggestion here)"},
 	"settings.tlsrptOff":   {"（TLS-RPT 已关闭——建议移除已发布的 _smtp._tls 记录）", "(TLS-RPT disabled — consider removing the published _smtp._tls record)"},
+	// ── Webmail前端可用性收口批（α 批——G2 批准 2026-10-14 20:37 三组候选 E-1-A/E-2-A/
+	// E-3-A：B2 管理侧成功反馈 noticed 族三族键+B7 err.page401 补键+C5 setup DNS 占位词
+	// 与引导串+B4 收件人失焦提示文案——D9-6 保留中点登记零键） ──
+	"err.page401":              {"请先登录", "Sign-in required"},
+	"admin.noticedCreated":     {"邮箱已创建", "Mailbox created"},
+	"admin.noticedActivated":   {"影子邮箱已激活", "Mailbox activated"},
+	"admin.noticedDisabled":    {"邮箱已禁用", "Mailbox disabled"},
+	"admin.noticedEnabled":     {"邮箱已启用", "Mailbox enabled"},
+	"admin.noticedPassword":    {"邮箱密码已修改", "Mailbox password changed"},
+	"admin.noticed2FAOn":       {"已设置 2FA 强制标记", "2FA enforcement set"},
+	"admin.noticed2FAOff":      {"已取消 2FA 强制标记", "2FA enforcement cleared"},
+	"sieve.noticedSaved":       {"脚本已保存", "Script saved"},
+	"sieve.noticedActivated":   {"脚本已激活", "Script activated"},
+	"sieve.noticedDeactivated": {"脚本已取消激活", "Script deactivated"},
+	"sieve.noticedDeleted":     {"脚本已删除", "Script deleted"},
+	"tokens.noticedRevoked":    {"Token 已撤销", "Token revoked"},
+	"setup.domainPlaceholder":  {"你的域名", "your domain"},
+	"setup.noteHostResolve":    {"主机记录解析", "Host record resolution"},
+	"setup.noteIpManual":       {"填你的服务器公网 IP（自动探测不可用——本机处于内网/NAT 环境）", "Enter your server public IP (auto-detection unavailable — this machine is behind NAT/intranet)"},
+	"compose.rcptHint":         {"收件人地址格式可能有误（各地址须含 @ 且不含空格）", "Recipient address format may be invalid (each must contain @ and no spaces)"},
 }
 
 // folderDisplayName 文件夹呈现名（D5——系统文件夹按 kind 本地化，custom/未知 kind 回退原 Name）。

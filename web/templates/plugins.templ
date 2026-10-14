@@ -5,6 +5,8 @@
 // 修改历史：
 //
 //	2026-10-05 15:20:00 | 新建 | Webmail管理职能批次（计划书阶段 6）
+//	2026-10-14 20:45:00 | 修正 | Webmail前端可用性收口批 B1：th scope=col+sr-only
+//	caption（批五 B11 漏网——G2 批准 2026-10-14 20:37）
 package templates
 
 // PluginRow 插件状态呈现行（templates 侧视图模型——与 web.PluginStatus 字段同构；
@@ -40,12 +42,15 @@ templ PluginsView(d PluginsData) {
 				</div>
 			} else {
 				<div class="table-wrap">
+					// B1（α 批）：th scope=col+sr-only caption（读屏表头关联与表用途播报；
+					// 视觉零变化——对照 admin/tokens 批五 B11 形态）。
 					<table class="mails">
+						<caption class="sr-only">{ Tr(lang, "plugins.title") }</caption>
 						<thead><tr>
-							<th>{ Tr(lang, "plugins.colName") }</th>
-							<th>{ Tr(lang, "plugins.colVer") }</th>
-							<th>{ Tr(lang, "plugins.colCaps") }</th>
-							<th>{ Tr(lang, "plugins.colStatus") }</th>
+							<th scope="col">{ Tr(lang, "plugins.colName") }</th>
+							<th scope="col">{ Tr(lang, "plugins.colVer") }</th>
+							<th scope="col">{ Tr(lang, "plugins.colCaps") }</th>
+							<th scope="col">{ Tr(lang, "plugins.colStatus") }</th>
 						</tr></thead>
 						<tbody>
 							for _, p := range d.Plugins {

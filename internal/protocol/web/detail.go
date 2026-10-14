@@ -7,6 +7,8 @@
 // 修改历史：
 //
 //	2026-09-19 10:34:00 | 新建 | U9 Webmail 核心（计划书步骤 6，G2 批准 2026-09-19 10:00:41）
+//	2026-10-14 20:45:00 | 修正 | Webmail前端可用性收口批 B6：详情返回链接保留来源页码
+//	（原恒 page=1——第 N 页查看详情返回回第 1 页的上下文丢失收口；G2 批准 2026-10-14 20:37）
 package web
 
 import (
@@ -93,12 +95,14 @@ func (s *Server) mailDetailGET(c *gin.Context) {
 	// （drafts 文件夹详情呈现「编辑草稿」入口——接通 ?draft= 既有回填链）+深链
 	// 整页形态（直接 URL 访问经 Layout 骨架——替代旧裸片段无 html 架构形态）。
 	p := parseListParams(c)
-	backHref := fmt.Sprintf("/mails?folder=%d&page=1&pagesize=%d", msg.FolderID, p.Pagesize)
+	// B6（α 批）：返回链接保留来源页码（pagesize/unread/keyword 既有保持——原唯页码
+	// 弃丢；搜索分支同语义）。
+	backHref := fmt.Sprintf("/mails?folder=%d&page=%d&pagesize=%d", msg.FolderID, p.Page, p.Pagesize)
 	if p.UnreadOnly {
 		backHref += "&unread=1"
 	}
 	if kw := strings.TrimSpace(c.Query("keyword")); kw != "" {
-		backHref = fmt.Sprintf("/search?keyword=%s&page=1&pagesize=%d", url.QueryEscape(kw), p.Pagesize)
+		backHref = fmt.Sprintf("/search?keyword=%s&page=%d&pagesize=%d", url.QueryEscape(kw), p.Page, p.Pagesize)
 	}
 	isDraft := s.isDraftFolder(c, view, msg.FolderID)
 	if c.GetHeader("HX-Request") != "" {

@@ -257,22 +257,23 @@ func TestU24AdminRequireActions(t *testing.T) {
 	}
 	csrf := u24ExtractCSRF(t, readBody(t, page))
 
-	// require2fa → 落库
+	// require2fa → 落库（α 批适配 2026-10-14：成功响应 200→303 noted=E-1-A——G2 批准
+	// 行为变化；落库断言语义保持）。
 	form := url.Values{"csrf_token": {csrf}, "address": {e.mailbox.Address}, "action": {"require2fa"}}
 	resp = postFormCookie(t, e.ts, "/admin/mailboxes", form, ck)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("require2fa: %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusSeeOther || !strings.Contains(resp.Header.Get("Location"), "noted=2faon") {
+		t.Fatalf("require2fa 应 303 noted=2faon: %d %s", resp.StatusCode, resp.Header.Get("Location"))
 	}
 	st, _ := e.twoFA.State(ctx, e.mailbox.ID)
 	if !st.Required {
 		t.Fatal("强制标记未落库（TC-028 判定⑤）")
 	}
 
-	// unrequire2fa → 清除
+	// unrequire2fa → 清除（同上适配）
 	form.Set("action", "unrequire2fa")
 	resp = postFormCookie(t, e.ts, "/admin/mailboxes", form, ck)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("unrequire2fa: %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusSeeOther || !strings.Contains(resp.Header.Get("Location"), "noted=2faoff") {
+		t.Fatalf("unrequire2fa 应 303 noted=2faoff: %d %s", resp.StatusCode, resp.Header.Get("Location"))
 	}
 	if st, _ = e.twoFA.State(ctx, e.mailbox.ID); st.Required {
 		t.Fatal("标记未清除")

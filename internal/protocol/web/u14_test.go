@@ -204,11 +204,12 @@ func TestU14TokensAdminUI(t *testing.T) {
 		t.Fatalf("新生成 last_used_at 应为零值: %v", list[0].LastUsedAt)
 	}
 
-	// 撤销（双条件——CSRF 表单）
+	// 撤销（双条件——CSRF 表单）。α 批适配（2026-10-14）：成功响应 200→303
+	// noted=revoked（E-1-A——G2 批准行为变化）；「撤销后行数清零」核心断言保持。
 	rform := url.Values{"csrf_token": {csrfOfSession(t, e, ck)}}
 	resp = postForm(t, e.ts, "/admin/tokens/"+itoa64(list[0].ID)+"/revoke", rform, ck)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("撤销: %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusSeeOther || !strings.Contains(resp.Header.Get("Location"), "noted=revoked") {
+		t.Fatalf("撤销应 303 noted=revoked: %d %s", resp.StatusCode, resp.Header.Get("Location"))
 	}
 	if list, err = e.tokens.ListByUser(context.Background(), e.adminID); err != nil || len(list) != 0 {
 		t.Fatalf("撤销后行数: %v %d", err, len(list))

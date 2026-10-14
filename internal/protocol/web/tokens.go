@@ -6,6 +6,8 @@
 // 修改历史：
 //
 //	2026-09-24 02:54:00 | 新建 | U14 API Token 管理（计划书步骤 4，G2 批准 2026-09-24 02:30:51）
+//	2026-10-14 20:45:00 | 修正 | Webmail前端可用性收口批 B7（create 500/revoke 400 空体
+//	收口入 errPage）+B2/E-1-A（撤销成功反馈 noticed 303——G2 批准 2026-10-14 20:37 E-1-A）
 package web
 
 import (
@@ -53,7 +55,11 @@ func (s *Server) tokensListGET(c *gin.Context) {
 		return
 	}
 	sess, _ := currentSession(c)
-	renderPage(c, http.StatusOK, templates.TokensView(langOf(c), s.tokenList(c, sess.SubjectID), "", "", sess.CSRFToken, s.sidebarDataFor(c)))
+	notice := ""
+	if c.Query("noted") == "revoked" { // B2/E-1-A（α 批）：撤销成功反馈
+		notice = templates.Tr(langOf(c), "tokens.noticedRevoked")
+	}
+	renderPage(c, http.StatusOK, templates.TokensView(langOf(c), s.tokenList(c, sess.SubjectID), "", "", notice, sess.CSRFToken, s.sidebarDataFor(c)))
 }
 
 // tokensCreatePOST Token 生成（POST /admin/tokens——三档有效期+IP 绑定可选；
@@ -80,13 +86,13 @@ func (s *Server) tokensCreatePOST(c *gin.Context) {
 	case "forever", "":
 		// 零值=永久
 	default:
-		renderPage(c, http.StatusBadRequest, templates.TokensView(langOf(c), s.tokenList(c, sess.SubjectID), "", templates.Tr(langOf(c), "tokens.errTier"), sess.CSRFToken, s.sidebarDataFor(c)))
+		renderPage(c, http.StatusBadRequest, templates.TokensView(langOf(c), s.tokenList(c, sess.SubjectID), "", templates.Tr(langOf(c), "tokens.errTier"), "", sess.CSRFToken, s.sidebarDataFor(c)))
 		return
 	}
 
 	raw, err := newBearerToken()
 	if err != nil {
-		c.Status(http.StatusInternalServerError)
+		s.errPage(c, http.StatusInternalServerError, "err.page500") // B7（α 批）：空体收口
 		return
 	}
 	if err := s.tokens.Create(ctx, &storage.ApiToken{
@@ -97,11 +103,11 @@ func (s *Server) tokensCreatePOST(c *gin.Context) {
 		CreatedAt: now,
 	}); err != nil {
 		sessLogger(c).Error("Token 生成失败", "error", err)
-		renderPage(c, http.StatusInternalServerError, templates.TokensView(langOf(c), s.tokenList(c, sess.SubjectID), "", templates.Tr(langOf(c), "tokens.errGen"), sess.CSRFToken, s.sidebarDataFor(c)))
+		renderPage(c, http.StatusInternalServerError, templates.TokensView(langOf(c), s.tokenList(c, sess.SubjectID), "", templates.Tr(langOf(c), "tokens.errGen"), "", sess.CSRFToken, s.sidebarDataFor(c)))
 		return
 	}
 	sessLogger(c).Info("Token 已生成", "user_id", sess.SubjectID, "expires", c.PostForm("expires"))
-	renderPage(c, http.StatusOK, templates.TokensView(langOf(c), s.tokenList(c, sess.SubjectID), raw, "", sess.CSRFToken, s.sidebarDataFor(c)))
+	renderPage(c, http.StatusOK, templates.TokensView(langOf(c), s.tokenList(c, sess.SubjectID), raw, "", "", sess.CSRFToken, s.sidebarDataFor(c)))
 }
 
 // tokensRevokePOST Token 撤销（POST /admin/tokens/:id/revoke——CSRF+双条件 Delete）。
@@ -118,16 +124,17 @@ func (s *Server) tokensRevokePOST(c *gin.Context) {
 
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || id <= 0 {
-		c.Status(http.StatusBadRequest)
+		s.errPage(c, http.StatusBadRequest, "err.page400") // B7（α 批）：空体收口
 		return
 	}
 	if err := s.tokens.Delete(ctx, id, sess.SubjectID); err != nil {
 		sessLogger(c).Error("Token 撤销失败", "error", err, "id", id)
-		renderPage(c, http.StatusInternalServerError, templates.TokensView(langOf(c), s.tokenList(c, sess.SubjectID), "", templates.Tr(langOf(c), "tokens.errRevoke"), sess.CSRFToken, s.sidebarDataFor(c)))
+		renderPage(c, http.StatusInternalServerError, templates.TokensView(langOf(c), s.tokenList(c, sess.SubjectID), "", templates.Tr(langOf(c), "tokens.errRevoke"), "", sess.CSRFToken, s.sidebarDataFor(c)))
 		return
 	}
 	sessLogger(c).Info("Token 已撤销", "user_id", sess.SubjectID, "id", id)
-	renderPage(c, http.StatusOK, templates.TokensView(langOf(c), s.tokenList(c, sess.SubjectID), "", "", sess.CSRFToken, s.sidebarDataFor(c)))
+	// B2/E-1-A（α 批）：撤销成功反馈 noticed 303（原成功静默重渲染无文字反馈收口）。
+	c.Redirect(http.StatusSeeOther, "/admin/tokens?noted=revoked")
 }
 
 // errPage 错误整页统一呈现（E1 批二——空体状态码群收口；键族 err.page*）。

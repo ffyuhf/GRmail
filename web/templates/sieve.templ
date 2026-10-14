@@ -11,6 +11,8 @@
 //	（激活行增「取消激活」对称按钮）；new 态标题独立键 sieve.newH2（原「编辑脚本：new」缺陷顺带收口）
 //	（依据：Sieve编辑器缺口修复_计划 v1.0.0 步骤 1/2，G2 批准 2026-10-04 21:56:23；
 //	WEB模板缺陷修正批次转 W 遗留 #30/#31 承载——FR-011 双入口语义收口）
+//	2026-10-14 20:45:00 | 修正 | Webmail前端可用性收口批 B1（th scope+caption）+
+//	B2/E-1-A（Notice 成功反馈呈现——G2 批准 2026-10-14 20:37）
 package templates
 
 // activeLabel 激活态标签（templ 表达式辅助——U18 双语化）。
@@ -33,6 +35,7 @@ type SieveListData struct {
 	CSRF    string
 	Scripts []SieveScriptRow
 	Error   string
+	Notice  string // B2/E-1-A（α 批）：操作成功反馈文案（noticed 303 回带——handler 键映射后注入）
 	Nav     *MailListData // 全站侧栏数据（D3 B 形态——AppFrame 承载；nil=降级）
 	IsAdmin bool          // F7（批二）：返回设置口径——admin 直达 /admin/settings（原 /settings 多一跳）
 }
@@ -64,6 +67,10 @@ templ SieveListView(d *SieveListData) {
 				<h2>{ Tr(d.Lang, "sieve.h2") }</h2>
 				<a class="primary" href="/sieve/new">{ Tr(d.Lang, "sieve.newLink") }</a>
 			</div>
+			// B2/E-1-A（α 批）：操作成功反馈（noticed 303 回带——原成功静默无文字反馈收口）。
+			if d.Notice != "" {
+				<p class="notice" role="status">{ d.Notice }</p>
+			}
 			if d.Error != "" {
 				<p class="error" role="alert">{ d.Error }</p>
 			}
@@ -77,8 +84,10 @@ templ SieveListView(d *SieveListData) {
 				</div>
 			} else {
 				<div class="table-wrap">
+					// B1（α 批）：th scope=col+sr-only caption（批五 B11 漏网两表之二）。
 					<table class="sieve-list">
-						<thead><tr><th>{ Tr(d.Lang, "sieve.colName") }</th><th>{ Tr(d.Lang, "mail.colStatus") }</th><th>{ Tr(d.Lang, "admin.colAction") }</th></tr></thead>
+						<caption class="sr-only">{ Tr(d.Lang, "sieve.h2") }</caption>
+						<thead><tr><th scope="col">{ Tr(d.Lang, "sieve.colName") }</th><th scope="col">{ Tr(d.Lang, "mail.colStatus") }</th><th scope="col">{ Tr(d.Lang, "admin.colAction") }</th></tr></thead>
 						<tbody>
 							for _, sc := range d.Scripts {
 								<tr>

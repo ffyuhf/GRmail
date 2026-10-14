@@ -13,6 +13,8 @@
 //   2026-10-05 15:25:00 | 重构 | Webmail管理职能批次 G4：AdminMailboxRow 增强行
 //   （2FA 态/创建时间列+搜索过滤+行内改密+详情展开——计划书 1.2 G4，G2 批准
 //   2026-10-05 15:15:22）
+//   2026-10-14 20:45:00 | 修正 | Webmail前端可用性收口批 B2/E-1-A：签名增 noticeText
+//   参数+成功反馈呈现块（G2 批准 2026-10-14 20:37 E-1-A noticed 303 扩展）
 package templates
 
 import (
@@ -59,9 +61,10 @@ func twoFALabel(lang Lang, r *AdminMailboxRow) string {
 }
 
 // AdminMailboxesView 邮箱管理页（增强列表+操作表单组——G4 形态）。
-// 参数：lang 界面语言；rows 增强行集；errText 操作结果提示；csrf 会话 token。
+// 参数：lang 界面语言；rows 增强行集；errText 操作结果提示；noticeText 成功反馈文案
+//（B2/E-1-A α 批——noticed 303 回带 ?noted= 经 GET 装配注入）；csrf 会话 token。
 // D3（2026-10-05 B 形态）：nav 参数为全站侧栏数据（AppFrame 承载；nil=无邮箱异常态降级）。
-templ AdminMailboxesView(lang Lang, rows []*AdminMailboxRow, errText string, csrf string, nav *MailListData) {
+templ AdminMailboxesView(lang Lang, rows []*AdminMailboxRow, errText string, noticeText string, csrf string, nav *MailListData) {
 	@AppFrame(lang, Tr(lang, "admin.title"), Tr(lang, "home.adminKind"), true, csrf, nav) {
 		<main class="main content-page" id="main-content">
 			<nav class="settings-nav" aria-label={ Tr(lang, "settings.navTitle") }>
@@ -82,6 +85,10 @@ templ AdminMailboxesView(lang Lang, rows []*AdminMailboxRow, errText string, csr
 			</div>
 			if errText != "" {
 				<p class="error" role="alert">{ errText }</p>
+			}
+			// B2/E-1-A（α 批）：管理操作成功反馈（noticed 303 回带——原成功静默无文字反馈收口）。
+			if noticeText != "" {
+				<p class="notice" role="status">{ noticeText }</p>
 			}
 			<div class="table-wrap admin-table-wrap">
 				// B11（批五）：th scope=col 补齐+sr-only caption（读屏表头关联与表用途播报——

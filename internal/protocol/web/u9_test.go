@@ -563,10 +563,15 @@ func TestU9AdminMailboxesAndUnregistered(t *testing.T) {
 		t.Fatalf("admin 列表应含既有邮箱")
 	}
 
-	// 创建→禁用→启用
+	// 创建→禁用→启用（α 批适配 2026-10-14：create 成功响应 200→303 noted=created
+	//〔E-1-A——G2 批准行为变化〕；「列表含新邮箱」断言意图保持——改 GET 列表承载）。
 	res = env.postForm(t, "/admin/mailboxes", cookie, "csrf-8", map[string][]string{
 		"action": {"create"}, "address": {"new@t.io"}, "password": {"pw123456"},
 	})
+	if res.StatusCode != http.StatusSeeOther {
+		t.Fatalf("创建应 303: %d", res.StatusCode)
+	}
+	res = env.get(t, "/admin/mailboxes", cookie)
 	page = bodyOf(t, res)
 	if !strings.Contains(page, "new@t.io") {
 		t.Fatalf("创建后列表应含新邮箱")

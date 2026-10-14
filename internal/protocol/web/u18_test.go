@@ -149,8 +149,10 @@ func TestU18DeepI18nRender(t *testing.T) {
 	// admin/tokens：lang 首参组件直驱（en；G4 增强行形态——AdminMailboxRow 视图模型；
 	// D3 B 形态签名增 nav 参——直驱形态传 nil〔AppFrame 降级分支〕）
 	w := httptest.NewRecorder()
+	// α 批适配（2026-10-14）：AdminMailboxesView 签名增 noticeText 参（B2/E-1-A——
+	// G2 批准面内机械适配，本用例 en 渲染断言意图零变化）。
 	if err := templates.AdminMailboxesView(templates.LangEN,
-		[]*templates.AdminMailboxRow{{Address: "en@t.io", Status: string(storage.MailboxStatusShadow)}}, "", "csrf", nil).Render(context.Background(), w); err != nil {
+		[]*templates.AdminMailboxRow{{Address: "en@t.io", Status: string(storage.MailboxStatusShadow)}}, "", "", "csrf", nil).Render(context.Background(), w); err != nil {
 		t.Fatalf("admin en 渲染: %v", err)
 	}
 	for _, want := range []string{"Mailbox accounts", "Create mailbox", "Address", "Actions"} {
@@ -159,7 +161,8 @@ func TestU18DeepI18nRender(t *testing.T) {
 		}
 	}
 	w = httptest.NewRecorder()
-	if err := templates.TokensView(templates.LangEN, nil, "raw-token-x", "", "csrf", nil).Render(context.Background(), w); err != nil {
+	// α 批适配（2026-10-14）：TokensView 签名增 noticeText 参（B2/E-1-A——同上机械适配）。
+	if err := templates.TokensView(templates.LangEN, nil, "raw-token-x", "", "", "csrf", nil).Render(context.Background(), w); err != nil {
 		t.Fatalf("tokens en 渲染: %v", err)
 	}
 	for _, want := range []string{"Generate token", "Existing tokens", "No tokens yet", "shown only once"} {

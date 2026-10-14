@@ -23,6 +23,8 @@
 //	消费侧 langSwitchHref next 承载）
 //	（依据：Setup向导缺陷修复计划书 v1.0.0 1.2 组4b，G2 批准 2026-10-05 00:21:19；
 //	SRS FR-013 双语子项向导页承载收口）
+//	2026-10-14 20:45:00 | 修正 | Webmail前端可用性收口批 C5：DNS 建议占位词「你的域名」
+//	与 A 记录引导串键承载（en 中文残留收口；G2 批准 2026-10-14 20:37）
 package web
 
 import (
@@ -158,7 +160,7 @@ func (s *Server) buildSetupData(c *gin.Context, idx int, errMsg string) template
 	}
 	data.DKIMGenerated = cfg.Auth.DKIM.KeyPath != "" && cfg.Auth.DKIM.Selector != ""
 	if idx == 3 { // DNS 建议步：按当前域名计算呈现（计划书 1.5⑤；真实值化——IP 探测/DKIM 公钥）
-		data.DNSRecords = buildDNSRecords(cfg)
+		data.DNSRecords = buildDNSRecords(cfg, langOf(c)) // C5（α 批）：lang 注入（占位词/引导串键承载）
 	}
 	if idx == 5 {
 		data.DomainFinal = cfg.Server.Domain
@@ -179,18 +181,20 @@ func HTTPPortZeroAsDefault(p int) int {
 // 真实值化（向导占位符与布局修复批次——干系人裁决 12:19）：A 记录=UDP 拨号探测的
 // 本机出口公网 IP（探测失败/NAT 私网→值留空+说明列引导，不虚构）；DKIM 行=config
 // 现键的真实公钥 TXT（SPKI 形态六a；未配置/不可读→该行不呈现，零占位文本）。
-func buildDNSRecords(cfg *config.Config) []templates.DNSRecordView {
+func buildDNSRecords(cfg *config.Config, lang templates.Lang) []templates.DNSRecordView {
+	// C5（α 批——审计实施批 B 组）：占位词与引导串改键承载（原中文硬编码——en 界面
+	// 中文残留收口，E9 批二「主域」同族遗漏；zh 键值=原文零变化）。
 	d := cfg.Server.Domain
 	if d == "" || d == "localhost" {
-		d = "你的域名"
+		d = templates.Tr(lang, "setup.domainPlaceholder")
 	}
 	spf := "v=spf1 mx -all"
 	dmarc := "v=DMARC1; p=none; rua=mailto:postmaster@" + d
 	// A 记录值：探测本机公网出口 IP（裁决五a——UDP 拨号零外呼；私网/失败回退留空引导）
 	pubIP := detectPublicIP()
-	aValue, aNote := pubIP, "主机记录解析"
+	aValue, aNote := pubIP, templates.Tr(lang, "setup.noteHostResolve")
 	if aValue == "" {
-		aNote = "填你的服务器公网 IP（自动探测不可用——本机处于内网/NAT 环境）"
+		aNote = templates.Tr(lang, "setup.noteIpManual")
 	}
 	// TTL 建议值（P8——Setup向导新手可用性批次）：常规记录 3600（1 小时）；
 	// _mta-sts 短 TTL 600（10 分钟——rfc8461 §3.1 策略轮换敏捷语义）
