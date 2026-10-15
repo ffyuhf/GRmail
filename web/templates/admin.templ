@@ -15,6 +15,9 @@
 //   2026-10-05 15:15:22）
 //   2026-10-14 20:45:00 | 修正 | Webmail前端可用性收口批 B2/E-1-A：签名增 noticeText
 //   参数+成功反馈呈现块（G2 批准 2026-10-14 20:37 E-1-A noticed 303 扩展）
+//   2026-10-15 01:35:00 | 修正 | Webmail前端可选交互增强批 C3/E-2-A：两视图 settings-nav
+//   内联替换为 settingsNavBack 组件（呈现零变化锚——aria-label 既有形态保持）
+//   （依据：γ批计划书 v1.0.0 1.2 C3，G2 批准 2026-10-15 01:22 候选 E-2-A）
 package templates
 
 import (
@@ -67,9 +70,7 @@ func twoFALabel(lang Lang, r *AdminMailboxRow) string {
 templ AdminMailboxesView(lang Lang, rows []*AdminMailboxRow, errText string, noticeText string, csrf string, nav *MailListData) {
 	@AppFrame(lang, Tr(lang, "admin.title"), Tr(lang, "home.adminKind"), true, csrf, nav) {
 		<main class="main content-page" id="main-content">
-			<nav class="settings-nav" aria-label={ Tr(lang, "settings.navTitle") }>
-				<a href="/admin/settings">{ Tr(lang, "nav.backSettings") }</a>
-			</nav>
+			@settingsNavBack(lang, true)
 			<div class="page-head">
 				<h2>{ Tr(lang, "admin.h2") }（{ fmt.Sprintf("%d", len(rows)) }）</h2>
 				// C4（批五）：状态筛选/地址过滤补 aria-label（原 placeholder/option 文案弱关联——
@@ -199,9 +200,7 @@ templ AdminUnregisteredView(lang Lang, list []*AdminMailboxRow, csrf string, nav
 		// B10（批五）：main 地标+id 补齐（skip-link 跳转目标——批二 G1 实施不完整收尾；
 		// 对照 AdminMailboxesView 既有形态）。
 		<main class="main content-page" id="main-content">
-			<nav class="settings-nav" aria-label={ Tr(lang, "settings.navTitle") }>
-				<a href="/admin/settings">{ Tr(lang, "nav.backSettings") }</a>
-			</nav>
+			@settingsNavBack(lang, true)
 			<div class="page-head"><h2>{ Tr(lang, "admin.aggH2") }</h2></div>
 			if len(list) == 0 {
 				<div class="empty-state">

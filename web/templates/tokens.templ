@@ -9,6 +9,9 @@
 //   （依据：U18 计划书 v1.0.0 步骤 3/1.5④，G2 批准 2026-09-26 15:25:47）
 //   2026-10-14 20:45:00 | 修正 | Webmail前端可用性收口批 B2/E-1-A：签名增 noticeText
 //   参数+撤销成功反馈呈现（G2 批准 2026-10-14 20:37）
+//   2026-10-15 01:35:00 | 修正 | Webmail前端可选交互增强批 C3/E-2-A：settings-nav
+//   内联替换为 settingsNavBack 组件（原无 aria-label——组件统一拉平，可访问名增益
+//   视觉零变化；G2 批准 2026-10-15 01:22 候选 E-2-A）
 package templates
 
 import (
@@ -65,7 +68,7 @@ templ TokensView(lang Lang, list []*storage.ApiToken, newToken string, errText s
 					<button type="button" class="btn-sm secondary" data-copy={ newToken }>{ Tr(lang, "common.copyAll") }</button>
 				</div>
 			}
-			<nav class="settings-nav"><a href="/admin/settings">{ Tr(lang, "nav.backSettings") }</a></nav>
+			@settingsNavBack(lang, true)
 			<div class="page-head"><h2>{ Tr(lang, "tokens.h2Gen") }</h2></div>
 			<form method="post" action="/admin/tokens" class="actions">
 				<input type="hidden" name="csrf_token" value={ csrf }/>

@@ -10,6 +10,11 @@
 //	2026-09-20 01:15:00 | 新建 | U10 Setup 向导与 ACME（计划书步骤 7）
 //	2026-09-23 08:44:00 | 扩展 | U13 传输安全全量：传输安全节（计划书步骤 4/1.5①⑩；
 //	  契约 v1.9.0 3.3——FR-010「二者默认启用、Web 可关闭」）
+//	2026-10-15 01:35:00 | 重构 | Webmail前端可选交互增强批 γ B5/E-1-A：adminSettingsPOST
+//	  改分区提交——section 隐藏域分派四节（auth/delivery/session/tls），每节仅校验+保存
+//	  本节字段（既有校验规则逐字迁移零增减；未提交节保留现值）；「一次保存全部五节」
+//	  批量交互移除（计划书 1.3 已披露获批）
+//	  （依据：γ批计划书 v1.0.0 1.2 B5，G2 批准 2026-10-15 01:22 候选 E-1-A）
 package web
 
 import (
@@ -119,7 +124,10 @@ func tlsrptTXTSuggestion(cfg *config.Config) string {
 	return "v=TLSRPTv1; rua=mailto:" + rua
 }
 
-// adminSettingsPOST 设置保存（POST /admin/settings）：整体校验→原子读改写→303 回显。
+// adminSettingsPOST 设置保存（POST /admin/settings）。B5/E-1-A（γ批 2026-10-15）：
+// 分区提交——section 隐藏域分派四可编辑节（auth/delivery/session/tls），每节独立
+// 校验+原子读改写（仅本节字段；未提交节保留现值——SaveConfig 读 Current 快照基底）；
+// 校验规则沿 U10/U13 既有十二判定点逐字迁移零增减；非法/缺失 section → 400 错误整页。
 func (s *Server) adminSettingsPOST(c *gin.Context) {
 	if !s.adminGuard(c) { // B9（批四）：内联 403 空体收口——adminGuard 复用（批二 E1 错误整页）
 		return
@@ -129,14 +137,47 @@ func (s *Server) adminSettingsPOST(c *gin.Context) {
 		s.errPage(c, http.StatusServiceUnavailable, "err.page503") // B9（批四）：空体改错误整页
 		return
 	}
+	switch c.PostForm("section") {
+	case "auth":
+		s.settingsSaveAuth(c)
+	case "delivery":
+		s.settingsSaveDelivery(c)
+	case "session":
+		s.settingsSaveSession(c)
+	case "tls":
+		s.settingsSaveTLS(c)
+	default:
+		s.errPage(c, http.StatusBadRequest, "err.page400") // B5：旧全量提交形态（无节标识）不再受支持
+	}
+}
 
-	// ── 表单解析与校验（1.5⑨：零值/非法值拒绝——禁止把配置写坏）──
+// settingsSaveAuth 认证栈节保存（B5：dkimAlgo 枚举校验——规则零增减；未列字段保留现值）。
+func (s *Server) settingsSaveAuth(c *gin.Context) {
 	dkimAlgo := strings.TrimSpace(c.PostForm("dkimAlgorithm"))
 	if dkimAlgo != "" && !dkimAlgorithms[dkimAlgo] {
-		renderPage(c, http.StatusOK, templates.SettingsView(s.buildSettingsData(c, s.cfg.CfgSnapshot(),
-			templates.Tr(langOf(c), "settings.errAlgo"))))
+		s.settingsReject(c, templates.Tr(langOf(c), "settings.errAlgo"))
 		return
 	}
+	if err := s.cfg.SaveConfig(func(cfg *config.Config) {
+		cfg.Auth.SPFEnabled = c.PostForm("spfEnabled") == "on"
+		cfg.Auth.DKIMEnabled = c.PostForm("dkimEnabled") == "on"
+		cfg.Auth.DMARCEnabled = c.PostForm("dmarcEnabled") == "on"
+		cfg.Auth.ARCEnabled = c.PostForm("arcEnabled") == "on"
+		cfg.Auth.DKIM = config.DKIMConf{
+			Selector:  strings.TrimSpace(c.PostForm("dkimSelector")),
+			KeyPath:   strings.TrimSpace(c.PostForm("dkimKeyPath")),
+			Algorithm: dkimAlgo,
+		}
+	}); err != nil {
+		s.settingsSaveFailed(c, "认证栈节", err)
+		return
+	}
+	sessLogger(c).Info("设置已保存（认证栈节，热加载生效）", "log_id", c.GetString(ctxKeyLogID))
+	c.Redirect(http.StatusSeeOther, "/admin/settings?saved=1") // F01：成功反馈经 ?saved=1 回显
+}
+
+// settingsSaveDelivery 投递聚合节保存（B5：五项正整数校验；未列字段保留现值）。
+func (s *Server) settingsSaveDelivery(c *gin.Context) {
 	maxSizeMB, err := parsePositiveForm(c, "maxMessageSizeMB")
 	if err != nil {
 		s.settingsReject(c, templates.Tr(langOf(c), "settings.errMaxSize"))
@@ -162,6 +203,25 @@ func (s *Server) adminSettingsPOST(c *gin.Context) {
 		s.settingsReject(c, templates.Tr(langOf(c), "settings.errMaxAttempts"))
 		return
 	}
+	if err := s.cfg.SaveConfig(func(cfg *config.Config) {
+		cfg.CatchAll = c.PostForm("catchAll") == "on"
+		cfg.Mail.MaxMessageSizeBytes = maxSizeMB * 1024 * 1024
+		cfg.Mail.Delivery = config.DeliveryConf{
+			RetryBaseSeconds: int(retryBase),
+			RetryFactor:      int(retryFactor),
+			RetryCapSeconds:  int(retryCap),
+			MaxAttempts:      int(maxAttempts),
+		}
+	}); err != nil {
+		s.settingsSaveFailed(c, "投递聚合节", err)
+		return
+	}
+	sessLogger(c).Info("设置已保存（投递聚合节，热加载生效）", "log_id", c.GetString(ctxKeyLogID))
+	c.Redirect(http.StatusSeeOther, "/admin/settings?saved=1")
+}
+
+// settingsSaveSession 会话限流节保存（B5：四项正整数校验；未列字段保留现值）。
+func (s *Server) settingsSaveSession(c *gin.Context) {
 	idleMinutes, err := parsePositiveForm(c, "idleMinutes")
 	if err != nil {
 		s.settingsReject(c, templates.Tr(langOf(c), "settings.errIdle"))
@@ -182,7 +242,20 @@ func (s *Server) adminSettingsPOST(c *gin.Context) {
 		s.settingsReject(c, templates.Tr(langOf(c), "settings.errLimitThr"))
 		return
 	}
-	// U13 传输安全节：mode 枚举+max_age 值域校验（rfc8461 §3.2——写坏配置防御）
+	if err := s.cfg.SaveConfig(func(cfg *config.Config) {
+		cfg.Session = config.SessionConf{IdleMinutes: int(idleMinutes), AbsoluteHours: int(absoluteHours)}
+		cfg.LoginLimit = config.LoginLimitConf{WindowMinutes: int(limitWindow), Threshold: limitThreshold}
+	}); err != nil {
+		s.settingsSaveFailed(c, "会话限流节", err)
+		return
+	}
+	sessLogger(c).Info("设置已保存（会话限流节，热加载生效）", "log_id", c.GetString(ctxKeyLogID))
+	c.Redirect(http.StatusSeeOther, "/admin/settings?saved=1")
+}
+
+// settingsSaveTLS 传输安全节保存（B5：mode 枚举+max_age 值域校验〔rfc8461 §3.2——
+// 写坏配置防御，U13 既有规则〕；开关热加载生效——判定③保存即端点停发/建议值停显）。
+func (s *Server) settingsSaveTLS(c *gin.Context) {
 	stsMode := strings.TrimSpace(c.PostForm("mtaStsMode"))
 	if stsMode != "enforce" && stsMode != "testing" {
 		s.settingsReject(c, templates.Tr(langOf(c), "settings.errStsMode"))
@@ -193,45 +266,28 @@ func (s *Server) adminSettingsPOST(c *gin.Context) {
 		s.settingsReject(c, templates.Tr(langOf(c), "settings.errStsAge"))
 		return
 	}
-
-	// ── 原子读改写（全量节合并；未列字段保留现值——SaveConfig 读 Current 快照基底）──
-	err = s.cfg.SaveConfig(func(cfg *config.Config) {
-		cfg.Auth.SPFEnabled = c.PostForm("spfEnabled") == "on"
-		cfg.Auth.DKIMEnabled = c.PostForm("dkimEnabled") == "on"
-		cfg.Auth.DMARCEnabled = c.PostForm("dmarcEnabled") == "on"
-		cfg.Auth.ARCEnabled = c.PostForm("arcEnabled") == "on"
-		cfg.Auth.DKIM = config.DKIMConf{
-			Selector:  strings.TrimSpace(c.PostForm("dkimSelector")),
-			KeyPath:   strings.TrimSpace(c.PostForm("dkimKeyPath")),
-			Algorithm: dkimAlgo,
-		}
-		cfg.CatchAll = c.PostForm("catchAll") == "on"
-		cfg.Mail.MaxMessageSizeBytes = maxSizeMB * 1024 * 1024
-		cfg.Mail.Delivery = config.DeliveryConf{
-			RetryBaseSeconds: int(retryBase),
-			RetryFactor:      int(retryFactor),
-			RetryCapSeconds:  int(retryCap),
-			MaxAttempts:      int(maxAttempts),
-		}
-		cfg.Session = config.SessionConf{IdleMinutes: int(idleMinutes), AbsoluteHours: int(absoluteHours)}
-		cfg.LoginLimit = config.LoginLimitConf{WindowMinutes: int(limitWindow), Threshold: limitThreshold}
-		cfg.MTASts = config.MTAStsConf{ // U13：开关热加载生效（判定③——保存即端点停发/建议值停显）
+	if err := s.cfg.SaveConfig(func(cfg *config.Config) {
+		cfg.MTASts = config.MTAStsConf{
 			Enabled:       c.PostForm("mtaStsEnabled") == "on",
 			Mode:          stsMode,
 			MaxAgeSeconds: int(stsMaxAge),
 			ReportEnabled: c.PostForm("tlsrptEnabled") == "on",
 			RuaAddress:    strings.TrimSpace(c.PostForm("tlsrptRuaAddress")),
 		}
-	})
-	if err != nil {
-		sessLogger(c).Error("设置保存失败", "error", err)
-		renderPage(c, http.StatusInternalServerError, templates.SettingsView(
-			s.buildSettingsData(c, s.cfg.CfgSnapshot(), templates.Tr(langOf(c), "settings.errSave"))))
+	}); err != nil {
+		s.settingsSaveFailed(c, "传输安全节", err)
 		return
 	}
-	sessLogger(c).Info("设置已保存（热加载生效）", "log_id", c.GetString(ctxKeyLogID))
-	// F01：成功反馈经 ?saved=1 回显 notice（GET 分支渲染）
+	sessLogger(c).Info("设置已保存（传输安全节，热加载生效）", "log_id", c.GetString(ctxKeyLogID))
 	c.Redirect(http.StatusSeeOther, "/admin/settings?saved=1")
+}
+
+// settingsSaveFailed 节保存失败统一出口（500 重渲染——B5 分派形态，语义与原全量保存失败一致）。
+// 参数：c 上下文；section 节名（日志定位用）；err 保存错误（日志关联）。
+func (s *Server) settingsSaveFailed(c *gin.Context, section string, err error) {
+	sessLogger(c).Error("设置保存失败", "section", section, "error", err)
+	renderPage(c, http.StatusInternalServerError, templates.SettingsView(
+		s.buildSettingsData(c, s.cfg.CfgSnapshot(), templates.Tr(langOf(c), "settings.errSave"))))
 }
 
 // settingsReject 校验拒绝统一出口（重渲染+消息）。

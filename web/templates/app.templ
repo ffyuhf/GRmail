@@ -15,6 +15,10 @@
 //   增 next 参数（空串容错省略——端点 next="/" 兜底既有）；顶栏调用点传 "/"（主界面
 //   切语言回首页——既有行为等价）；调用点编译期强校验零遗漏
 //   （依据：Setup向导缺陷修复计划书 v1.0.0 1.2 组4b，G2 批准 2026-10-05 00:21:19）
+//   2026-10-15 00:40:00 | 修正 | Webmail前端可见性一致性令牌批 β：A1 theme-color
+//   双 media 拆分（暗色适配——亮色 #1976d2 零变化锚）+C1 枢纽图标库三增
+//   （iconLock/iconList/iconMail——settings_hub 消费）
+//   （依据：β批计划书 v1.0.0 1.2 A1/C1，G2 批准 2026-10-15 00:12）
 package templates
 
 // iconMenu 汉堡菜单图标（F05：☰ 字符改 SVG——基准 TopAppBar Material Menu 同构；
@@ -39,6 +43,15 @@ var iconLogout = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" str
 // iconShield 2FA 盾牌图标（菜单项）。
 var iconShield = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`
 
+// iconLock 锁图标（C1 β 批：枢纽「修改密码」卡片——emoji→SVG 收口）。
+var iconLock = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`
+
+// iconList 清单图标（C1 β 批：枢纽「过滤规则」卡片）。
+var iconList = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>`
+
+// iconMail 信封图标（C1 β 批：枢纽「返回邮箱」卡片）。
+var iconMail = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/></svg>`
+
 // AppLayout Webmail 页面骨架（登录后各页统一应用栏+抽屉容器）。
 // 参数：lang 界面语言；title 页面标题；label 主体呈现名；isAdmin admin 主体标记；csrf 会话绑定 token。
 templ AppLayout(lang Lang, title string, label string, isAdmin bool, csrf string) {
@@ -55,7 +68,10 @@ templ AppLayout(lang Lang, title string, label string, isAdmin bool, csrf string
 			// H3（批二）：favicon+manifest+theme-color（原每页 favicon.ico 404）。
 			<link rel="icon" href={ StaticURL("/static/favicon.svg") } type="image/svg+xml"/>
 			<link rel="manifest" href={ StaticURL("/static/manifest.webmanifest") }/>
-			<meta name="theme-color" content="#1976d2"/>
+			// A1（β 批）：theme-color 双 media 拆分——暗色系统窗口色条随 --bg 暗档
+			// #212121 适配（亮色 #1976d2 零变化锚）。
+			<meta name="theme-color" content="#1976d2" media="(prefers-color-scheme: light)"/>
+			<meta name="theme-color" content="#212121" media="(prefers-color-scheme: dark)"/>
 		</head>
 		<body>
 			// G1（批二）：跳转链接（键盘用户跳过侧栏直达主内容）+H6 noscript 降级说明。

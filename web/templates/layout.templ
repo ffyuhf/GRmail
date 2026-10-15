@@ -7,6 +7,9 @@
 //   2026-09-19 05:10:00 | 新建 | U8 Web 会话与登录（计划书步骤 7）
 //   2026-09-24 16:50:00 | 扩展 | U16 Webmail 体验收尾（计划书步骤 4/5，G2 批准 2026-09-24 11:51:57）
 //   2026-10-02 18:10:00 | 注记 | Webmail设计系统重构批次阶段D（G2 批准 2026-10-02 17:34:40）
+//   2026-10-15 00:40:00 | 修正 | Webmail前端可见性一致性令牌批 β：A1 theme-color
+//   双 media 拆分（暗色适配）+E4 manifest 引用补挂（Layout 骨架六页对齐 AppLayout）
+//   （依据：β批计划书 v1.0.0 1.2 A1/E4，G2 批准 2026-10-15 00:12）
 package templates
 
 // Layout 页面骨架：统一 <head> 与错误提示位（登录失败统一模糊文本——防枚举口径）。
@@ -19,9 +22,13 @@ templ Layout(lang Lang, title string, errText string) {
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
 			<title>{ title }</title>
 			<link rel="stylesheet" href={ StaticURL("/static/app.css") }/>
-			// H3（批二）：favicon+theme-color（Layout 骨架页同享——404 消除）。
+			// H3（批二）：favicon+theme-color（Layout 骨架页同享——404 消除）；
+			// A1（β 批）：theme-color 双 media 拆分（暗色适配——亮色 #1976d2 零变化锚）；
+			// E4（β 批）：manifest 引用补挂（Layout 骨架六页对齐 AppLayout 既有形态）。
 			<link rel="icon" href={ StaticURL("/static/favicon.svg") } type="image/svg+xml"/>
-			<meta name="theme-color" content="#1976d2"/>
+			<link rel="manifest" href={ StaticURL("/static/manifest.webmanifest") }/>
+			<meta name="theme-color" content="#1976d2" media="(prefers-color-scheme: light)"/>
+			<meta name="theme-color" content="#212121" media="(prefers-color-scheme: dark)"/>
 		</head>
 		<body>
 			if errText != "" {

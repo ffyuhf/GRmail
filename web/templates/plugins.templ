@@ -7,6 +7,9 @@
 //	2026-10-05 15:20:00 | 新建 | Webmail管理职能批次（计划书阶段 6）
 //	2026-10-14 20:45:00 | 修正 | Webmail前端可用性收口批 B1：th scope=col+sr-only
 //	caption（批五 B11 漏网——G2 批准 2026-10-14 20:37）
+//	2026-10-15 01:35:00 | 修正 | Webmail前端可选交互增强批 C3/E-2-A：settings-nav
+//	内联替换为 settingsNavBack 组件（原无 aria-label——组件统一拉平，可访问名增益
+//	视觉零变化；G2 批准 2026-10-15 01:22 候选 E-2-A）
 package templates
 
 // PluginRow 插件状态呈现行（templates 侧视图模型——与 web.PluginStatus 字段同构；
@@ -32,7 +35,7 @@ templ PluginsView(d PluginsData) {
 	{{ lang := NormalizeLang(d.Lang) }}
 	@AppFrame(lang, Tr(lang, "plugins.title"), Tr(lang, "home.adminKind"), true, d.CSRF, d.Nav) {
 		<main class="main content-page" id="main-content">
-			<nav class="settings-nav"><a href="/admin/settings">{ Tr(lang, "nav.backSettings") }</a></nav>
+			@settingsNavBack(lang, true)
 			<div class="page-head"><h2>{ Tr(lang, "plugins.title") }</h2></div>
 			<p class="hint">{ Tr(lang, "plugins.hint") }</p>
 			if len(d.Plugins) == 0 {

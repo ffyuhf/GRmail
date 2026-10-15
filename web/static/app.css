@@ -15,7 +15,15 @@
  * 修改历史：
  *   2026-09-24 16:48:00 | 新建 | U16 Webmail 体验收尾（G2 批准 2026-09-24 11:51:57）
  *   2026-10-02 13:30:00 | 重构 | Webmail视觉重构批次阶段2（G2 批准 2026-10-02 13:20:06）
- *   2026-10-02 17:40:00 | 重构 | Webmail设计系统重构批次阶段A（G2 批准 2026-10-02 17:34:40） */
+ *   2026-10-02 17:40:00 | 重构 | Webmail设计系统重构批次阶段A（G2 批准 2026-10-02 17:34:40）
+ *   2026-10-15 00:40:00 | 修正 | Webmail前端可见性一致性令牌批 β（G2 批准 2026-10-15 00:12）：
+ *   A2 content-page 表单弹性宽+C1 hub-ic SVG 尺寸+C2/E-1-A csv 表并入 .table-wrap+
+ *   C4/E-2-A 微调散值令牌化（16 值归令牌承载原值）+E1 ::placeholder 令牌（明暗双档 AA）
+ *   2026-10-15 01:35:00 | 重构 | Webmail前端可选交互增强批 γ（G2 批准 2026-10-15 01:22
+ *   三组候选全 A）：B5/E-1-A+T2 分区折叠样式（.settings-fold——fieldset→details 承载，
+ *   summary 绝对定位骑边框线复刻 legend 嵌线视觉；≥768 summary 禁交互恒展开=桌面呈现
+ *   零变化锚；<768 可折叠+三角指示；节内表单 gap 0 复刻原 fieldset 紧排）+A2 弹性宽
+ *   规则等效迁移（fieldset→.settings-fold 作用域） */
 
 /* ════════════════ ① 设计令牌（:root 浅色基线）════════════════ */
 :root {
@@ -99,6 +107,24 @@
 	--z-drawer: 90;     /* 抽屉（移动端浮层） */
 	--z-menu: 200;      /* 菜单/浮层 */
 	--z-toast: 300;     /* 反馈条 */
+	/* —— β 批（C4/E-2-A）：微调值令牌化——承载原值视觉零变化；E1 占位色 —— */
+	--fs-code: .82em;           /* code 字号（相对正文） */
+	--fs-brand: 1.1rem;         /* 应用栏品牌字 */
+	--fs-empty: 1.25rem;        /* 空态主标题 */
+	--fs-toggle: 1.25rem;       /* 抽屉开关键（.nav-toggle 字号） */
+	--fs-nav: .875rem;          /* settings-nav 导航字 */
+	--fs-detail-sm: .8125rem;   /* 行详情小字 */
+	--fs-editor: .9375rem;      /* Quill 编辑区正文 */
+	--ls-th: .03em;             /* 表头字距 */
+	--ls-brand: .02em;          /* 品牌字距 */
+	--ls-mono: .06em;           /* 等宽密文（恢复码）字距 */
+	--pad-code-y: .08rem; --pad-code-x: .35rem; /* code 内边距 */
+	--pad-kbd-x: .4rem;         /* kbd 横向内边距 */
+	--pad-link-x: .25rem;       /* 文字按钮横向内边距 */
+	--pad-badge-y: .12rem; --pad-badge-x: .6rem; /* badge 内边距 */
+	--pad-unread-x: .55rem;     /* 侧栏未读计数横向内边距 */
+	--icon-lg: 1.5rem;          /* 大图标（枢纽卡片） */
+	--placeholder: rgba(0, 0, 0, 0.54); /* E1：占位文字色（4.6:1 @白底 AA） */
 	/* —— 布局 —— */
 	--topbar-h: 56px;    /* 应用栏高（MUI Toolbar 密度） */
 	--sidebar-w: 15rem;  /* persistent 抽屉宽 */
@@ -139,6 +165,7 @@
 		--badge-ok-bg: #1b3a22;  --badge-ok-fg: #a5d6a7;
 		--badge-warn-bg: #3d3340; --badge-warn-fg: #ffe082;
 		--badge-err-bg: #4a1f1d;  --badge-err-fg: #ef9a9a;
+		--placeholder: rgba(255, 255, 255, 0.5); /* E1（β 批）：暗色档（4.6:1 @#2d2d2d 面） */
 		--shadow-card: 0 2px 1px -1px rgba(0,0,0,.4), 0 1px 1px 0 rgba(0,0,0,.28), 0 1px 3px 0 rgba(0,0,0,.24);
 		--shadow-menu: 0 3px 3px -2px rgba(0,0,0,.4), 0 3px 4px 0 rgba(0,0,0,.28), 0 1px 8px 0 rgba(0,0,0,.24);
 	}
@@ -221,8 +248,8 @@ code {
 	font-family: var(--font-mono);
 	background: var(--border-soft);
 	border-radius: var(--radius-xs);
-	padding: .08rem .35rem;
-	font-size: .82em;
+	padding: var(--pad-code-y) var(--pad-code-x); /* C4/E-2-A（β 批）：散值归令牌承载原值 */
+	font-size: var(--fs-code);
 }
 pre { font-family: var(--font-mono); white-space: pre-wrap; }
 fieldset {
@@ -271,7 +298,7 @@ button:disabled, .btn:disabled {
 }
 button.linklike {
 	background: none; color: var(--primary);
-	min-height: auto; padding: 0 .25rem;
+	min-height: auto; padding: 0 var(--pad-link-x); /* C4/E-2-A（β 批） */
 	text-decoration: underline;
 }
 /* 次要按钮（outlined——描边形态；C1 批四：选择器组增 a.secondary——详情返回按钮
@@ -385,6 +412,9 @@ input[type="checkbox"], input[type="radio"] {
 }
 input[type="search"] { min-height: var(--btn-h); }
 textarea { resize: vertical; }
+/* E1（β 批）：占位文字专用令牌——浏览器默认≈2.81:1 低对比断层收口（AA≥4.5:1）；
+ * opacity:1 防 UA 双重调暗（令牌色即最终色——明暗双档见 :root/暗色块）。 */
+::placeholder { color: var(--placeholder); opacity: 1; }
 form { display: flex; flex-direction: column; gap: var(--sp-3); }
 form.inline, .inline { display: inline-flex; flex-direction: row; align-items: center; gap: var(--sp-2); margin: 0; }
 
@@ -404,6 +434,15 @@ label:has(> input[type="checkbox"]) {
 .card form input:not([type="radio"]):not([type="checkbox"]):not([type="hidden"]),
 .card form select,
 .card form textarea { width: 100%; }
+/* A2（β 批）：content-page 表单 fieldset 输入弹性宽——settings 四输入原 size 物理宽
+ * （40/40/16/32 字符）窄屏溢出收口；满宽+24rem 上限。作用域限 fieldset（settings
+ * 形态）——admin 行内表单（无 fieldset）/password .card/sieve textarea 零波及。
+ * γ批等效迁移：settings 节容器由 fieldset 改 .settings-fold（E2 折叠承载）——弹性宽
+ * 规则同步覆盖 .settings-fold 表单（β 批批准面等效承载，语义零变化）。 */
+.content-page form fieldset input:not([type="radio"]):not([type="checkbox"]):not([type="hidden"]),
+.content-page form fieldset select,
+.content-page .settings-fold form input:not([type="radio"]):not([type="checkbox"]):not([type="hidden"]),
+.content-page .settings-fold form select { width: 100%; max-width: 24rem; }
 
 /* —— Chip 胶囊标签（选中过滤/元信息小标签）—— */
 .chip {
@@ -426,7 +465,7 @@ label:has(> input[type="checkbox"]) {
 /* —— Badge 徽标（状态三态——保留既有类名锚）—— */
 .badge {
 	display: inline-block;
-	padding: .12rem .6rem;
+	padding: var(--pad-badge-y) var(--pad-badge-x); /* C4/E-2-A（β 批） */
 	border-radius: var(--radius-pill);
 	font-size: var(--text-caption);
 	font-weight: var(--text-label-weight);
@@ -440,7 +479,7 @@ label:has(> input[type="checkbox"]) {
 	background: var(--border-soft);
 	border: 1px solid var(--border);
 	box-shadow: 0 1px 1px rgba(0, 0, 0, .2), inset 0 2px 0 0 rgba(255, 255, 255, .7);
-	padding: 0 .4rem;
+	padding: 0 var(--pad-kbd-x); /* C4/E-2-A（β 批） */
 	border-radius: var(--radius-xs);
 	font-size: var(--text-caption);
 	font-family: var(--font-mono);
@@ -642,7 +681,7 @@ th {
 	font-weight: var(--text-label-weight);
 	color: var(--fg-secondary);
 	/* G10（批二）：uppercase 移除（读屏逐字母拼读中文/无大小写语言畸形） */
-	letter-spacing: .03em;
+	letter-spacing: var(--ls-th); /* C4/E-2-A（β 批） */
 	background: var(--surface-2);
 	border-bottom: 1px solid var(--border);
 	position: sticky;
@@ -669,7 +708,7 @@ section table, .card table { border-radius: var(--radius-sm); overflow: hidden; 
 	max-width: 24rem;
 }
 .empty-state svg { width: 96px; height: 96px; opacity: .45; }
-.empty-state h3 { font-size: 1.25rem; font-weight: var(--text-title-weight); margin: var(--sp-3) 0 var(--sp-1); color: var(--fg); }
+.empty-state h3 { font-size: var(--fs-empty); font-weight: var(--text-title-weight); margin: var(--sp-3) 0 var(--sp-1); color: var(--fg); } /* C4/E-2-A（β 批） */
 .empty-state p { margin: var(--sp-1) 0; font-size: var(--text-body); }
 
 /* —— 骨架屏（MUI Skeleton wave——列表加载态）—— */
@@ -766,9 +805,9 @@ section table, .card table { border-radius: var(--radius-sm); overflow: hidden; 
 	display: flex;
 	align-items: center;
 	gap: var(--sp-2);
-	font-size: 1.1rem;
+	font-size: var(--fs-brand); /* C4/E-2-A（β 批） */
 	font-weight: 600;
-	letter-spacing: .02em;
+	letter-spacing: var(--ls-brand);
 	color: var(--fg);
 	text-decoration: none;
 }
@@ -784,7 +823,7 @@ section table, .card table { border-radius: var(--radius-sm); overflow: hidden; 
 .nav-toggle {
 	display: inline-flex;
 	cursor: pointer;
-	font-size: 1.25rem;
+	font-size: var(--fs-toggle); /* C4/E-2-A（β 批）——步骤 0 复查补收（var( 同行过滤遗漏） */
 	padding: var(--sp-1) var(--sp-2);
 	min-height: 40px;
 	min-width: 40px;
@@ -855,7 +894,7 @@ section table, .card table { border-radius: var(--radius-sm); overflow: hidden; 
 	font-weight: 600;
 	font-size: var(--text-caption);
 	background: color-mix(in srgb, var(--primary) 12%, transparent);
-	padding: 0 .55rem;
+	padding: 0 var(--pad-unread-x); /* C4/E-2-A（β 批） */
 	border-radius: var(--radius-pill);
 	min-height: 20px;
 	display: inline-flex;
@@ -1213,10 +1252,10 @@ input[type="file"]::file-selector-button:hover { background: var(--primary-soft)
 .lang-switch a { color: var(--primary); text-decoration: none; font-size: var(--text-caption); }
 .lang-switch a:hover { text-decoration: underline; }
 
-/* CSV 导入候选（类名锚——Go 侧 i18n 生成保持） */
+/* CSV 导入候选（类名锚——Go 侧 i18n 生成保持）。
+ * C2/E-1-A（β 批——G2 批准 2026-10-15 00:12）：容器挂 .table-wrap 双类（i18n.go）
+ * 并入统一表格体系——自有 1px collapse 边框两行规则废止；圆角描边/表头底色/断词全继承。 */
 .csv-candidates { margin: var(--sp-1) 0; }
-.csv-candidates table { border-collapse: collapse; }
-.csv-candidates th, .csv-candidates td { border: 1px solid var(--border-soft); padding: var(--sp-1) var(--sp-2); }
 
 /* ════════════════ ⑩ 支撑页 ════════════════ */
 
@@ -1256,7 +1295,7 @@ input[type="file"]::file-selector-button:hover { background: var(--primary-soft)
 	border-radius: var(--radius-sm);
 	padding: var(--sp-2) var(--sp-3);
 	font-size: var(--text-body);
-	letter-spacing: .06em;
+	letter-spacing: var(--ls-mono); /* C4/E-2-A（β 批） */
 	text-align: center;
 }
 .qr-box {
@@ -1461,9 +1500,11 @@ input[type="file"]::file-selector-button:hover { background: var(--primary-soft)
 	transition: border-color var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast) var(--ease-standard);
 }
 .hub-card:hover { border-color: var(--primary); box-shadow: var(--shadow-menu); }
-.hub-ic { font-size: 1.5rem; line-height: 1; }
+/* C1（β 批）：枢纽卡片图标 SVG 化尺寸（emoji 废止——currentColor 暗色联动）。 */
+.hub-ic { width: var(--icon-lg); height: var(--icon-lg); display: inline-flex; color: var(--fg-secondary); }
+.hub-ic svg { width: 100%; height: 100%; }
 .hub-name { font-weight: 600; }
-.hub-desc { color: var(--fg-muted); font-size: .875rem; }
+.hub-desc { color: var(--fg-muted); font-size: var(--text-body); } /* C4/E-2-A（β 批）——同值既有令牌归位（.875rem=text-body 档） */
 
 /* G2·D6 管理枢纽分区导航（/admin/settings 六分区 tab 链） */
 .settings-nav {
@@ -1477,12 +1518,50 @@ input[type="file"]::file-selector-button:hover { background: var(--primary-soft)
 .settings-nav a, .settings-nav span {
 	padding: var(--sp-1) var(--sp-3);
 	border-radius: var(--radius-sm);
-	font-size: .875rem;
+	font-size: var(--fs-nav); /* C4/E-2-A（β 批） */
 	color: var(--fg-muted);
 }
 .settings-nav a { text-decoration: none; }
 .settings-nav a:hover { color: var(--primary); background: var(--surface); }
 .settings-nav span.active { color: var(--primary); background: var(--surface); font-weight: 600; }
+
+/* B5/E2（γ批——G2 批准 2026-10-15 01:22 三组候选全 A）：settings 分区分组折叠承载。
+ * E-3-A：details 默认全展开——summary 绝对定位骑边框线（复刻 legend 嵌线视觉——
+ * top 负值+surface 背景遮挡）；≥768 summary 禁交互恒展开（桌面呈现零变化锚——
+ * 用户无收起路径，open 态恒定）；<768 可折叠+三角指示（E-3-A 默认全展开=移动端
+ * 默认呈现与现状一致，仅新增可收起能力）。
+ * E-1-A 伴随：节内表单 gap 0+保存钮上距——复刻原 fieldset 内 label 紧排视觉
+ * （表单容器由 fieldset 改 details>form，全局 form gap 覆盖为原形态）。 */
+.settings-fold {
+	position: relative;
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	padding: var(--sp-3) var(--sp-4);
+	margin: 0 0 var(--sp-4);
+}
+.settings-fold > summary {
+	position: absolute;
+	top: -0.72em;
+	left: var(--sp-3);
+	background: var(--surface);
+	padding: 0 var(--sp-2);
+	color: var(--muted);
+	font-size: var(--text-label);
+	cursor: pointer;
+	list-style: none;
+	white-space: nowrap;
+}
+.settings-fold > summary::-webkit-details-marker { display: none; }
+.settings-fold form { gap: 0; }
+.settings-fold form > .primary { margin-top: var(--sp-2); }
+.settings-fold > p:first-of-type { margin-top: 0; }
+@media (min-width: 768px) {
+	.settings-fold > summary { pointer-events: none; cursor: default; }
+}
+@media (max-width: 767.98px) {
+	.settings-fold > summary::after { content: "▾"; margin-left: var(--sp-1); color: var(--fg-secondary); }
+	.settings-fold:not([open]) > summary::after { content: "▸"; }
+}
 
 /* G1·D1 改密表单卡片（窄幅居中形态） */
 .form-card { max-width: 28rem; padding: var(--sp-4); }
@@ -1495,7 +1574,7 @@ input[type="file"]::file-selector-button:hover { background: var(--primary-soft)
 	margin-top: var(--sp-2);
 	background: var(--surface);
 	border-radius: var(--radius-sm);
-	font-size: .8125rem;
+	font-size: var(--fs-detail-sm); /* C4/E-2-A（β 批） */
 }
 .row-details-body p { margin: var(--sp-1) 0; }
 
@@ -1517,7 +1596,7 @@ input[type="file"]::file-selector-button:hover { background: var(--primary-soft)
 	box-shadow: var(--shadow-menu);
 }
 .compose-editor .ql-container.ql-snow { border-color: var(--border); border-radius: 0 0 var(--radius-sm) var(--radius-sm); }
-.ql-editor { font-size: .9375rem; line-height: 1.65; }
+.ql-editor { font-size: var(--fs-editor); line-height: 1.65; } /* C4/E-2-A（β 批） */
 
 /* G5·D3 compose 分区卡片化（视觉层增量——既有布局属性保持） */
 #compose-page form { display: flex; flex-direction: column; gap: var(--sp-3); }

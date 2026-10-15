@@ -13,6 +13,9 @@
 //	WEB模板缺陷修正批次转 W 遗留 #30/#31 承载——FR-011 双入口语义收口）
 //	2026-10-14 20:45:00 | 修正 | Webmail前端可用性收口批 B1（th scope+caption）+
 //	B2/E-1-A（Notice 成功反馈呈现——G2 批准 2026-10-14 20:37）
+//	2026-10-15 01:35:00 | 修正 | Webmail前端可选交互增强批 C3/E-2-A：列表/编辑两页
+//	双分支 settings-nav 内联替换为 settingsNavBack 组件（F7 批二双分支语义参数化保持；
+//	aria-label 统一拉平可访问名增益；G2 批准 2026-10-15 01:22 候选 E-2-A）
 package templates
 
 // activeLabel 激活态标签（templ 表达式辅助——U18 双语化）。
@@ -56,13 +59,7 @@ templ SieveListView(d *SieveListData) {
 	@AppFrame(d.Lang, Tr(d.Lang, "sieve.title"), Tr(d.Lang, "sieve.nav"), d.IsAdmin, d.CSRF, d.Nav) {
 		<main class="main content-page" id="main-content">
 		<section class="sieve-page">
-			<nav class="settings-nav">
-				if d.IsAdmin {
-					<a href="/admin/settings">{ Tr(d.Lang, "nav.backSettings") }</a>
-				} else {
-					<a href="/settings">{ Tr(d.Lang, "nav.backSettings") }</a>
-				}
-			</nav>
+			@settingsNavBack(d.Lang, d.IsAdmin)
 			<div class="page-head">
 				<h2>{ Tr(d.Lang, "sieve.h2") }</h2>
 				<a class="primary" href="/sieve/new">{ Tr(d.Lang, "sieve.newLink") }</a>
@@ -126,13 +123,7 @@ templ SieveEditView(d *SieveEditData) {
 	@AppFrame(d.Lang, Tr(d.Lang, "sieve.editTitle"), Tr(d.Lang, "sieve.nav"), d.IsAdmin, d.CSRF, d.Nav) {
 		<main class="main content-page" id="main-content">
 		<section class="sieve-edit">
-			<nav class="settings-nav">
-				if d.IsAdmin {
-					<a href="/admin/settings">{ Tr(d.Lang, "nav.backSettings") }</a>
-				} else {
-					<a href="/settings">{ Tr(d.Lang, "nav.backSettings") }</a>
-				}
-			</nav>
+			@settingsNavBack(d.Lang, d.IsAdmin)
 			<div class="page-head">
 				// #30：new 态独立标题（原「编辑脚本：new」缺陷顺带收口）
 				if d.NameEditable {

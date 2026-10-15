@@ -274,32 +274,57 @@ func TestU10AdminSettingsFullConfig(t *testing.T) {
 	if resp := postForm(t, env.ts, "/admin/settings", url.Values{"spfEnabled": {"on"}}, cookie); resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("无 token POST 应 403，得 %d", resp.StatusCode)
 	}
-	// 全量保存（Q7-C 四节+U13 传输安全节）→ 配置快照断言（TC-009 Web 侧：保存链热生效）
-	form := url.Values{
+	// 全量保存（Q7-C 四节+U13 传输安全节）→ 配置快照断言（TC-009 Web 侧：保存链热生效）。
+	// B5/E-1-A（γ批 2026-10-15）：分区提交——原全量单次 POST 拆四节各自提交（section
+	// 隐藏域分派）；表单字段与全部断言锚逐项保持，测试意图〔四节保存生效+TC-009 热生效链〕零变化
+	// （G2 批准行为变化支撑的机械适配——测试改动披露清单第 1 处）。
+	authForm := url.Values{
+		"csrf_token":    {"csrf-u10"},
+		"section":       {"auth"},
+		"spfEnabled":    {"on"},
+		"dkimEnabled":   {"on"},
+		"dmarcEnabled":  {"on"},
+		"dkimSelector":  {"s2048"},
+		"dkimKeyPath":   {"data/dkim.pem"},
+		"dkimAlgorithm": {"ed25519-sha256"},
+	}
+	if resp := postForm(t, env.ts, "/admin/settings", authForm, cookie); resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("认证栈节保存应 303，得 %d", resp.StatusCode)
+	}
+	deliveryForm := url.Values{
+		"csrf_token":       {"csrf-u10"},
+		"section":          {"delivery"},
+		"catchAll":         {"on"},
+		"maxMessageSizeMB": {"20"},
+		"retryBaseSeconds": {"120"},
+		"retryFactor":      {"3"},
+		"retryCapSeconds":  {"7200"},
+		"maxAttempts":      {"6"},
+	}
+	if resp := postForm(t, env.ts, "/admin/settings", deliveryForm, cookie); resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("投递聚合节保存应 303，得 %d", resp.StatusCode)
+	}
+	sessionForm := url.Values{
 		"csrf_token":         {"csrf-u10"},
-		"spfEnabled":         {"on"},
-		"dkimEnabled":        {"on"},
-		"dmarcEnabled":       {"on"},
-		"dkimSelector":       {"s2048"},
-		"dkimKeyPath":        {"data/dkim.pem"},
-		"dkimAlgorithm":      {"ed25519-sha256"},
-		"catchAll":           {"on"},
-		"maxMessageSizeMB":   {"20"},
-		"retryBaseSeconds":   {"120"},
-		"retryFactor":        {"3"},
-		"retryCapSeconds":    {"7200"},
-		"maxAttempts":        {"6"},
+		"section":            {"session"},
 		"idleMinutes":        {"45"},
 		"absoluteHours":      {"10"},
 		"limitWindowMinutes": {"30"},
 		"limitThreshold":     {"4"},
+	}
+	if resp := postForm(t, env.ts, "/admin/settings", sessionForm, cookie); resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("会话限流节保存应 303，得 %d", resp.StatusCode)
+	}
+	tlsForm := url.Values{
+		"csrf_token": {"csrf-u10"},
+		"section":    {"tls"},
 		// U13 传输安全节（FR-010：MTASts 关闭态落库——判定③「Web 可关闭」锚）
 		"mtaStsMode":          {"testing"},
 		"mtaStsMaxAgeSeconds": {"86400"},
 		"tlsrptRuaAddress":    {"tlsrpt@u10.example"},
 	}
-	if resp := postForm(t, env.ts, "/admin/settings", form, cookie); resp.StatusCode != http.StatusSeeOther {
-		t.Fatalf("合法保存应 303，得 %d", resp.StatusCode)
+	if resp := postForm(t, env.ts, "/admin/settings", tlsForm, cookie); resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("传输安全节保存应 303，得 %d", resp.StatusCode)
 	}
 	env.mu.Lock()
 	c := env.cfg
@@ -326,13 +351,13 @@ func TestU10AdminSettingsFullConfig(t *testing.T) {
 		t.Fatalf("传输安全节参数未落: %+v", c.MTASts)
 	}
 	env.mu.Unlock()
-	// 非法值拒绝（DKIM 算法越权枚举）
-	bad := url.Values{"csrf_token": {"csrf-u10"}, "dkimAlgorithm": {"md5"}}
+	// 非法值拒绝（DKIM 算法越权枚举）——B5：补 section=auth 分派（披露清单第 2 处）
+	bad := url.Values{"csrf_token": {"csrf-u10"}, "section": {"auth"}, "dkimAlgorithm": {"md5"}}
 	if resp := postForm(t, env.ts, "/admin/settings", bad, cookie); resp.StatusCode != http.StatusOK {
 		t.Fatalf("非法算法应重渲染 200，得 %d", resp.StatusCode)
 	}
-	// 非正数拒绝
-	bad2 := url.Values{"csrf_token": {"csrf-u10"}, "idleMinutes": {"0"}}
+	// 非正数拒绝——B5：补 section=session 分派（披露清单第 3 处）
+	bad2 := url.Values{"csrf_token": {"csrf-u10"}, "section": {"session"}, "idleMinutes": {"0"}}
 	if resp := postForm(t, env.ts, "/admin/settings", bad2, cookie); resp.StatusCode != http.StatusOK {
 		t.Fatalf("非正数应重渲染 200，得 %d", resp.StatusCode)
 	}

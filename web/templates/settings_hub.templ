@@ -5,6 +5,9 @@
 // 修改历史：
 //
 //	2026-10-05 15:20:00 | 新建 | Webmail管理职能批次（计划书阶段 3）
+//	2026-10-15 00:40:00 | 修正 | Webmail前端可见性一致性令牌批 β C1：四卡片
+//	emoji→SVG（iconLock/iconShield/iconList/iconMail——暗色联动+跨平台字形一致）
+//	（依据：β批计划书 v1.0.0 1.2 C1，G2 批准 2026-10-15 00:12）
 package templates
 
 // SettingsHubData 个人设置枢纽数据（视图模型）。
@@ -32,22 +35,22 @@ templ SettingsHubView(d *SettingsHubData) {
 			}
 			<div class="hub-grid">
 				<a class="hub-card" href="/settings/password">
-					<span class="hub-ic" aria-hidden="true">🔑</span>
+					<span class="hub-ic" aria-hidden="true">@templ.Raw(iconLock)</span>
 					<span class="hub-name">{ Tr(lang, "hub.password") }</span>
 					<span class="hub-desc">{ Tr(lang, "hub.passwordDesc") }</span>
 				</a>
 				<a class="hub-card" href="/settings/2fa">
-					<span class="hub-ic" aria-hidden="true">🛡️</span>
+					<span class="hub-ic" aria-hidden="true">@templ.Raw(iconShield)</span>
 					<span class="hub-name">{ Tr(lang, "hub.twofactor") }</span>
 					<span class="hub-desc">{ Tr(lang, "hub.twofactorDesc") }</span>
 				</a>
 				<a class="hub-card" href="/sieve">
-					<span class="hub-ic" aria-hidden="true">📑</span>
+					<span class="hub-ic" aria-hidden="true">@templ.Raw(iconList)</span>
 					<span class="hub-name">{ Tr(lang, "hub.rules") }</span>
 					<span class="hub-desc">{ Tr(lang, "hub.rulesDesc") }</span>
 				</a>
 				<a class="hub-card" href="/">
-					<span class="hub-ic" aria-hidden="true">📧</span>
+					<span class="hub-ic" aria-hidden="true">@templ.Raw(iconMail)</span>
 					<span class="hub-name">{ Tr(lang, "hub.mails") }</span>
 					<span class="hub-desc">{ Tr(lang, "hub.mailsDesc") }</span>
 				</a>

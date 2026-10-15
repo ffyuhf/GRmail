@@ -8,6 +8,9 @@
 // 修改历史：
 //
 //	2026-09-24 21:46:00 | 新建 | U16 Webmail 体验收尾（计划书步骤 4/6，G2 批准 2026-09-24 11:51:57）
+//	2026-10-15 00:40:00 | 修正 | Webmail前端可见性一致性令牌批 β C2/E-1-A：候选表
+//	容器挂 .table-wrap 类（并入统一表格体系——仅类名消费零逻辑变化）
+//	（依据：β批计划书 v1.0.0 1.2 C2+候选 E-1-A，G2 批准 2026-10-15 00:12）
 package web
 
 import (
@@ -92,7 +95,9 @@ func (s *Server) csvImportPOST(c *gin.Context) {
 	}
 	rows, skipped := parseCSVRecipients(buf)
 	var b bytes.Buffer
-	b.WriteString(`<div class="csv-candidates"><p>`)
+	// C2/E-1-A（β 批）：容器挂 .table-wrap 双类——并入统一表格体系（app.css 自有
+	// 边框规则废止；仅类名消费零逻辑变化）。
+	b.WriteString(`<div class="csv-candidates table-wrap"><p>`)
 	b.WriteString(templates.Tr(lang, "compose.csvTarget"))
 	// E3（Webmail前端缺陷修复批批二）：候选表补表头 th（scope=col——原无 thead 行
 	// 结构不规范）+勾选框程序化名称（aria-label=候选地址——读屏逐行可辨）。
