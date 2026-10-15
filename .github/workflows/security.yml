@@ -1,0 +1,85 @@
+name: Security Scan
+
+on:
+  pull_request:
+    branches: [ main, master ]
+  push:
+    branches: [ main, master ]
+  schedule:
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+  pull-requests: write
+
+jobs:
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [ 'go' ]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: 'stable'
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4.39.0
+        with:
+          languages: ${{ matrix.language }}
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v4.39.0
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4.39.0
+
+  semgrep:
+    name: Semgrep
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Install Semgrep
+        run: pip install semgrep==1.177.0
+
+      - name: Run Semgrep
+        run: |
+          semgrep scan \
+            --config auto \
+            --config p/golang \
+            --sarif \
+            --output semgrep.sarif
+
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v4.39.0
+        with:
+          sarif_file: semgrep.sarif
+        if: always()
+
+  muninn:
+    name: Muninn
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Muninn Security Scan
+        uses: skaldlab/muninn@v0.3.10
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fail-on: high
