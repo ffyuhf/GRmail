@@ -354,7 +354,9 @@ func TestU13VerifyNoPeerCert(t *testing.T) {
 // TestU13STSPolicyTextABNF 策略文本逐字段断言（rfc8461 §3.2 ABNF——CRLF 分隔四行）。
 func TestU13STSPolicyTextABNF(t *testing.T) {
 	got := STSPolicyText("x.io", config.MTAStsConf{Mode: "enforce", MaxAgeSeconds: 604800})
-	want := "version: STSv1\r\nmode: enforce\r\nmx: x.io\r\nmax_age: 604800"
+	// 外部审计缺陷修复批 E-1-A（G2 批准 2026-10-15 21:50:17）形态适配：mx 通配
+	// *.<主域>（原 x.io→*.x.io——意图锚「策略文本逐字段 ABNF 断言」保持）。
+	want := "version: STSv1\r\nmode: enforce\r\nmx: *.x.io\r\nmax_age: 604800"
 	if got != want {
 		t.Fatalf("策略文本不符:\n got=%q\nwant=%q", got, want)
 	}

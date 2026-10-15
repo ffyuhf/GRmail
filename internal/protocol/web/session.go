@@ -272,8 +272,17 @@ func requireAuth() gin.HandlerFunc {
 				// 部署（-p 端口/向导期 80）回跳 cookie 可写入（原恒 Secure 被浏览器丢弃
 				// 致「被登出重登后回不到原页」另一半收口）；HTTPS 零变化。低敏感路径
 				// cookie（非凭据）——披露同 langSetGET。
-				c.SetCookie(loginRedirectCookie, c.Request.URL.Path, 300, "/", "",
-					c.Request.TLS != nil, true) // 5min 窗口 HttpOnly+SameSite=Strict（站内回跳临时态）
+				// E-4（外部审计缺陷修复批 W-02）：改 http.SetCookie 显式 SameSite=Strict
+				// （与原注释口径一致化——gin 签名无 SameSite 位实际未设）；D4-B 保持。
+				http.SetCookie(c.Writer, &http.Cookie{
+					Name:     loginRedirectCookie,
+					Value:    c.Request.URL.Path,
+					MaxAge:   300, // 5min 窗口（站内回跳临时态）
+					Path:     "/",
+					Secure:   c.Request.TLS != nil,
+					HttpOnly: true,
+					SameSite: http.SameSiteStrictMode,
+				})
 			}
 			c.Redirect(http.StatusFound, redirect)
 			c.Abort()
@@ -320,7 +329,10 @@ func isPublicAssetPath(p string) bool {
 // 无 cookie/非法值回既有 / 口径（集中一处——admin/mailbox 两通道共用）。
 func redirectAfterLogin(c *gin.Context) string {
 	if p, err := c.Cookie(loginRedirectCookie); err == nil && p != "" {
-		c.SetCookie(loginRedirectCookie, "", -1, "/", "", true, true) // 清除（一次性）
+		http.SetCookie(c.Writer, &http.Cookie{ // E-4：清除路径同步显式形态（一次性）
+			Name: loginRedirectCookie, Value: "", MaxAge: -1, Path: "/",
+			Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode,
+		})
 		return safeRedirectPath(p)
 	}
 	return "/"

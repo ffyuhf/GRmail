@@ -108,6 +108,10 @@ func mimeByExt(name string) string {
 		return "image/x-icon"
 	case ".webmanifest": // H3 补齐（批二续接）：PWA manifest 专用 MIME（原回落 octet-stream）
 		return "application/manifest+json"
+	case ".woff2": // E-5 伴生（外部审计缺陷修复批）：Web 字体 MIME（font-src 通路配套——原 octet-stream）
+		return "font/woff2"
+	case ".woff":
+		return "font/woff"
 	default:
 		return "application/octet-stream"
 	}

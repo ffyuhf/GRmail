@@ -136,6 +136,16 @@ type Server struct {
 	listeners      []net.Listener
 }
 
+// 外部审计缺陷修复批 E-6-A（G2 批准 2026-10-15 21:50:17 温和档裁决）：HTTP 服务
+// 超时常量——Read/Write 300s 覆盖 35MiB 附件常规链路传输（极慢链路超 5 分钟被
+// 切断——能力影响已在计划书 1.3 披露获批）；Idle 120s keep-alive 空闲回收；
+// httpSrv/http80Srv 双 server 同步承载（80 侧未完成态承载向导全站表单上传）。
+const (
+	httpReadTimeout  = 300 * time.Second
+	httpWriteTimeout = 300 * time.Second
+	httpIdleTimeout  = 120 * time.Second
+)
+
 // NewServer 构造 Web 服务端：引擎装配+中间件链+路由挂载。
 // 参数：cfg 配置；sessions 会话仓储；users 管理员仓储；attempts 登录尝试仓储；
 // accounts 账号域服务（邮箱账号端点凭据校验）。
@@ -180,12 +190,15 @@ func NewServer(cfg ServerConfig, sessions storage.SessionRepo, users storage.Use
 	s.httpSrv = &http.Server{
 		Handler:           s.engine,
 		ReadHeaderTimeout: 10 * time.Second, // 慢速头攻击防护基线
+		ReadTimeout:       httpReadTimeout,  // E-6-A 温和档（G2 批准 2026-10-15 21:50:17）
+		WriteTimeout:      httpWriteTimeout,
+		IdleTimeout:       httpIdleTimeout,
 	}
 	return s
 }
 
-// securityHeadersMiddleware 安全响应头中间件（B-S批 F2——干系人裁决 A〔2026-10-09
-// 13:34〕：四头全域注入）：
+// securityHeadersMiddleware 安全响应头中间件（B-S批 F2 四头全域注入+外部审计
+// 缺陷修复批 E-2/E-3/E-5 增量〔G2 批准 2026-10-15 21:50:17〕：六头全域+条件 HSTS）：
 //   - X-Content-Type-Options: nosniff——MIME 嗅探防护；
 //   - X-Frame-Options: DENY——点击劫持嵌入防护（与 CSP frame-ancestors 双保险）；
 //   - Referrer-Policy: strict-origin-when-cross-origin——跨站来源泄漏收口；
@@ -203,8 +216,21 @@ func (s *Server) securityHeadersMiddleware() gin.HandlerFunc {
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		// E-5（外部审计缺陷修复批——δ批 D-2 品牌字体浏览器加载通路兑现）：font-src
+		// 'self' 追加——@font-face 的 woff2 请求原回落 default-src 'none' 被拒（外部
+		// 复核报告实机三证据：document.fonts unloaded/零字体请求/CSP 拦截）。
 		h.Set("Content-Security-Policy",
-			"default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-src 'self'; media-src 'self'; frame-ancestors 'none'")
+			"default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-src 'self'; media-src 'self'; font-src 'self'; frame-ancestors 'none'")
+		// E-2（外部审计缺陷修复批——外部安全审计 F-002）：HSTS 条件注入——仅 TLS
+		// 请求响应携带（明文端口按 RFC 6797 浏览器忽略且防误发面）；max-age 一年+
+		// includeSubDomains（本服务全部监听器 TLS 承载；子域 HTTPS 锁定面已在计划
+		// 书 1.3 披露获批）。
+		if c.Request.TLS != nil {
+			h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
+		// E-3（外部审计缺陷修复批——外部安全审计 F-005）：Permissions-Policy 六能力
+		// 全禁用（本项目 Webmail 零使用面——纯纵深防御）。
+		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=()")
 		c.Next()
 	}
 }
@@ -423,7 +449,8 @@ func (s *Server) ListenAndServeHTTP(addr string) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/.well-known/acme-challenge/", s.challengeHTTP)
 	mux.HandleFunc("/", s.http80Root)
-	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout: httpReadTimeout, WriteTimeout: httpWriteTimeout, IdleTimeout: httpIdleTimeout} // E-6-A 双 server 同步
 	s.http80Srv = srv // F7②：独立 server 存字段——Shutdown 双停承载（原局部变量游离）
 	return srv.Serve(ln)
 }

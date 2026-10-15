@@ -8,6 +8,7 @@ go 1.26.0
 
 require (
 	github.com/a-h/templ v0.3.1020
+	github.com/creachadair/otp v0.5.5
 	github.com/emersion/go-imap/v2 v2.0.0-beta.8
 	github.com/emersion/go-message v0.18.2
 	github.com/fsnotify/fsnotify v1.10.1
@@ -20,6 +21,7 @@ require (
 	github.com/miekg/dns v1.1.73
 	github.com/phuslu/log v1.0.133
 	github.com/pressly/goose/v3 v3.28.0
+	github.com/pschlump/goqrcode v1.1.0
 	github.com/stephenafamo/bob v0.50.0
 	github.com/synqronlabs/raven v1.6.1
 	github.com/veqryn/slog-context v0.9.0
@@ -38,7 +40,6 @@ require (
 	github.com/bytedance/sonic/loader v0.5.0 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
-	github.com/creachadair/otp v0.5.5 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/emersion/go-sasl v0.0.0-20241020182733-b788ff22d5a6 // indirect
 	github.com/fatih/color v1.16.0 // indirect
@@ -75,7 +76,6 @@ require (
 	github.com/pschlump/filelib v1.0.12 // indirect
 	github.com/pschlump/go-colorable v0.0.23 // indirect
 	github.com/pschlump/go-isatty v0.0.23 // indirect
-	github.com/pschlump/goqrcode v1.1.0 // indirect
 	github.com/pschlump/json v1.12.1 // indirect
 	github.com/qdm12/reprint v0.0.0-20200326205758-722754a53494 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect

@@ -57,7 +57,17 @@ func (s *Server) langSetGET(c *gin.Context) {
 	// 请求 scheme 动态——明文部署（-p 端口/向导期 80）下语言偏好可写入生效（原恒
 	// Secure 被浏览器静默丢弃致切换失效）；HTTPS 部署零变化。披露：明文通道低敏感
 	// 偏好 cookie 可被中间人读取（非凭据——__Host-sid 会话 cookie 恒 Secure不受影响）。
-	c.SetCookie(langCookieName, string(target), 365*24*3600, "/", "", c.Request.TLS != nil, true)
+	// E-4（外部审计缺陷修复批 W-02——gin c.SetCookie 七参签名无 SameSite 位）：
+	// 改 http.SetCookie 显式 SameSite=Lax——与本函数既有注释口径一致化（原实际未设）。
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     langCookieName,
+		Value:    string(target),
+		MaxAge:   365 * 24 * 3600,
+		Path:     "/",
+		Secure:   c.Request.TLS != nil, // D4-B：按请求 scheme 动态（保持）
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
 	c.Redirect(http.StatusFound, next)
 }
 
