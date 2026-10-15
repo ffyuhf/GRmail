@@ -4,6 +4,8 @@
 // 4xx/5xx 全站无呈现层；A4 片段语境经 fragError helper 双态分派（HX=片段错误块/
 // 非 HX=错误整页）。
 // SRS 条目：FR-013（㉗ 统一拦截与会话失效跳转承载伴随）；NFR-005。
+// 修改历史：2026-10-15 16:34:00 | 修正 | Webmail前端品牌焕新批 δ D-8：错误页卡片头
+// 字标位（h1 加 .wordmark——Geist 字标族四位一体；G2 批准 2026-10-15 16:28:59）。
 package templates
 
 // ErrorBlock 片段错误块（HTMX 交换目标内就地呈现——role=alert 读屏播报）。
@@ -26,7 +28,9 @@ templ ErrorPageView(lang Lang, code int, msg string) {
 	} }}
 	@Layout(lang, Tr(lang, "err.pageTitle"), "") {
 		<div class="card">
-			<h1>{ Tr(lang, titleKey) }</h1>
+			// δ批 D-8：字标族统一（错误页 h1 为状态文案非品牌名——仅字体族消费，
+			// 结构零变化）。
+			<h1 class="wordmark">{ Tr(lang, titleKey) }</h1>
 			<p>{ msg }</p>
 			<p><a class="btn-text" href="/">{ Tr(lang, "common.backHome") }</a></p>
 		</div>

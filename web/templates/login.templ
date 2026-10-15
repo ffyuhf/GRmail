@@ -12,6 +12,9 @@
 //   2026-10-05 00:22:00 | 修正 | Setup向导缺陷修复批次（缺陷④A 裁决同修）：语言切换
 //   链接传固定页路径（next 承载——切换后回原页而非跳首页）
 //   （依据：Setup向导缺陷修复计划书 v1.0.0 1.2 组4b，G2 批准 2026-10-05 00:21:19）
+//   2026-10-15 16:34:00 | 修正 | Webmail前端品牌焕新批 δ D-3：登录页品牌区——双视图
+//   card-head 升级（Geist 字标 .wordmark+品牌语 .brandline brand.tagline+hr 分隔——
+//   样张①批准形态：无插画无色块纯排版；G2 批准 2026-10-15 16:28:59）
 package templates
 
 // AdminLoginView 管理员登录页（/login：用户名不含 @，走 UserRepo+VerifyPassword）。
@@ -21,7 +24,10 @@ templ AdminLoginView(lang Lang, errText string) {
 	// 空传 Layout 位+卡片内呈现）；D2：用户名 inputmode；F4：交叉链接。
 	@Layout(lang, Tr(lang, "login.adminTitle"), "") {
 		<div class="card">
-			<div class="card-head"><h1>GRmail</h1><span class="chip">{ Tr(lang, "home.adminKind") }</span></div>
+			// δ批 D-3：品牌区（字标+品牌语+hr——chip 主体类型保持既定裁决面）。
+			<div class="card-head"><h1 class="wordmark">GRmail</h1><span class="chip">{ Tr(lang, "home.adminKind") }</span></div>
+			<p class="brandline">{ Tr(lang, "brand.tagline") }</p>
+			<hr/>
 			if errText != "" {
 				<p class="error" role="alert">{ errText }</p>
 			}
@@ -40,7 +46,10 @@ templ AdminLoginView(lang Lang, errText string) {
 templ MailboxLoginView(lang Lang, errText string) {
 	@Layout(lang, Tr(lang, "login.mailTitle"), "") {
 		<div class="card">
-			<div class="card-head"><h1>GRmail</h1><span class="chip">{ Tr(lang, "home.mailKind") }</span></div>
+			// δ批 D-3：品牌区（与 AdminLoginView 同构——样张①批准形态）。
+			<div class="card-head"><h1 class="wordmark">GRmail</h1><span class="chip">{ Tr(lang, "home.mailKind") }</span></div>
+			<p class="brandline">{ Tr(lang, "brand.tagline") }</p>
+			<hr/>
 			if errText != "" {
 				<p class="error" role="alert">{ errText }</p>
 			}

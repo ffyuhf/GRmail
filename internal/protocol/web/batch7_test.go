@@ -200,19 +200,20 @@ func b7AppCSS(t *testing.T) string {
 
 // ───────────────────────── A1+E4：双骨架 head 元数据（组件直驱） ─────────────────────────
 
-// TestBatch7A1E4HeadMeta A1：双骨架 theme-color 双 media 拆分（亮 #1976d2 零变化+
-// 暗 #212121 适配）；E4：Layout 骨架 manifest 引用补挂（对齐 AppLayout）。
+// TestBatch7A1E4HeadMeta A1：双骨架 theme-color 双 media 拆分（δ批 D-4 色值更新：
+// 亮 #17181c 墨石/暗 #101113 对齐 --bg 暗档——2026-10-15 16:28:59 G2 批准面内
+// 机械适配，双 media+恰二 meta 意图锚保持）；E4：Layout manifest 引用（对齐 AppLayout）。
 func TestBatch7A1E4HeadMeta(t *testing.T) {
 	w := httptest.NewRecorder()
 	if err := templates.AppLayout(templates.LangZH, "t", "lbl", false, "csrf").Render(context.Background(), w); err != nil {
 		t.Fatalf("AppLayout 渲染: %v", err)
 	}
 	body := w.Body.String()
-	if !strings.Contains(body, `media="(prefers-color-scheme: light)"`) || !strings.Contains(body, "#1976d2") {
-		t.Fatal("AppLayout 应保留亮色 theme-color #1976d2（media light——A1 亮色零变化锚）")
+	if !strings.Contains(body, `media="(prefers-color-scheme: light)"`) || !strings.Contains(body, "#17181c") {
+		t.Fatal("AppLayout 应呈现亮色 theme-color #17181c（media light——δ批墨石）")
 	}
-	if !strings.Contains(body, `media="(prefers-color-scheme: dark)"`) || !strings.Contains(body, "#212121") {
-		t.Fatal("AppLayout 应补暗色 theme-color #212121（media dark——A1 暗色适配）")
+	if !strings.Contains(body, `media="(prefers-color-scheme: dark)"`) || !strings.Contains(body, "#101113") {
+		t.Fatal("AppLayout 应呈现暗色 theme-color #101113（media dark——δ批对齐 --bg 暗档）")
 	}
 	if strings.Count(body, `name="theme-color"`) != 2 {
 		t.Fatal("AppLayout theme-color 应恰为双 meta（A1）")
@@ -223,8 +224,8 @@ func TestBatch7A1E4HeadMeta(t *testing.T) {
 		t.Fatalf("Layout 渲染: %v", err)
 	}
 	body2 := w2.Body.String()
-	if !strings.Contains(body2, `media="(prefers-color-scheme: dark)"`) || !strings.Contains(body2, "#212121") {
-		t.Fatal("Layout 应补暗色 theme-color（A1）")
+	if !strings.Contains(body2, `media="(prefers-color-scheme: dark)"`) || !strings.Contains(body2, "#101113") {
+		t.Fatal("Layout 应呈现暗色 theme-color（δ批 D-4 与 AppLayout 同步）")
 	}
 	if !strings.Contains(body2, `rel="manifest"`) || !strings.Contains(body2, "manifest.webmanifest") {
 		t.Fatal("Layout 应补 manifest 引用（E4——对齐 AppLayout 既有形态）")
@@ -335,7 +336,7 @@ func TestBatch7C4E1CssTokens(t *testing.T) {
 	for _, tok := range []string{
 		"--fs-code: .82em;", "--fs-brand: 1.1rem;", "--fs-empty: 1.25rem;",
 		"--fs-nav: .875rem;", "--fs-detail-sm: .8125rem;", "--fs-editor: .9375rem;",
-		"--ls-th: .03em;", "--ls-brand: .02em;", "--ls-mono: .06em;",
+		"--ls-th: .03em;", "--ls-brand: -0.02em;", "--ls-mono: .06em;",
 		"--fs-toggle: 1.25rem;",
 		"--pad-code-y: .08rem;", "--pad-kbd-x: .4rem;", "--pad-link-x: .25rem;",
 		"--pad-badge-y: .12rem;", "--pad-unread-x: .55rem;", "--icon-lg: 1.5rem;",

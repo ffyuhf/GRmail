@@ -10,6 +10,8 @@
 //   2026-10-15 00:40:00 | 修正 | Webmail前端可见性一致性令牌批 β：A1 theme-color
 //   双 media 拆分（暗色适配）+E4 manifest 引用补挂（Layout 骨架六页对齐 AppLayout）
 //   （依据：β批计划书 v1.0.0 1.2 A1/E4，G2 批准 2026-10-15 00:12）
+//   2026-10-15 16:34:00 | 修正 | Webmail前端品牌焕新批 δ D-4：theme-color 双值随
+//   墨石方向更新（亮 #17181c/暗 #101113；G2 批准 2026-10-15 16:28:59）
 package templates
 
 // Layout 页面骨架：统一 <head> 与错误提示位（登录失败统一模糊文本——防枚举口径）。
@@ -23,12 +25,13 @@ templ Layout(lang Lang, title string, errText string) {
 			<title>{ title }</title>
 			<link rel="stylesheet" href={ StaticURL("/static/app.css") }/>
 			// H3（批二）：favicon+theme-color（Layout 骨架页同享——404 消除）；
-			// A1（β 批）：theme-color 双 media 拆分（暗色适配——亮色 #1976d2 零变化锚）；
-			// E4（β 批）：manifest 引用补挂（Layout 骨架六页对齐 AppLayout 既有形态）。
+			// A1（β 批）：theme-color 双 media 拆分；E4（β 批）：manifest 引用补挂
+			//（Layout 骨架六页对齐 AppLayout 既有形态）；δ批 D-4：色值随墨石方向更新
+			//（亮 #17181c/暗 #101113——样张批准形态，与 app.templ 同步）。
 			<link rel="icon" href={ StaticURL("/static/favicon.svg") } type="image/svg+xml"/>
 			<link rel="manifest" href={ StaticURL("/static/manifest.webmanifest") }/>
-			<meta name="theme-color" content="#1976d2" media="(prefers-color-scheme: light)"/>
-			<meta name="theme-color" content="#212121" media="(prefers-color-scheme: dark)"/>
+			<meta name="theme-color" content="#17181c" media="(prefers-color-scheme: light)"/>
+			<meta name="theme-color" content="#101113" media="(prefers-color-scheme: dark)"/>
 		</head>
 		<body>
 			if errText != "" {

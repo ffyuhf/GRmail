@@ -28,6 +28,9 @@
 //	go generate ./... 单命令触发 templ generate 全量再生成（.templ→*_templ.go），
 //	消除逐次手动执行；生成物入库形态不变（CI 直接构建零生成依赖）
 //	（依据：发布准备计划书 v1.0.0 1.2-MF 组/阶段 2，G2 批准 2026-10-03 17:09:00）
+//	2026-10-15 16:39:00 | 扩展 | Webmail前端品牌焕新批 δ D-7：brand.tagline
+//	品牌语键（zh「自有服务器，自持信箱」/en "Self-hosted. Self-owned."——登录页
+//	品牌区+manifest description 消费；G2 批准 2026-10-15 16:28:59）
 
 //go:generate templ generate
 package templates
@@ -120,6 +123,9 @@ var messages = map[string][2]string{
 	"plugins.dead":       {"已崩溃", "crashed"},
 	"plugins.emptyTitle": {"暂无插件", "No plugins"},
 	"plugins.empty":      {"将插件二进制放入 plugins/ 目录后重启主程序即可加载。", "Place plugin binaries in the plugins/ directory and restart to load them."},
+	// ── 品牌层（δ批 D-7——2026-10-15 品牌焕新批：登录页品牌语+manifest description 消费；
+	// 样张①批准形态「自有服务器，自持信箱」） ──
+	"brand.tagline": {"自有服务器，自持信箱", "Self-hosted. Self-owned."},
 	// ── 登录页 ──
 	"login.adminTitle": {"GRmail · 管理员登录", "GRmail · Admin Login"},
 	"login.mailTitle":  {"GRmail · 邮箱登录", "GRmail · Mailbox Login"},

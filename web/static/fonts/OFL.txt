@@ -1,0 +1,14 @@
+Geist Font — SIL Open Font License 1.1
+======================================
+
+Vendor 文件：geist-latin-var.woff2（29,400 字节，Latin 子集，可变字体 400-500 权重区间）
+
+来源：Vercel（github.com/vercel/geist-font），经 Google Fonts（fonts.google.com/specimen/Geist）
+gstatic CDN Latin 子集分发形态下载（2026-10-15）。
+
+授权：SIL Open Font License 1.1（OFL 1.1）——允许嵌入、分发、商业与私用；
+完整授权文本见 https://openfontlicense.org/ 与上游仓库 LICENSE 文件。
+
+δ 批依据：Webmail前端品牌焕新批（审计实施批 δ·墨石方向）D-2（G2 批准
+2026-10-15 16:28:59；样张方向裁决 2026-10-15 13:40:34 AGREE）。
+CON-001 单二进制：本文件经 web/static embed 进二进制，禁止 CDN 外链运行时加载。

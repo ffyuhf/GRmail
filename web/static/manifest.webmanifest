@@ -1,10 +1,11 @@
 {
   "name": "GRmail",
   "short_name": "GRmail",
+  "description": "Self-hosted. Self-owned.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f5f5f5",
-  "theme_color": "#1976d2",
+  "theme_color": "#17181c",
   "icons": [
     { "src": "/static/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
   ]

@@ -23,7 +23,27 @@
  *   三组候选全 A）：B5/E-1-A+T2 分区折叠样式（.settings-fold——fieldset→details 承载，
  *   summary 绝对定位骑边框线复刻 legend 嵌线视觉；≥768 summary 禁交互恒展开=桌面呈现
  *   零变化锚；<768 可折叠+三角指示；节内表单 gap 0 复刻原 fieldset 紧排）+A2 弹性宽
- *   规则等效迁移（fieldset→.settings-fold 作用域） */
+ *   规则等效迁移（fieldset→.settings-fold 作用域）
+ *   2026-10-15 16:31:00 | 重构 | Webmail前端品牌焕新批 δ（G2 批准 2026-10-15 16:28:59；
+ *   方向 A′ 墨石 Monolith——样张裁决 2026-10-15 13:40:34 AGREE 批准实物形态）：
+ *   D-1 品牌色令牌迁移（Material 蓝→墨石无彩色：--primary 族六令牌亮档 #17181c+
+ *   暗档对偶反转 #f0f0f2；--selected/--surface-active/--bg 暗档随样张；danger/success/
+ *   warning/info 四功能色零触碰）+D-2 Geist 可变字体 vendor（fonts/geist-latin-var.woff2
+ *   29400B OFL 1.1——@font-face 400-500 区间+--font-brand；品牌位四位一体消费）+
+ *   D-5 未读点 danger 红借用（全局唯一暖色点缀）+D-3 登录页品牌区（.wordmark/
+ *   .brandline） */
+
+/* δ批 D-2：Geist 品牌字标（OFL 1.1——vercel/geist-font，授权文本 fonts/OFL.txt；
+ * 可变字体单文件 vendor 29400B 覆盖 400-500 权重区间，Latin 子集——中文正文经
+ * --font-sans 系统栈回退零影响；仅品牌位消费〔.wordmark/.app-bar-brand〕——正文/
+ * 表单/列表字体保持系统栈。字体文件更换时须改文件名以破 immutable 缓存。） */
+@font-face {
+	font-family: "Geist";
+	font-style: normal;
+	font-weight: 400 500;
+	font-display: swap;
+	src: url("/static/fonts/geist-latin-var.woff2") format("woff2");
+}
 
 /* ════════════════ ① 设计令牌（:root 浅色基线）════════════════ */
 :root {
@@ -38,12 +58,12 @@
 	--fg-muted: var(--fg-secondary); /* C1（批二）：muted 别名补定义（三处消费点原未定义回退失效） */
 	--border: #e0e0e0;           /* grey[300] 分隔/描边 */
 	--border-soft: #eeeeee;      /* grey[200] 骨架/弱分隔 */
-	--surface-active: #bbdefb;   /* 选中态 lighten(primary,.7) */
-	--primary: #1976d2;          /* MUI v6 主色 */
-	--primary-hover: #1565c0;
-	--primary-fg: #ffffff;
-	--primary-soft: #e3f2fd;     /* 主色淡背景（焦点环/计数） */
-	--accent: #64b5f6;
+	--surface-active: rgba(23, 24, 28, 0.12); /* 选中态 墨12%（δ批 D-1 墨石） */
+	--primary: #17181c;          /* 墨石主色（δ批——Material 蓝废止；danger/success/warning/info 功能色保持） */
+	--primary-hover: #2a2b32;
+	--primary-fg: #fafafa;
+	--primary-soft: rgba(23, 24, 28, 0.08); /* 主色淡背景（焦点环/计数） */
+	--accent: #17181c;
 	--danger: #d32f2f;
 	--danger-soft: #fdecea;
 	--danger-fg: #b71c1c;
@@ -55,13 +75,14 @@
 	--info-soft: #e1f5fe;
 	--hover: rgba(0, 0, 0, 0.04);    /* action.hover 行/项悬停 */
 	--hover-strong: rgba(0, 0, 0, 0.08);
-	--selected: rgba(25, 118, 210, 0.18); /* 列表行选中 alpha(primary,.18) */
+	--selected: rgba(23, 24, 28, 0.08);    /* 列表行选中 墨8%（δ批） */
 	--scrim: rgba(0, 0, 0, 0.32);   /* 抽屉/菜单遮罩 */
 	--badge-ok-bg: var(--success-soft);  --badge-ok-fg: #1b5e20;
 	--badge-warn-bg: var(--warning-soft); --badge-warn-fg: #8d6e00;
 	--badge-err-bg: var(--danger-soft);   --badge-err-fg: #b71c1c;
 	/* —— 排版（MUI typography 档位映射）—— */
 	--font-sans: "Roboto", system-ui, -apple-system, "Segoe UI", "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif;
+	--font-brand: "Geist", var(--font-sans); /* δ批 D-2：品牌字标族（vendor 可变字体——四位一体品牌位消费） */
 	--font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 	--text-h1: 1.375rem;   --text-h1-weight: 600;   /* 页标题/登录卡 */
 	--text-h2: 1.125rem;   --text-h2-weight: 600;   /* 区标题/详情主题 */
@@ -116,7 +137,7 @@
 	--fs-detail-sm: .8125rem;   /* 行详情小字 */
 	--fs-editor: .9375rem;      /* Quill 编辑区正文 */
 	--ls-th: .03em;             /* 表头字距 */
-	--ls-brand: .02em;          /* 品牌字距 */
+	--ls-brand: -0.02em;        /* 品牌字距（δ批：负字距精修——样张批准形态） */
 	--ls-mono: .06em;           /* 等宽密文（恢复码）字距 */
 	--pad-code-y: .08rem; --pad-code-x: .35rem; /* code 内边距 */
 	--pad-kbd-x: .4rem;         /* kbd 横向内边距 */
@@ -133,9 +154,9 @@
 /* ════════════════ ② 暗色模式（prefers-color-scheme 跟随系统）════════════════ */
 @media (prefers-color-scheme: dark) {
 	:root {
-		--bg: #212121;               /* grey[900] */
-		--surface: #2d2d2d;
-		--surface-2: #262626;
+		--bg: #101113;               /* 墨石暗档（δ批 样张批准形态——较 grey[900] 更深一档） */
+		--surface: #1a1b1e;
+		--surface-2: #222327;
 		--fg: rgba(255, 255, 255, 0.87);
 		--fg-secondary: rgba(255, 255, 255, 0.6);
 		--fg-disabled: rgba(255, 255, 255, 0.38);
@@ -143,12 +164,12 @@
 		--fg-muted: var(--fg-secondary); /* C1（批二）：暗色同补 */
 		--border: rgba(255, 255, 255, 0.12);
 		--border-soft: rgba(255, 255, 255, 0.08);
-		--surface-active: #2b4a68;   /* darken(primary,.7) 形态 */
-		--primary: #90caf9;          /* MUI dark 蓝300 */
-		--primary-hover: #a9d5f9;
-		--primary-fg: rgba(0, 0, 0, 0.87);
-		--primary-soft: #1e3a5f;
-		--accent: #90caf9;
+		--surface-active: rgba(240, 240, 242, 0.14); /* 选中态 墨石暗档对偶 */
+		--primary: #f0f0f2;          /* 墨石暗档主色（δ批 对偶反转——按钮白底墨字，可用性同等） */
+		--primary-hover: #ffffff;
+		--primary-fg: #101113;
+		--primary-soft: rgba(240, 240, 242, 0.10);
+		--accent: #f0f0f2;
 		--danger: #f44336;
 		--danger-soft: #4a1f1d;
 		--danger-fg: #ef9a9a;
@@ -160,7 +181,7 @@
 		--info-soft: #123243;
 		--hover: rgba(255, 255, 255, 0.08);
 		--hover-strong: rgba(255, 255, 255, 0.14);
-		--selected: rgba(144, 202, 249, 0.22);
+		--selected: rgba(240, 240, 242, 0.10);
 		--scrim: rgba(0, 0, 0, 0.5);
 		--badge-ok-bg: #1b3a22;  --badge-ok-fg: #a5d6a7;
 		--badge-warn-bg: #3d3340; --badge-warn-fg: #ffe082;
@@ -598,6 +619,16 @@ label:has(> input[type="checkbox"]) {
 .card h2 { font-size: var(--text-h2); margin: var(--sp-4) 0 var(--sp-2); }
 .card p { color: var(--fg-secondary); font-size: var(--text-body); }
 
+/* —— δ批 D-3/D-8：品牌字标族（登录页品牌区+占位首页/错误页卡片头——四位一体；
+ *     样张①批准形态：Geist Medium 字标+品牌语一行+hairline 分隔（无插画无色块）。 —— */
+.wordmark {
+	font-family: var(--font-brand);
+	font-weight: 500;
+	letter-spacing: var(--ls-brand);
+}
+.brandline { margin: var(--sp-1) 0 0; font-size: var(--text-label); color: var(--fg-secondary); }
+.card hr { margin: var(--sp-3) 0; border: none; border-top: 1px solid var(--border); }
+
 /* —— RadiusFrame 容器语义（白底+divider 描边+圆角 12）——基准 RadiusFrame.tsx；
  * 由 .tool-bar/.pager/.table-wrap 分载体承载（F28：独立死类删除——语义注记归一）——
  * Webmail界面精修批次 2026-10-03 16:30:00 */
@@ -805,8 +836,9 @@ section table, .card table { border-radius: var(--radius-sm); overflow: hidden; 
 	display: flex;
 	align-items: center;
 	gap: var(--sp-2);
+	font-family: var(--font-brand); /* δ批 D-2：顶栏字标族（四位一体品牌位之一） */
 	font-size: var(--fs-brand); /* C4/E-2-A（β 批） */
-	font-weight: 600;
+	font-weight: 500;
 	letter-spacing: var(--ls-brand);
 	color: var(--fg);
 	text-decoration: none;
@@ -1039,7 +1071,7 @@ table.mails a:hover { color: var(--primary); text-decoration: none; }
 	display: inline-block;
 	width: 8px; height: 8px;
 	border-radius: 50%;
-	background: var(--primary);
+	background: var(--danger); /* δ批 D-5：未读点 danger 红借用——全局唯一暖色点缀（样张②批准形态；暗档经 --danger #f44336 联动；「未读=注意」信号色语义强化） */
 }
 td.status-cell { white-space: nowrap; width: 3.5rem; }
 td.status-cell .flag { margin-right: var(--sp-1); }
@@ -1329,6 +1361,7 @@ input[type="file"]::file-selector-button:hover { background: var(--primary-soft)
 	padding: var(--sp-3) var(--sp-4);
 	margin-bottom: var(--sp-3);
 }
+/* 注：.wordmark/.brandline/.card hr 品牌区样式见 ⑥复合组件 .card 区块后（δ批 D-3/D-8 承载位）。 */
 .token-reveal code { word-break: break-all; background: rgba(255,255,255,.5); }
 
 /* —— WEB模板缺陷修正批次·组E：长串断词族（沿 token-reveal break-all 先例）——
