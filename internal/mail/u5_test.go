@@ -221,21 +221,21 @@ func TestSubmitAuthorization(t *testing.T) {
 	raw := []byte("Subject: hi\r\nFrom: a@t.io\r\n\r\nbody\r\n")
 
 	// 管理员任意地址（FR-002）
-	if err := svc.Submit(ctx, &Submission{
+	if _, err := svc.Submit(ctx, &Submission{
 		Envelope: auth.Envelope{MailFrom: "anyone@t.io"}, AuthUser: "boss",
 		Recipients: []string{"x@ext.io"},
 	}, raw); err != nil {
 		t.Fatalf("管理员任意地址应放行: %v", err)
 	}
 	// null path 允许（rfc6409 3.2）
-	if err := svc.Submit(ctx, &Submission{
+	if _, err := svc.Submit(ctx, &Submission{
 		Envelope:   auth.Envelope{MailFrom: ""},
 		Recipients: []string{"x@ext.io"},
 	}, raw); err != nil {
 		t.Fatalf("null path 应放行: %v", err)
 	}
 	// 普通用户 From 不一致→ErrUnauthorized（rfc6409 6.1）
-	err := svc.Submit(ctx, &Submission{
+	_, err := svc.Submit(ctx, &Submission{
 		Envelope: auth.Envelope{MailFrom: "other@t.io"}, AuthUser: "a@t.io",
 		Recipients: []string{"x@ext.io"},
 	}, raw)
@@ -253,7 +253,7 @@ func TestSubmitEnqueuesPerRecipient(t *testing.T) {
 	svc := NewSubmissionPipelineService(signer, blobs, store,
 		&stubAdmins{admins: map[string]bool{"boss": true}}, "t.io")
 
-	if err := svc.Submit(ctx, &Submission{
+	if _, err := svc.Submit(ctx, &Submission{
 		Envelope:   auth.Envelope{MailFrom: "boss@t.io", Helo: "cli"},
 		AuthUser:   "boss",
 		Recipients: []string{"r1@ext.io", "r2@ext.io"},
@@ -285,7 +285,7 @@ func TestSubmitStoreFailure451(t *testing.T) {
 	ctx := context.Background()
 	svc := NewSubmissionPipelineService(&keylessSigner{}, newMemBlobs(),
 		&stubSubmissionStore{fail: true}, &stubAdmins{admins: map[string]bool{"boss": true}}, "t.io")
-	err := svc.Submit(ctx, &Submission{
+	_, err := svc.Submit(ctx, &Submission{
 		Envelope: auth.Envelope{MailFrom: ""}, Recipients: []string{"x@ext.io"},
 	}, []byte("Subject: s\r\n\r\nb\r\n"))
 	if err == nil || !strings.Contains(err.Error(), ErrRetryable.Error()) {

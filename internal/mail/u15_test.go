@@ -119,7 +119,7 @@ func testSubmission(rcpt string) *Submission {
 // TestU15SubmitNilHooksZeroRegression nil 发信钩子链=U14b 末态等价。
 func TestU15SubmitNilHooksZeroRegression(t *testing.T) {
 	sp := newTestSubmit()
-	if err := sp.Submit(context.Background(), testSubmission("x@other.io"), sampleRaw()); err != nil {
+	if _, err := sp.Submit(context.Background(), testSubmission("x@other.io"), sampleRaw()); err != nil {
 		t.Fatalf("nil 钩子链不应影响提交: %v", err)
 	}
 }
@@ -132,7 +132,7 @@ func TestU15SubmitRejectShortCircuits(t *testing.T) {
 		name: "rejector",
 		dec:  &HookDecision{Allow: false, SMTPCode: 552, Message: "5.7.1 message too large per policy"},
 	}})
-	err := sp.Submit(context.Background(), testSubmission("x@other.io"), sampleRaw())
+	_, err := sp.Submit(context.Background(), testSubmission("x@other.io"), sampleRaw())
 	var rej *PluginRejectError
 	if !errors.As(err, &rej) || rej.Code != 552 || rej.Plugin != "rejector" {
 		t.Fatalf("期望 552 PluginRejectError（rejector），得到: %v", err)
@@ -143,7 +143,7 @@ func TestU15SubmitRejectShortCircuits(t *testing.T) {
 func TestU15SubmitRPCFailureDegrades(t *testing.T) {
 	sp := newTestSubmit()
 	sp.SetSubmitHooks([]SubmitHook{&stubHook{name: "broken", err: errors.New("rpc down")}})
-	if err := sp.Submit(context.Background(), testSubmission("x@other.io"), sampleRaw()); err != nil {
+	if _, err := sp.Submit(context.Background(), testSubmission("x@other.io"), sampleRaw()); err != nil {
 		t.Fatalf("插件失败应降级放行: %v", err)
 	}
 }

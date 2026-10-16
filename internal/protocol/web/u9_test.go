@@ -35,15 +35,26 @@ import (
 )
 
 // u9StubSubmit 提交管道 stub（NFR-015：入队断言经捕获而非真管道——U5 已覆盖真链）。
+// E-乙适配（生产缺陷修复批 v1.52.0，G2 批准 2026-10-17 02:30）：Submit 双返回值；
+// blobs 注入时落盘并返回真实 CAS 键（Sent 副本可读性锚——TestUProdFixSentCopyReadable
+// 消费）；既有 Captured/Raws 断言语义零变化。
 type u9StubSubmit struct {
 	Captured []*mail.Submission
 	Raws     [][]byte
+	blobs    storage.BlobStore // E-乙：真键返回（nil=纯捕获形态返回空键）
 }
 
-func (s *u9StubSubmit) Submit(ctx context.Context, in *mail.Submission, raw []byte) error {
+func (s *u9StubSubmit) Submit(ctx context.Context, in *mail.Submission, raw []byte) (string, error) {
 	s.Captured = append(s.Captured, in)
 	s.Raws = append(s.Raws, raw)
-	return nil
+	if s.blobs != nil {
+		key := storage.ComputeBlobKey(raw)
+		if err := s.blobs.Write(ctx, key, raw); err != nil {
+			return "", err
+		}
+		return key, nil
+	}
+	return "", nil
 }
 
 // u9Env 集成测试环境。
@@ -78,7 +89,7 @@ func newU9Env(t *testing.T) *u9Env {
 	sessRepo := storage.NewSQLiteSessionRepo(db)
 	blobs := storage.NewFileSystemBlobStore(filepath.Join(t.TempDir(), "blobs"))
 	accounts := account.NewService(mbRepo, fdRepo)
-	submit := &u9StubSubmit{}
+	submit := &u9StubSubmit{blobs: blobs} // E-乙：真键返回（Sent 副本可读性锚）
 
 	srv := NewServer(ServerConfig{
 		Domain: "t.io", TLSConfig: func() *tls.Config { return nil },

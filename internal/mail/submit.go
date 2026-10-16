@@ -64,8 +64,11 @@ type DSNParam struct {
 type SubmissionPipeline interface {
 	// Submit 提交入队：授权校验→DKIM 签名→Message-ID/Date 补齐→Blob 先写→
 	// 单事务{messages+delivery_queue 逐收件人}→应答「已接受」（非「已投递」）。
-	// 返回错误即拒绝应答；ErrRetryable→451（CON-004）
-	Submit(ctx context.Context, in *Submission, raw []byte) error
+	// 返回：落盘 blob 的 CAS 键（E-乙——生产缺陷修复批 v1.52.0，G2 批准 2026-10-17
+	// 02:30：staged=前置头+DKIM 签名后字节的 SHA-256；Webmail Sent 副本消费真实键，
+	// 终结 archiveSentCopy 对 raw 重算 K2≠K1 的幽灵行缺陷）；错误即拒绝应答；
+	// ErrRetryable→451（CON-004）。
+	Submit(ctx context.Context, in *Submission, raw []byte) (string, error)
 }
 
 // 编译期断言：契约 v1.2.0 2.3 提交管道接口实现锁定。
@@ -112,15 +115,16 @@ func NewSubmissionPipelineService(signer outboundSigner, blobs storage.BlobStore
 	return &SubmissionPipelineService{signer: signer, blobs: blobs, store: store, admins: admins, domain: domain}
 }
 
-// Submit 提交入队（契约 v1.2.0 2.3 语义逐字落地）。
+// Submit 提交入队（契约 v1.2.0 2.3 语义落地；v1.52.0 E-乙签名扩展）。
 // 编排（流程设计 3.1）：授权校验→头补齐→DKIM 签名→Blob 先写→缓存列解析→
 // StoreSubmission 单事务（逐收件人队列行）。
 // 参数：ctx 上下文（携带 LogID logger）；in 提交输入；raw DATA 完成后的原始字节。
-// 返回：nil=可应答 250「已接受」；ErrRetryable=451；ErrUnauthorized=550 5.7.1。
-func (s *SubmissionPipelineService) Submit(ctx context.Context, in *Submission, raw []byte) error {
+// 返回：落盘 blob CAS 键+错误（"" 伴随非 nil 错误；nil 错误时键恒为已落盘文件的
+// 键——E-乙：Sent 副本消费锚）；ErrRetryable=451；ErrUnauthorized=550 5.7.1。
+func (s *SubmissionPipelineService) Submit(ctx context.Context, in *Submission, raw []byte) (string, error) {
 	// 1. 授权校验（rfc6409 3.2/6.1 + FR-002；会话层已保证已认证，此处校验 From 授权）
 	if err := s.authorizeSender(ctx, in); err != nil {
-		return err
+		return "", err
 	}
 
 	// 1.5 MSA 接收 trace 头注入（F-9——rfc8314 §7.4 L416-418「Mail Submission Servers
@@ -150,13 +154,13 @@ func (s *SubmissionPipelineService) Submit(ctx context.Context, in *Submission, 
 	// REJECT→PluginRejectError 提交客户端可见（计划偏离裁决 A）；失败降级放行
 	// CON-004——applySubmitHooks 内承载；nil/空链=U14b 末态等价零调用）
 	if rej := s.applySubmitHooks(ctx, in, staged); rej != nil {
-		return rej
+		return "", rej
 	}
 
 	// 4. Blob 先写（数据模型 1.3：fsync 先行；失败 451，禁止无字节入队）
 	blobKey := sha256Hex(staged)
 	if err = s.blobs.Write(ctx, blobKey, staged); err != nil {
-		return fmt.Errorf("%w: blob 写入: %v", ErrRetryable, err)
+		return "", fmt.Errorf("%w: blob 写入: %v", ErrRetryable, err)
 	}
 
 	// 5. 缓存列解析（畸形头容忍，沿 U4 口径）
@@ -184,9 +188,9 @@ func (s *SubmissionPipelineService) Submit(ctx context.Context, in *Submission, 
 		Message: submissionMessageMeta(parsed, blobKey, staged),
 		Items:   items,
 	}); err != nil {
-		return fmt.Errorf("%w: 提交事务: %v", ErrRetryable, err)
+		return "", fmt.Errorf("%w: 提交事务: %v", ErrRetryable, err)
 	}
-	return nil
+	return blobKey, nil // E-乙：真实投递 CAS 键（Sent 副本消费锚）
 }
 
 // authorizeSender 发信授权判定（FR-002 + rfc6409 6.1）：

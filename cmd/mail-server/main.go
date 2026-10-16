@@ -66,6 +66,10 @@
 //	覆盖值仅本次进程生效不持久化〔S3-W Q2 裁决〕；HTTPS/协议端口零触碰〔S3-W Q1 裁决〕；
 //	依据：HTTP端口参数化计划书 v1.0.0 1.2-CLI/WA 组，G2 批准 2026-10-04 11:32:10；
 //	SRS FR-015 判定标准「无需手工编辑任何配置文件」在无 80 权限设备的可达性收口）
+//	2026-10-17 02:38:00 | 修正 | 生产缺陷修复批（G2 批准 2026-10-17 02:30「批准，乙 C」
+//	+白名单扩展批准 02:37）：C=HTTP/HTTPS 监听 goroutine 识别 http.ErrServerClosed
+//	为正常关闭（原误判异常 Exit(1) 抢跑——systemd 记 FAILURE+退出序被截断，
+//	NFR-007/NFR-016 承载）；E-乙=TLSRPT 提交适配 Submit 双返回值（v1.52.0）
 package main
 
 import (
@@ -80,6 +84,7 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
@@ -731,6 +736,12 @@ func main() {
 	// 恒为有效值 1~65535）
 	go func() {
 		if err := webServer.ListenAndServeHTTP(fmt.Sprintf(":%d", httpPort)); err != nil {
+			// C（生产缺陷修复批）：http.ErrServerClosed 为 Shutdown 触发的正常关闭信号
+			// （web/server.go Serve 原样透传）——原误判异常致 Exit(1) 抢跑截断退出序。
+			if errors.Is(err, http.ErrServerClosed) {
+				logger.Info("Web HTTP 端点已随优雅退出关闭", "port", httpPort)
+				return
+			}
 			logger.Error("Web HTTP 端点异常退出", "error", err, "port", httpPort)
 			os.Exit(1)
 		}
@@ -744,6 +755,11 @@ func main() {
 		if err := webServer.ListenAndServeTLS(fmt.Sprintf(":%d", webPort)); err != nil {
 			if err == web.ErrTLSNotReady {
 				logger.Warn("Web HTTPS 端点跳过（TLS 证书未配置——配置后重启生效；Setup 载体归 U10）", "error", err)
+				return
+			}
+			// C（生产缺陷修复批）：Shutdown 触发的正常关闭信号——不 Exit 不 Error。
+			if errors.Is(err, http.ErrServerClosed) {
+				logger.Info("Web HTTPS 端点已随优雅退出关闭", "port", webPort)
 				return
 			}
 			logger.Error("Web 服务异常退出", "error", err)
@@ -1129,7 +1145,7 @@ func runTLSRPTReportRound(ctx context.Context, agg *transport.TLSRPTAggregator, 
 		_ = gzw.Close()
 		filename := transport.TLSRPTReportFilename(domain, policyDomain, start, end, observability.NewLogID()[:8])
 		email := transport.BuildTLSRPTReportEmail(domain, policyDomain, rua, filename, reportID, gz.Bytes())
-		if err = submit.Submit(ctx, &mail.Submission{
+		if _, err = submit.Submit(ctx, &mail.Submission{ // E-乙：键不消费（报告链）
 			Envelope:      auth.Envelope{MailFrom: "", Helo: domain}, // null path（授权放行+防循环）
 			Recipients:    []string{rua},
 			SkipTLSPolicy: true, // F1/A-9：报告行豁免（rfc8460 §5.3.1 MUST NOT honor——迁移 00013 持久）

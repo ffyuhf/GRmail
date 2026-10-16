@@ -20,6 +20,11 @@
 //	  草稿 BodyCache 填充+Sent 副本（archiveSentCopy 尽力语义）+CSV 导入端点+错误文案 i18n 化
 //	2026-09-24 23:06:00 | 扩展 | U17 富文本编辑器（计划书步骤 4，G2 批准 2026-09-24 22:51:39）：
 //	  BuildOutgoingMail htmlBody 调用+fillFromDraft HTML 优先分支
+//	2026-10-17 02:36:00 | 修正 | 生产缺陷修复批 E-乙（G2 批准 2026-10-17 02:30「批准，乙 C」）：
+//	  composeSend 消费 Submit 返回的真实投递 CAS 键；archiveSentCopy 改用该键——原对
+//	  构造原文 raw 重算 K2（≠Submit 落盘的 K1=staged 键）且 K2 永不写盘，StoreAppend
+//	  以 K2 建 messages 行=幽灵行（Sent 副本点不开，U16 批〔2026-09-24〕起存量缺陷）
+//	  就此终结；副本行自此引用实际落盘文件（呈现实际投递件——含前置头与 DKIM 签名）
 package web
 
 import (
@@ -303,7 +308,9 @@ func (s *Server) composeSend(c *gin.Context, view *mailboxView, data *templates.
 	if len(recipients) == 0 {
 		return templates.Tr(lang, "err.rcptInvalid")
 	}
-	err := s.submit.Submit(c.Request.Context(), &mail.Submission{
+	// E-乙（生产缺陷修复批 v1.52.0）：消费 Submit 返回的真实投递 CAS 键——Sent
+	// 副本行引用实际落盘文件（幽灵行缺陷终结）。
+	sentBlobKey, err := s.submit.Submit(c.Request.Context(), &mail.Submission{
 		Envelope: auth.Envelope{
 			Helo: "webmail", RemoteIP: net.ParseIP(c.ClientIP()), MailFrom: from,
 		},
@@ -323,21 +330,23 @@ func (s *Server) composeSend(c *gin.Context, view *mailboxView, data *templates.
 	// U16 Q4-A：Sent 文件夹自动副本（仅 Webmail 路径——SMTP 客户端经 IMAP APPEND 自存
 	// 已覆盖标准路径不重复；blobKey 复用 CAS 幂等零重写；尽力失败语义——失败 Warn
 	// 不改变发送成功结果，沿 TouchLastUsed 先例）
-	s.archiveSentCopy(c, view, data, raw)
+	s.archiveSentCopy(c, view, data, raw, sentBlobKey)
 	sessLogger(c).Info("Webmail 发送入队", "rcpts", len(recipients), "log_id", c.GetString(ctxKeyLogID))
 	return ""
 }
 
 // archiveSentCopy 发送成功后 Sent 文件夹自动副本（U16 Q4-A——U9 登记项①收口）。
-// 实现：blobKey=SHA-256(raw) 复用（Submit 已写 Blob——CAS 幂等零重写）+StoreAppend
-// （sent 系统文件夹——沿 Drafts 同路径）；meta 与草稿同构（BodyCache 填充——
-// Q3-A 出站信正文可检索）；失败 Warn 尽力（已入队事实不回滚）。
-// 参数：c 请求上下文（日志）；view 主体视图；data 表单（From 展示态）；raw 发送原始字节。
-// 返回：无（尽力语义——错误仅记日志）。
-func (s *Server) archiveSentCopy(c *gin.Context, view *mailboxView, data *templates.ComposeData, raw []byte) {
+// E-乙（生产缺陷修复批 v1.52.0，G2 批准 2026-10-17 02:30）：BlobKey 消费 Submit
+// 返回的真实投递键（staged 字节的 CAS 键）——原实现对构造原文 raw 重算 K2（≠Submit
+// 落盘的 K1）且 K2 从未写盘，StoreAppend 以 K2 建 messages 行=幽灵行（Sent 副本
+// 点不开的根因，U16 起存量缺陷）；本版起副本行引用真实文件（详情可读，呈现实际
+// 投递件）。StoreAppend 的 CAS 复用语义自此真正成立（K1 行已由 StoreSubmission
+// 建立——同键复用主体，仅追加 Sent 关联行）。失败 Warn 尽力（已入队事实不回滚）。
+// 参数：c 请求上下文（日志）；view 主体视图；data 表单（From 展示态）；raw 构造
+// 原文（元数据解析源——Subject/收件人等缓存列与投递件一致：前置头不改变这些字段）；
+// blobKey Submit 返回的真实投递 CAS 键。返回：无（尽力语义——错误仅记日志）。
+func (s *Server) archiveSentCopy(c *gin.Context, view *mailboxView, data *templates.ComposeData, raw []byte, blobKey string) {
 	ctx := c.Request.Context()
-	sum := sha256.Sum256(raw)
-	blobKey := hex.EncodeToString(sum[:])
 	folderID := s.sentFolderIDOf(c, view)
 	if folderID <= 0 {
 		sessLogger(c).Warn("Sent 副本跳过（sent 文件夹不可用）", "mailbox_id", view.MailboxID)

@@ -17,6 +17,10 @@
 //	2026-10-08 13:10:00 | 修正 | 文档治理批 C1：头注契约版本引用刷新 v1.8.0→v1.37.0（注释漂移收口；纯注释零行为变更）
 //	2026-10-10 03:25:00 | 扩展 | SCRAM认证批：头注 SCRAM 注记（v1.39.0——机制承载
 //	  归 session.go authSCRAM 函数群；本文件仅注入位语义注记，零代码变更）
+//	2026-10-17 02:38:00 | 修正 | 生产缺陷修复批 C（白名单扩展批准 2026-10-17 02:37）：
+//	  Server 增 closed 原子标志+Serve 的 Accept 错误在 closed 时返回 nil——原直接
+//	  上抛致 main goroutine Error+Exit(1) 抢跑截断退出序（与 smtp/imap/pop3 既有
+//	  closed 防线同构收口）
 package managesieve
 
 import (
@@ -90,9 +94,10 @@ func (s *Server) protocolDebug() bool {
 
 // Server ManageSieve 服务端（4190 明文承载+连接级 STARTTLS 升级）。
 type Server struct {
-	cfg   ServerConfig
-	ln    net.Listener
-	conns atomic.Int64 // F8：活动连接计数（上限判定）
+	cfg    ServerConfig
+	ln     net.Listener
+	conns  atomic.Int64 // F8：活动连接计数（上限判定）
+	closed atomic.Bool  // C（生产缺陷修复批）：优雅关闭标志——Shutdown 先置位再关监听
 }
 
 // NewServer 构造服务端。
@@ -120,6 +125,11 @@ func (s *Server) Serve(ln net.Listener) error {
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
+			// C（生产缺陷修复批）：Shutdown 触发的监听关闭=正常返回——原直接上抛
+			// 致 main goroutine Error+Exit(1) 抢跑（SMTP25/插件/worker drain 被截断）。
+			if s.closed.Load() {
+				return nil
+			}
 			return err
 		}
 		// F8（访问协议资源限制批）：连接上限——超限即时关闭（NFR-002 资源面防御）。
@@ -141,6 +151,7 @@ const managesieveMaxConns = 256
 
 // Shutdown 优雅停止。
 func (s *Server) Shutdown() error {
+	s.closed.Store(true) // C（生产缺陷修复批）：先置位再关监听（Accept 错误归类依据）
 	if s.ln != nil {
 		return s.ln.Close()
 	}

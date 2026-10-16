@@ -123,38 +123,70 @@ func NewSubmissionServer(cfg SubmissionConfig, pipeline mail.SubmissionPipeline,
 // ListenAndServe 启动双端口：465（隐式 TLS，证书就绪时）与 587（明文+STARTTLS）。
 // 证书未就绪（TLSConfig nil）时 465 跳过并日志告警（U5 计划书 1.5⑫）。
 // 参数：implicitAddr 形如 ":465"（空=跳过）；explicitAddr 形如 ":587"。
+//
+// A（生产缺陷修复批，G2 批准 2026-10-17 02:30「批准，乙 C」）：双端口先全部完成
+// net.Listen 再各自进入 Accept 循环——原顺序调用形态下首个 serveListener(":587")
+// 的 Accept 阻塞循环正常运行永不返回，":465" 分支为死代码（465 从未监听的生产根因
+// ——config 配置 465 而 ss -tulnp 零监听实证）；任一监听失败时回滚已开监听整体
+// 返回错误（启动失败语义保持——main 侧 Error+Exit(1) 既有路径）。行为变化披露
+// （CHANGE5 承载）：运行期单端口 Accept 异常从「全服务 Exit(1)」改为「该端口停止
+// 接受+Error 日志」（可用性 NFR-003 对齐——25 收信/IMAP/POP3 不受单提交端口故障牵连）。
 func (s *SubmissionServer) ListenAndServe(implicitAddr, explicitAddr string) error {
+	var lnExplicit, lnImplicit net.Listener
 	if explicitAddr != "" {
-		if err := s.serveListener(explicitAddr, false); err != nil {
-			return err
+		ln, err := net.Listen("tcp", explicitAddr)
+		if err != nil {
+			return fmt.Errorf("提交端点监听失败 %s: %w", explicitAddr, err)
 		}
+		lnExplicit = ln
 	}
 	if implicitAddr != "" {
-		if s.cfg.TLSConfig() == nil {
+		// A 修复注记：TLSConfig 字段 nil 或返回 nil 均为「证书未就绪」——465 跳过而
+		// 587 正常服务（U5 计划书 1.5⑫ 语义：跳过≠失败，不关停已开的 587 监听；
+		// 原顺序阻塞形态下本检查不可达、字段 nil 的 panic 被掩盖——重构后暴露，
+		// 此处一并防御，沿 NewSubmissionServer MaxMessageSize nil 兜底先例）。
+		if s.cfg.TLSConfig == nil || s.cfg.TLSConfig() == nil {
 			slog.Default().Warn("TLS 证书未配置：465 提交端点跳过启动（手动放置证书或 U10 ACME 后生效）")
-			return nil
+			implicitAddr = ""
+		} else {
+			ln, err := net.Listen("tcp", implicitAddr)
+			if err != nil {
+				if lnExplicit != nil {
+					_ = lnExplicit.Close()
+				}
+				return fmt.Errorf("提交端点监听失败 %s: %w", implicitAddr, err)
+			}
+			lnImplicit = ln
 		}
-		if err := s.serveListener(implicitAddr, true); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// serveListener 单端口监听循环。
-func (s *SubmissionServer) serveListener(addr string, implicitTLS bool) error {
-	ln, err := net.Listen("tcp", addr)
-	if err != nil {
-		return fmt.Errorf("提交端点监听失败 %s: %w", addr, err)
 	}
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
-		_ = ln.Close()
+		for _, ln := range []net.Listener{lnExplicit, lnImplicit} {
+			if ln != nil {
+				_ = ln.Close()
+			}
+		}
 		return fmt.Errorf("提交端点已关闭")
 	}
-	s.lns = append(s.lns, ln)
+	for _, ln := range []net.Listener{lnExplicit, lnImplicit} {
+		if ln != nil {
+			s.lns = append(s.lns, ln)
+		}
+	}
 	s.mu.Unlock()
+	if lnExplicit != nil {
+		go s.acceptLoop(lnExplicit, false)
+	}
+	if lnImplicit != nil {
+		go s.acceptLoop(lnImplicit, true)
+	}
+	return nil
+}
+
+// acceptLoop 单监听 Accept 循环（A 重构：原 serveListener 循环段独立——
+// Shutdown 关闭后 Accept 错误视为正常返回；非关闭异常 Error 日志后该端口停止）。
+func (s *SubmissionServer) acceptLoop(ln net.Listener, implicitTLS bool) {
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
@@ -162,9 +194,10 @@ func (s *SubmissionServer) serveListener(addr string, implicitTLS bool) error {
 			closed := s.closed
 			s.mu.Unlock()
 			if closed {
-				return nil
+				return
 			}
-			return fmt.Errorf("提交端点接受连接: %w", err)
+			slog.Default().Error("提交端点接受连接异常，该端口停止服务", "addr", ln.Addr().String(), "error", err)
+			return
 		}
 		if implicitTLS {
 			if tc := s.cfg.TLSConfig(); tc != nil {
@@ -730,7 +763,9 @@ func (ss *submitSession) data() {
 					return
 				}
 				// F6/B-F10：改传 ss.ctx（会话 LogID 链闭环——NFR-016）。
-				res := ss.srv.pipeline.Submit(ss.ctx, &mail.Submission{
+				// E-乙（生产缺陷修复批 v1.52.0）：Submit 增返回投递 CAS 键——端点应答与
+				// 键无关，显式忽略（键消费归 Webmail Sent 副本）。
+				_, res := ss.srv.pipeline.Submit(ss.ctx, &mail.Submission{
 					// F-9：RemoteIP+TLSCipher 承载（MSA 接收 trace 头构造输入——rfc8314 §7.4）
 					Envelope:   auth.Envelope{MailFrom: ss.mailFrom, Helo: "submission", RemoteIP: ss.remoteIP()},
 					AuthUser:   ss.authUser,

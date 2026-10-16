@@ -26,6 +26,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"net"
 	"strings"
 	"time"
 
@@ -100,7 +101,11 @@ func NewProdDNSSECExchange() (dnssecExchange, error) {
 		m.SetQuestion(dns.Fqdn(name), qtype)
 		m.RecursionDesired = true
 		m.SetEdns0(4096, true) // DO 位——请求 DNSSEC 记录与 AD 位判定（rfc7672 §2.1.3）
-		server := cc.Servers[rand.Intn(len(cc.Servers))] + ":" + cc.Port
+		// B（生产缺陷修复批，G2 批准 2026-10-17 02:30）：daneServerAddr 承载——原
+		// server+":"+port 拼接在 IPv6 递归服务器环境（如 resolv.conf nameserver
+		// fdae:6a60:38ca::1）产生非法拨号串致 net.Dial「too many colons in address」，
+		// DANE 全量 A 查询失败→出站投递全量 deferred 的生产根因。
+		server := daneServerAddr(cc.Servers[rand.Intn(len(cc.Servers))], cc.Port)
 		resp, _, err := udp.ExchangeContext(ctx, m, server)
 		if err == nil && resp.Truncated { // UDP 截断→TCP 重试（大 TLSA RRset 场景）
 			resp, _, err = tcp.ExchangeContext(ctx, m, server)
@@ -115,6 +120,15 @@ func NewProdDNSSECExchange() (dnssecExchange, error) {
 		}
 		return resp, nil
 	}, nil
+}
+
+// daneServerAddr DNS 服务器拨号地址构造（B——生产缺陷修复批，G2 批准 2026-10-17
+// 02:30）：net.JoinHostPort 承载，IPv6 裸地址自动加方括号（"[v6]:port" 形态——
+// rfc3986 §3.2.2 host:port 字面量要求）；IPv4/主机名形态与原手工拼接逐字节等价
+// （回归零变化锚）。参数：server resolv.conf 递归服务器地址；port 端口（resolv.conf
+// 缺省 53）。返回：合法拨号串。
+func daneServerAddr(server, port string) string {
+	return net.JoinHostPort(server, port)
 }
 
 // dnsRcodeIsQueryError DNS 应答 RCODE 查询失败判定（F9②/B-S11——纯函数：NFR-015

@@ -37,9 +37,11 @@ type stubSubmitPipeline struct {
 	err    error
 }
 
-func (s *stubSubmitPipeline) Submit(ctx context.Context, in *mail.Submission, raw []byte) error {
+// E-乙适配（生产缺陷修复批 v1.52.0，G2 批准 2026-10-17 02:30）：Submit 双返回值——
+// 键固定空串（端点测试不消费键；断言语义零变化）。
+func (s *stubSubmitPipeline) Submit(ctx context.Context, in *mail.Submission, raw []byte) (string, error) {
 	s.called, s.gotCtx, s.gotSub, s.gotRaw = true, ctx, in, raw
-	return s.err
+	return "", s.err
 }
 
 // stubVerifier 凭据校验桩（记录 ctx/user——F3②/F6 断言载体）。
