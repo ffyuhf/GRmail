@@ -78,7 +78,10 @@
 	--selected: rgba(23, 24, 28, 0.08);    /* 列表行选中 墨8%（δ批） */
 	--scrim: rgba(0, 0, 0, 0.32);   /* 抽屉/菜单遮罩 */
 	--badge-ok-bg: var(--success-soft);  --badge-ok-fg: #1b5e20;
-	--badge-warn-bg: var(--warning-soft); --badge-warn-fg: #8d6e00;
+	/* K-3（快赢清单批——G2 裁决 A 点名单点 2026-10-16 17:36）：亮档 warn 徽标前景加深
+	 * #8d6e00→#7a6000——第三方报告实测 4.53:1 零余量收口至 ≥5.5:1（AA 有余量；
+	 * 黄棕语义辨识保持；暗档 #ffe082 高对比零触碰；功能色 --warning 本值零触碰）。 */
+	--badge-warn-bg: var(--warning-soft); --badge-warn-fg: #7a6000;
 	--badge-err-bg: var(--danger-soft);   --badge-err-fg: #b71c1c;
 	/* —— 排版（MUI typography 档位映射）—— */
 	--font-sans: "Roboto", system-ui, -apple-system, "Segoe UI", "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif;
@@ -116,6 +119,15 @@
 	--ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
 	--ease-sharp: cubic-bezier(0.4, 0, 0.6, 1);
 	--ease-out: cubic-bezier(0, 0, 0.2, 1);
+	/* K-2（快赢清单批——G2 裁决 A 双曲线差异化 2026-10-16 17:36）：替换内置等价
+	 * 出向曲线——第三方报告 5.5 违例③（出向缓动等价内置 ease-out）+5.10 M7（引入
+	 * 2–3 条差异化曲线）。--ease-emphasized 进入强减速（Material emphasized 形态）
+	 * /--ease-exit 加速离场；进入消费点（卡片 grow/菜单/提示条 slide-up×2/详情
+	 * grow/compose grow/抽屉进入）分派 emphasized，出向消费点（抽屉收起 margin/width
+	 * transition）改绑 exit；时长全部不变。--ease-out 定义保留——六消费点迁移后
+	 * 零消费（沿 C7 死类登记池先例登记，CHANGE5 承载）。 */
+	--ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
+	--ease-exit: cubic-bezier(0.4, 0, 1, 1);
 	--dur-fast: 150ms;       /* fade 页面切换/悬停反馈 */
 	--dur-normal: 250ms;     /* 背景/选中过渡 */
 	--dur-drawer-in: 225ms;  /* 抽屉展开 enteringScreen */
@@ -524,7 +536,7 @@ label:has(> input[type="checkbox"]) {
 	padding: var(--sp-5);
 	width: min(27.75rem, calc(100vw - 2rem));
 	margin: 10vh auto 0;
-	animation: gr-grow-in var(--dur-normal) var(--ease-out);
+	animation: gr-grow-in var(--dur-normal) var(--ease-emphasized); /* K-2 进入强减速 */
 }
 .card .card-head {
 	display: flex;
@@ -672,7 +684,7 @@ label:has(> input[type="checkbox"]) {
 	border-radius: var(--radius-sm);
 	box-shadow: var(--shadow-menu);
 	padding: var(--sp-1) 0;
-	animation: gr-menu-in var(--dur-fast) var(--ease-out);
+	animation: gr-menu-in var(--dur-fast) var(--ease-emphasized); /* K-2 进入强减速 */
 }
 .menu a, .menu button {
 	display: flex;
@@ -817,7 +829,7 @@ section table, .card table { border-radius: var(--radius-sm); overflow: hidden; 
 	box-shadow: var(--shadow-menu);
 	padding: var(--sp-3) var(--sp-4);
 	font-size: var(--text-body);
-	animation: gr-slide-up var(--dur-normal) var(--ease-out), gr-toast-life 5.6s var(--ease-standard) forwards;
+	animation: gr-slide-up var(--dur-normal) var(--ease-emphasized), gr-toast-life 5.6s var(--ease-standard) forwards; /* K-2 进入强减速 */
 }
 .toast-ok  { background: var(--success); color: #fff; }
 .toast-err { background: var(--danger); color: #fff; }
@@ -892,13 +904,25 @@ section table, .card table { border-radius: var(--radius-sm); overflow: hidden; 
 	 * 可点击条带（第三方报告 P1-2）；border-box 后位移量=全宽完全隐藏（内容区
 	 * 收窄 16px 视觉微变——计划书 1.3 已披露；移动档 translateX(-100%) 百分比
 	 * 位移随盒模型自适应无影响）。 */
+	/* K-5（快赢清单批——干系人指令替换原"设置页表单限宽收紧"+差异裁决 A 全站
+	 * sticky 2026-10-16 17:36）：固定侧边栏布局——侧栏展开态（未收回）下滚动
+	 * 长内容页时驻留视口左侧始终可点击（原普通文档流随页滚走，须回滚顶部）。
+	 * sticky+top=应用栏下沿+视口高+align-self:flex-start（flex item 纵向起点
+	 * 对齐——脱离拉伸默认值，sticky 生效前提）；超高自身内滚（overflow-y:auto
+	 * 既有承载）；移动档 <768 浮层抽屉 position:fixed 于后文媒体查询内覆盖本
+	 * 声明（同特异性后者胜出）——移动形态零变化；桌面收起态负 margin 与
+	 * sticky 正交（margin-left 过渡照常收起完全隐藏——A-5 锚保持）。 */
+	position: sticky;
+	top: var(--topbar-h);
+	height: calc(100vh - var(--topbar-h));
+	align-self: flex-start;
 	box-sizing: border-box;
 	width: var(--sidebar-w);
 	flex-shrink: 0;
 	padding: var(--sp-2) var(--sp-2);
 	overflow-y: auto;
-	transition: margin-left var(--dur-drawer-out) var(--ease-sharp),
-		width var(--dur-drawer-out) var(--ease-sharp);
+	transition: margin-left var(--dur-drawer-out) var(--ease-exit), /* K-2 出向加速离场（原 --ease-sharp） */
+		width var(--dur-drawer-out) var(--ease-exit);
 }
 .main {
 	flex: 1;
@@ -1067,7 +1091,10 @@ td.cell-trunc > a, td.cell-trunc > span {
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
-td.time-cell { white-space: nowrap; font-size: var(--text-caption); color: var(--fg-secondary); }
+/* K-1（快赢清单批——G2 裁决 A 仅时间列 2026-10-16 17:36）：时间列等宽数字——
+ * tabular-nums 使 "2006-01-02 15:04" 各数字等宽纵向对齐（第三方报告 5.4 快赢①；
+ * 比例字宽下 "1" 窄于 "0" 致各行时间参差的观感收口；作用域限 td.time-cell）。 */
+td.time-cell { white-space: nowrap; font-size: var(--text-caption); color: var(--fg-secondary); font-variant-numeric: tabular-nums; }
 table.mails { min-width: 36rem; }
 table.mails tbody tr {
 	min-height: var(--row-h);
@@ -1112,7 +1139,7 @@ td.status-cell .flag { margin-right: var(--sp-1); }
 	border-radius: var(--radius);
 	padding: var(--sp-1) var(--sp-2);
 	margin-bottom: var(--sp-2);
-	animation: gr-slide-up var(--dur-fast) var(--ease-out);
+	animation: gr-slide-up var(--dur-fast) var(--ease-emphasized); /* K-2 进入强减速 */
 }
 .batch-bar form { margin: 0; flex-direction: row; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
 .list-area:has(.mail-id:checked) .batch-bar,
@@ -1194,7 +1221,7 @@ table.mails.admin-mailboxes td form input[type="password"] {
 /* ════════════════ ⑨ 详情/写信 ════════════════ */
 
 /* 详情页（阅读效率优先——头部卡片+正文容器+附件卡片） */
-.detail { animation: gr-grow-in var(--dur-normal) var(--ease-out); max-width: 52rem; }
+.detail { animation: gr-grow-in var(--dur-normal) var(--ease-emphasized); max-width: 52rem; } /* K-2 进入强减速 */
 .detail-head { margin-bottom: var(--sp-3); }
 .detail-head h2 { margin: 0 0 var(--sp-2); }
 .detail-head .meta-row {
@@ -1259,7 +1286,7 @@ table.mails.admin-mailboxes td form input[type="password"] {
 	gap: var(--sp-2);
 }
 .compose-rcpt-grid { display: grid; grid-template-columns: 1fr; gap: var(--sp-2); }
-#compose-page form { animation: gr-grow-in var(--dur-normal) var(--ease-out); }
+#compose-page form { animation: gr-grow-in var(--dur-normal) var(--ease-emphasized); } /* K-2 进入强减速 */
 #compose-page:fullscreen { background: var(--bg); padding: var(--sp-5) var(--sp-6); overflow-y: auto; }
 #compose-page:fullscreen .compose-editor .ql-container { min-height: 55vh; }
 #compose-toolbar { display: flex; flex-wrap: wrap; gap: var(--sp-1); padding: var(--sp-1); }
@@ -1456,7 +1483,7 @@ input[type="file"]::file-selector-button {
 		background: var(--bg);
 		box-shadow: var(--shadow-menu);
 		transform: translateX(-100%);
-		transition: transform var(--dur-drawer-in) var(--ease-out);
+		transition: transform var(--dur-drawer-in) var(--ease-emphasized); /* K-2 进入强减速 */
 	}
 	#nav-toggle:checked ~ .layout .sidebar { transform: translateX(0); }
 	/* C4（批二）：遮罩改真实 label（.drawer-scrim——可点击关闭抽屉；原 ::after
