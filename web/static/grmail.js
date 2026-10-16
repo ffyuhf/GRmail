@@ -276,6 +276,40 @@
 		}, 5600);
 	};
 
+	/* ── A-4（前端报告批 E-4-B——G2 批准 2026-10-16 10:51）：侧栏高亮同步 ──
+	 * 第三方报告 P1-1：文件夹切换走 HTMX 局部替换（#mail-list 目标不含侧栏），
+	 * active 类服务端整页渲染——点击后高亮不更新需刷新。afterSwap 钩子按地址栏
+	 * folder 参数就地同步（hx-push-url 既有承载）；同步规则对齐服务端语义
+	 * （webmail.go）：/与/mails 带 folder=N→对应项 active；无 folder→首项
+	 * （收件箱缺省）；/search 搜索态→全部清除（服务端搜索态不设 Active）。 */
+	function grmailSyncSidebarActive() {
+		var items = document.querySelectorAll(".sidebar .folder-item");
+		if (items.length === 0) { return; }
+		var path = location.pathname;
+		var isMailPath = path === "/" || path === "/mails";
+		var m = isMailPath ? location.search.match(/[?&]folder=(\d+)/) : null;
+		var activeIdx = -1;
+		if (isMailPath) {
+			if (m) {
+				for (var i = 0; i < items.length; i++) {
+					var hm = items[i].getAttribute("href").match(/[?&]folder=(\d+)/);
+					if (hm && hm[1] === m[1]) { activeIdx = i; break; }
+				}
+			} else {
+				activeIdx = 0; // 无 folder 参数=收件箱缺省（服务端 resolveFolderID 语义）
+			}
+		}
+		for (var j = 0; j < items.length; j++) {
+			var on = j === activeIdx;
+			items[j].classList.toggle("active", on);
+			if (on) { items[j].setAttribute("aria-current", "page"); }
+			else { items[j].removeAttribute("aria-current"); }
+		}
+	}
+	document.body.addEventListener("htmx:afterSwap", function (e) {
+		if (e.target && e.target.id === "mail-list") { grmailSyncSidebarActive(); }
+	});
+
 	/* ── ⑤ B-S批 F2（裁决 A 2026-10-09 13:34）：内联事件外迁承载（CSP
 	 *     script-src 'self' 配套——原模板 onclick/onchange/oninput 清除） ── */
 

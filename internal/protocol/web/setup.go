@@ -202,7 +202,12 @@ func buildDNSRecords(cfg *config.Config, lang templates.Lang) []templates.DNSRec
 	const ttlSTS = "600"
 	records := []templates.DNSRecordView{
 		{Type: "A", Name: d, Value: aValue, TTL: ttlStd, Note: aNote},
-		{Type: "MX", Name: d, Value: "10 " + d, TTL: ttlStd, Note: "邮件交换（优先级 10）"},
+		// B-1（前端报告批·批次二 E-7-A——G2 批准 2026-10-16 10:51）：MX 建议改
+		// smtp. 连接子域——裸域 MX 不匹配策略通配 *.<主域>（rfc8461 §4.1 通配仅
+		// 匹配单标签子域），按向导发布的裸域部署 enforce 不生效（外部审计批
+		// S4-W Q1-B 裁决 2026-10-15 22:08:35 登记事项兑现）；smtp. A 记录行 P9
+		// 既有+证书 SAN 已覆盖（certificateDomains 无条件含 smtp.）——零新增记录行。
+		{Type: "MX", Name: d, Value: "10 smtp." + d, TTL: ttlStd, Note: "邮件交换（优先级 10，指向 smtp 连接子域——与 MTA-STS 策略通配匹配）"},
 		{Type: "TXT", Name: d, Value: spf, TTL: ttlStd, Note: "SPF 发信授权（rfc7208）"},
 		{Type: "TXT", Name: "_dmarc." + d, Value: dmarc, TTL: ttlStd, Note: "DMARC 策略（rfc9989）"},
 	}

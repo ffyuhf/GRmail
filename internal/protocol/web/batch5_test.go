@@ -189,8 +189,12 @@ func TestBatch5C2C4AriaLabels(t *testing.T) {
 	if !strings.Contains(page, `<span class="sr-only">主题</span>`) {
 		t.Fatal("主题输入应有 sr-only label 文本（C2）")
 	}
-	if !strings.Contains(page, `<span class="sr-only">附件（可多选）</span>`) {
-		t.Fatal("附件输入应有 sr-only label 文本（C2——键值含多选提示）")
+	// A-8（前端报告批——G2 批准 2026-10-16 10:51）：附件控件经 sr-only label 改为
+	// file-pick 自定义形态（可见双语按钮+文件名回显）——读屏控件名经 aria-label
+	// 承载（键值意图锚「附件（可多选）」保持——读屏可达等价；批准行为变化的
+	// 机械适配，沿 u13 mx/batch7 色值锚适配先例；形态披露落本批 CHANGE5 专章）。
+	if !strings.Contains(page, `aria-label="附件（可多选）"`) {
+		t.Fatal("附件输入应有 aria-label 控件名（C2 键值含多选提示——A-8 形态适配）")
 	}
 	if !strings.Contains(page, `aria-label="加粗`) {
 		t.Fatal("工具栏控件应补 aria-label（C2 抽查——加粗；键值含 Ctrl+B 后缀为前缀匹配）")

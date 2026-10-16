@@ -205,9 +205,11 @@
 	from { opacity: 0; transform: scale(0.96) translateY(-4px); }
 	to   { opacity: 1; transform: scale(1) translateY(0); }
 }
-@keyframes gr-slide-in {          /* 内容进入：右侧平移（阶段切换方向感） */
-	from { opacity: 0; transform: translateX(60%); }
-	to   { opacity: 1; transform: translateX(0); }
+@keyframes gr-slide-in {          /* 内容进入：右侧平移（阶段切换方向感；A-9 前端报告批
+	                            * E-6-A：60%→16px 收敛——高频导航路径大位移观感收口，
+	                            * 第三方报告 5.5 违例第 1 条；绝对值统一两消费点形态） */
+	from { opacity: 0; transform: translateX(16px); }
+	to { opacity: 1; transform: translateX(0); }
 }
 @keyframes gr-slide-out {
 	from { opacity: 1; transform: translateX(0); }
@@ -263,7 +265,7 @@ h2 { font-size: var(--text-h2); font-weight: var(--text-h2-weight); margin: 0 0 
 h3 { font-size: var(--text-title); font-weight: var(--text-title-weight); margin: var(--sp-4) 0 var(--sp-2); }
 p  { margin: var(--sp-1) 0; }
 a  { color: var(--primary); text-decoration: none; }
-a:hover { text-decoration: underline; }
+@media (hover: hover) { a:hover { text-decoration: underline; } } /* A-9 门控 */
 hr { border: none; border-top: 1px solid var(--border); }
 code {
 	font-family: var(--font-mono);
@@ -309,7 +311,7 @@ button {
 		box-shadow var(--dur-fast) var(--ease-standard),
 		transform var(--dur-fast) var(--ease-standard);
 }
-button:hover { background: var(--primary-hover); }
+@media (hover: hover) { button:hover { background: var(--primary-hover); } } /* A-9 门控 */
 button:active { transform: scale(0.97); }
 button:disabled, .btn:disabled {
 	color: var(--fg-disabled);
@@ -329,13 +331,13 @@ button.linklike {
 	color: var(--primary);
 	border: 1px solid var(--border);
 }
-.btn-secondary:hover, button.secondary:hover, a.secondary:hover { background: var(--primary-soft); border-color: var(--primary); } /* C1（批四） */
+@media (hover: hover) { .btn-secondary:hover, button.secondary:hover, a.secondary:hover { background: var(--primary-soft); border-color: var(--primary); } } /* C1（批四）+A-9 门控 */
 /* 危险按钮 */
 .btn-danger, button.danger {
 	background: var(--danger);
 	color: #fff;
 }
-.btn-danger:hover, button.danger:hover { filter: brightness(1.1); }
+@media (hover: hover) { .btn-danger:hover, button.danger:hover { filter: brightness(1.1); } } /* A-9 门控 */
 /* 文字按钮 */
 .btn-text {
 	background: none;
@@ -343,7 +345,7 @@ button.linklike {
 	min-height: auto;
 	padding: var(--sp-1) var(--sp-2);
 }
-.btn-text:hover { background: var(--primary-soft); }
+@media (hover: hover) { .btn-text:hover { background: var(--primary-soft); } } /* A-9 门控 */
 /* 图标按钮（40×40 触达区——TopAppBar/列表行内动作） */
 .btn-icon {
 	min-height: 40px;
@@ -353,7 +355,7 @@ button.linklike {
 	color: var(--fg-secondary);
 	border-radius: var(--radius-pill);
 }
-.btn-icon:hover { background: var(--hover); color: var(--fg); }
+@media (hover: hover) { .btn-icon:hover { background: var(--hover); color: var(--fg); } } /* A-9 门控 */
 .btn-icon svg { width: var(--icon-size); height: var(--icon-size); }
 /* 紧凑档（表格行内/菜单项） */
 .btn-sm, .btn-sm:focus-visible { min-height: var(--btn-h-sm); padding: 0 var(--sp-3); font-size: var(--text-caption); }
@@ -375,7 +377,7 @@ button.primary, a.primary {
 	transition: background-color var(--dur-fast) var(--ease-standard),
 		transform var(--dur-fast) var(--ease-standard);
 }
-button.primary:hover, a.primary:hover { background: var(--primary-hover); text-decoration: none; }
+@media (hover: hover) { button.primary:hover, a.primary:hover { background: var(--primary-hover); text-decoration: none; } } /* A-9 门控 */
 button.primary:active, a.primary:active { transform: scale(0.97); }
 button:focus-visible, a:focus-visible, label:focus-visible, summary:focus-visible, input:focus-visible + .kbd {
 	outline: 2px solid var(--primary);
@@ -406,8 +408,10 @@ input, select, textarea {
 		box-shadow var(--dur-fast) var(--ease-standard),
 		background-color var(--dur-fast) var(--ease-standard);
 }
-input:hover:not(:disabled):not(:focus-visible), select:hover:not(:disabled), textarea:hover:not(:disabled) {
-	border-color: var(--fg-secondary);
+@media (hover: hover) { /* A-9 门控 */
+	input:hover:not(:disabled):not(:focus-visible), select:hover:not(:disabled), textarea:hover:not(:disabled) {
+		border-color: var(--fg-secondary);
+	}
 }
 input:focus-visible, select:focus-visible, textarea:focus-visible {
 	outline: none;
@@ -650,7 +654,7 @@ label:has(> input[type="checkbox"]) {
 	user-select: none;
 }
 .menu-host > summary::-webkit-details-marker { display: none; }
-.menu-host > summary:hover { background: var(--hover); color: var(--fg); }
+@media (hover: hover) { .menu-host > summary:hover { background: var(--hover); color: var(--fg); } } /* A-9 门控 */
 .menu-host > summary .ic { transition: transform var(--dur-fast) var(--ease-standard); }
 .menu-host[open] > summary .ic-caret { transform: rotate(180deg); }
 .menu-host[open] > summary { background: var(--hover); color: var(--fg); }
@@ -658,6 +662,10 @@ label:has(> input[type="checkbox"]) {
 	position: absolute;
 	right: 0;
 	top: calc(100% + var(--sp-1));
+	/* A-9（前端报告批 E-6-A）：transform-origin 顶部锚点——gr-menu-in 缩放起点
+	 * 自中心（默认）改为右上触发器侧（菜单右对齐展开——第三方报告 P1-6 浮层
+	 * 原点缺失；弹窗 gr-grow-in 居中缩放为模态例外保持默认）。 */
+	transform-origin: top right;
 	min-width: 13rem;
 	z-index: var(--z-menu);
 	background: var(--surface);
@@ -683,14 +691,16 @@ label:has(> input[type="checkbox"]) {
 	text-decoration: none;
 	white-space: nowrap;
 }
-.menu a:hover, .menu button:hover {
-	background: var(--hover);
-	color: var(--fg);
-	text-decoration: none;
-	filter: none;
+@media (hover: hover) { /* A-9 门控 */
+	.menu a:hover, .menu button:hover {
+		background: var(--hover);
+		color: var(--fg);
+		text-decoration: none;
+		filter: none;
+	}
 }
 .menu .menu-danger { color: var(--danger); }
-.menu .menu-danger:hover { background: var(--danger-soft); }
+@media (hover: hover) { .menu .menu-danger:hover { background: var(--danger-soft); } } /* A-9 门控 */
 .menu hr { margin: var(--sp-1) 0; }
 .menu .ic { width: 18px; height: 18px; }
 .ic-caret { width: 16px; height: 16px; transition: transform var(--dur-fast) var(--ease-standard); }
@@ -721,7 +731,7 @@ th {
 }
 td { padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--border-soft); vertical-align: middle; }
 tbody tr { transition: background-color var(--dur-normal) var(--ease-standard); }
-tbody tr:hover { background: var(--hover); }
+@media (hover: hover) { tbody tr:hover { background: var(--hover); } } /* A-9 门控 */
 tbody tr:last-child td { border-bottom: none; }
 section table, .card table { border-radius: var(--radius-sm); overflow: hidden; }
 /* —— 表格长值断行（向导占位符与布局修复批次 2026-10-04 15:05:00——td 无断词规则，
@@ -843,7 +853,7 @@ section table, .card table { border-radius: var(--radius-sm); overflow: hidden; 
 	color: var(--fg);
 	text-decoration: none;
 }
-.app-bar-brand:hover { text-decoration: none; }
+@media (hover: hover) { .app-bar-brand:hover { text-decoration: none; } } /* A-9 门控 */
 .app-bar-brand .app-bar-label { color: var(--fg-secondary); font-size: var(--text-body); font-weight: 400; }
 .app-bar-actions {
 	display: flex;
@@ -866,7 +876,7 @@ section table, .card table { border-radius: var(--radius-sm); overflow: hidden; 
 	transition: transform var(--dur-normal) var(--ease-standard),
 		background-color var(--dur-fast) var(--ease-standard);
 }
-.nav-toggle:hover { background: var(--hover); color: var(--fg); }
+@media (hover: hover) { .nav-toggle:hover { background: var(--hover); color: var(--fg); } } /* A-9 门控 */
 /* F19：按压反馈统一按钮体系 scale 惯例（基准 IconButton 无旋转形态）——Webmail界面精修批次 */
 .nav-toggle:active { transform: scale(0.97); }
 
@@ -877,6 +887,12 @@ section table, .card table { border-radius: var(--radius-sm); overflow: hidden; 
 	position: relative;
 }
 .sidebar {
+	/* A-5（前端报告批 E-5-A——G2 批准 2026-10-16 10:51）：box-sizing border-box
+	 * ——content-box 实宽=240+8×2=256px 与收起负 margin -240px 错位残留 16px
+	 * 可点击条带（第三方报告 P1-2）；border-box 后位移量=全宽完全隐藏（内容区
+	 * 收窄 16px 视觉微变——计划书 1.3 已披露；移动档 translateX(-100%) 百分比
+	 * 位移随盒模型自适应无影响）。 */
+	box-sizing: border-box;
 	width: var(--sidebar-w);
 	flex-shrink: 0;
 	padding: var(--sp-2) var(--sp-2);
@@ -914,7 +930,7 @@ section table, .card table { border-radius: var(--radius-sm); overflow: hidden; 
 	transition: background-color var(--dur-normal) var(--ease-standard),
 		box-shadow var(--dur-normal) var(--ease-standard);
 }
-.folder-item:hover { background: var(--hover); }
+@media (hover: hover) { .folder-item:hover { background: var(--hover); } } /* A-9 门控 */
 /* F14：键盘可达焦点环（tabindex=0 配套——Webmail界面精修批次） */
 .folder-item:focus-visible {
 	outline: 2px solid var(--primary);
@@ -971,7 +987,7 @@ section table, .card table { border-radius: var(--radius-sm); overflow: hidden; 
 	min-height: 32px;
 }
 .sidebar summary::-webkit-details-marker { display: none; }
-.sidebar summary:hover { background: var(--hover); color: var(--fg); }
+@media (hover: hover) { .sidebar summary:hover { background: var(--hover); color: var(--fg); } } /* A-9 门控 */
 .sidebar details[open] > summary { color: var(--fg); }
 .sidebar details[open] > *:not(summary) { animation: gr-fade-in var(--dur-fast) var(--ease-standard); }
 .sidebar details form { padding: var(--sp-1) var(--sp-2) var(--sp-1) calc(var(--sp-3) + var(--icon-size) + 14px); gap: var(--sp-1); }
@@ -983,7 +999,7 @@ section table, .card table { border-radius: var(--radius-sm); overflow: hidden; 
 	padding: var(--sp-1) var(--sp-2);
 	border-radius: var(--radius-sm);
 }
-.sidebar .folder-manage-row:hover { background: var(--hover); }
+@media (hover: hover) { .sidebar .folder-manage-row:hover { background: var(--hover); } } /* A-9 门控 */
 .sidebar .folder-manage-row .fm-name { font-size: var(--text-caption); color: var(--fg-secondary); padding-left: var(--sp-2); }
 .sidebar .folder-manage-row form { padding: 0 var(--sp-1) 0 var(--sp-2); }
 
@@ -1018,7 +1034,7 @@ section table, .card table { border-radius: var(--radius-sm); overflow: hidden; 
 	border-radius: var(--radius-pill);
 	white-space: nowrap;
 }
-.tool-bar a.filter-link:hover { background: var(--hover); color: var(--fg); text-decoration: none; }
+@media (hover: hover) { .tool-bar a.filter-link:hover { background: var(--hover); color: var(--fg); text-decoration: none; } } /* A-9 门控 */
 
 /* B6/E-1-A（批五——G2 批准 2026-10-13 08:42:57 五组候选全 A）：列表区视口内滚动容器
  * ——.list-area 自此为滚动容器（th sticky 的滚动参照恢复：批二 C2 的 overflow:clip 与
@@ -1058,12 +1074,16 @@ table.mails tbody tr {
 	transition: background-color var(--dur-normal) var(--ease-standard),
 		box-shadow var(--dur-normal) var(--ease-standard);
 }
-table.mails tbody tr:hover { background: var(--hover); }
+@media (hover: hover) { table.mails tbody tr:hover { background: var(--hover); } } /* A-9 门控 */
 table.mails tbody tr:has(.mail-id:checked) { background: var(--selected); }
+/* A-6（前端报告批）：批量条目标下拉与动作联动——非「移动到」态隐藏目标下拉
+ * （第三方报告 P1-3；:has(option:checked) 沿 .mail-id:checked 既有支持面——
+ * 批五 E-4-A :has 先例；不支持 :has 的浏览器整条不匹配=恒显示（现状降级无害）。 */
+.batch-bar form:not(:has(select[name="action"] option[value="move"]:checked)) select[name="target"] { display: none; }
 table.mails tbody tr:last-child td { border-bottom: none; }
 tr.unread td { font-weight: var(--text-label-weight); }
 table.mails a { color: var(--fg); text-decoration: none; display: block; }
-table.mails a:hover { color: var(--primary); text-decoration: none; }
+@media (hover: hover) { table.mails a:hover { color: var(--primary); text-decoration: none; } } /* A-9 门控 */
 /* 状态图标区（未读圆点/星标——参考 G11 状态可视化） */
 .flag { color: var(--warning); display: inline-flex; }
 .flag svg { width: 16px; height: 16px; }
@@ -1104,7 +1124,7 @@ td.status-cell .flag { margin-right: var(--sp-1); }
 .actions select, .actions input, .actions button { padding: var(--sp-1) var(--sp-2); min-height: var(--btn-h); }
 .actions form { flex-direction: row; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin: 0; }
 .actions a { color: var(--primary); text-decoration: none; font-size: var(--text-body); }
-.actions a:hover { text-decoration: underline; }
+@media (hover: hover) { .actions a:hover { text-decoration: underline; } } /* A-9 门控 */
 
 /* ════════════ Webmail前端缺陷修复批三（G2 批准 2026-10-12 22:21:32）════════════ */
 
@@ -1114,7 +1134,7 @@ td.status-cell .flag { margin-right: var(--sp-1); }
  * 恢复 --primary-fg 白字；作用域限 .actions——顶栏「写信」等非 .actions 主按钮
  * 与 .actions 内普通文字链（btn-text 等）零波及。 */
 .actions a.primary { color: var(--primary-fg); }
-.actions a.primary:hover { color: var(--primary-fg); text-decoration: none; }
+@media (hover: hover) { .actions a.primary:hover { color: var(--primary-fg); text-decoration: none; } } /* A-9 门控 */
 
 /* A3：admin 邮箱管理表专用布局——原三件套致 1024~1920 全宽度列崩坏：①表自动布局
  * （table-layout:fixed 仅限 .list-area 邮件列表）②全局 table.mails min-width:36rem
@@ -1124,10 +1144,15 @@ td.status-cell .flag { margin-right: var(--sp-1); }
  * .list-area/tokens/聚合视图表零波及。 */
 .table-wrap.admin-table-wrap { overflow-x: auto; }
 table.mails.admin-mailboxes { table-layout: fixed; }
+/* A-2（前端报告批 E-2-A——G2 批准 2026-10-16 10:51）：首列显式声明——原四列声明
+ * 45rem 在 content-page 52rem 限宽容器内挤压地址列至约 64px（逐字竖排不可读，
+ * 第三方报告 P0-1）；min-width 保底+操作列 22→18rem（密码框+按钮实际需求），
+ * 「地址列吃余量」注释意图与实现一致化。 */
+table.mails.admin-mailboxes th:nth-child(1) { width: auto; min-width: 14rem; } /* 地址列（吃余量+保底） */
 table.mails.admin-mailboxes th:nth-child(2) { width: 6.5rem; } /* 状态徽标列 */
 table.mails.admin-mailboxes th:nth-child(3) { width: 7rem; }   /* 2FA 态列 */
 table.mails.admin-mailboxes th:nth-child(4) { width: 9.5rem; } /* 创建时间列 */
-table.mails.admin-mailboxes th:nth-child(5) { width: 22rem; }  /* 操作列（内联表单组） */
+table.mails.admin-mailboxes th:nth-child(5) { width: 18rem; }  /* 操作列（内联表单组——A-2 收窄） */
 table.mails.admin-mailboxes td form input[type="password"] {
 	width: 7rem;
 	padding: var(--sp-1) var(--sp-2);
@@ -1159,7 +1184,7 @@ table.mails.admin-mailboxes td form input[type="password"] {
 	text-decoration: none;
 	transition: background-color var(--dur-fast) var(--ease-standard);
 }
-.pager a:hover { background: var(--hover); text-decoration: none; }
+@media (hover: hover) { .pager a:hover { background: var(--hover); text-decoration: none; } } /* A-9 门控 */
 .pager .active { background: var(--primary); color: var(--primary-fg); font-weight: var(--text-label-weight); }
 .pagesize { font-size: var(--text-caption); color: var(--fg-secondary); display: inline-flex; align-items: center; gap: var(--sp-1); }
 .pagesize a { color: var(--primary); text-decoration: none; padding: var(--sp-1) var(--sp-1); }
@@ -1212,7 +1237,7 @@ table.mails.admin-mailboxes td form input[type="password"] {
 	transition: border-color var(--dur-fast) var(--ease-standard),
 		box-shadow var(--dur-fast) var(--ease-standard);
 }
-.attach a:hover { border-color: var(--primary); box-shadow: var(--shadow-card); text-decoration: none; }
+@media (hover: hover) { .attach a:hover { border-color: var(--primary); box-shadow: var(--shadow-card); text-decoration: none; } } /* A-9 门控 */
 .attach a .ic { width: 18px; height: 18px; color: var(--primary); }
 
 /* 写信页（分区布局——收件人组/主题/编辑器/附件/动作栏） */
@@ -1274,7 +1299,16 @@ input[type="file"]::file-selector-button {
 	cursor: pointer;
 	transition: background-color var(--dur-fast) var(--ease-standard);
 }
-input[type="file"]::file-selector-button:hover { background: var(--primary-soft); border-color: var(--primary); }
+@media (hover: hover) { input[type="file"]::file-selector-button:hover { background: var(--primary-soft); border-color: var(--primary); } } /* A-9 门控 */
+/* A-8（前端报告批）：附件自定义控件——.file-pick 内 input 视觉隐藏（可聚焦可
+ * 触发——label 点击冒泡打开选择器；第三方报告 P1-5 原生英文文案收口）；焦点
+ * 样式经 input:focus-visible + .btn-text 邻接选择器呈现。 */
+.file-pick { display: inline-flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.file-pick input[type="file"] {
+	position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden;
+	clip-path: inset(50%); white-space: nowrap;
+}
+.file-pick input[type="file"]:focus-visible + .btn-text { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: var(--radius-xs); }
 
 /* F18：表格空态行（tokens 空表——与 empty-state 组件同语言——Webmail界面精修批次） */
 .empty-cell { text-align: center; color: var(--fg-secondary); padding: var(--sp-5) var(--sp-3) !important; }
@@ -1282,7 +1316,7 @@ input[type="file"]::file-selector-button:hover { background: var(--primary-soft)
 /* F07：登录前语言切换行（卡片底部居中——Webmail界面精修批次） */
 .lang-switch { text-align: center; margin: var(--sp-3) 0 0; }
 .lang-switch a { color: var(--primary); text-decoration: none; font-size: var(--text-caption); }
-.lang-switch a:hover { text-decoration: underline; }
+@media (hover: hover) { .lang-switch a:hover { text-decoration: underline; } } /* A-9 门控 */
 
 /* CSV 导入候选（类名锚——Go 侧 i18n 生成保持）。
  * C2/E-1-A（β 批——G2 批准 2026-10-15 00:12）：容器挂 .table-wrap 双类（i18n.go）
@@ -1387,7 +1421,7 @@ input[type="file"]::file-selector-button:hover { background: var(--primary-soft)
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { border-radius: var(--radius-xs); }
 ::-webkit-scrollbar-thumb { border-radius: var(--radius-xs); background: transparent; }
-::-webkit-scrollbar-thumb:hover, *:hover::-webkit-scrollbar-thumb { background: var(--border); }
+@media (hover: hover) { ::-webkit-scrollbar-thumb:hover, *:hover::-webkit-scrollbar-thumb { background: var(--border); } } /* A-9 门控 */
 *::-webkit-scrollbar-corner { background: transparent; }
 * { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
 
@@ -1453,6 +1487,13 @@ input[type="file"]::file-selector-button:hover { background: var(--primary-soft)
 	.menu a, .menu button { min-height: var(--touch-min); }
 	/* G6（批二）：触达区补齐——侧栏项/分页/筛选链接移动端 44px */
 	.folder-item, .pager a, .tool-bar a.filter-link { min-height: var(--touch-min); }
+	/* A-7（前端报告批）：触控目标补齐——既有五类提升档外补 input/select/textarea/
+	 * summary/skip-link（第三方报告实测 27 项 <44px，最小 32px=INPUT）；输入字号
+	 * ≥16px（iOS 聚焦自动缩放防线——报告 5.1 触控口径）；桌面 ≥768 零变化锚。 */
+	input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+	select, textarea { min-height: var(--touch-min); font-size: 16px; }
+	summary { min-height: var(--touch-min); }
+	.skip-link { min-height: var(--touch-min); }
 }
 /* H5（批二）：打印样式——导航/操作/侧栏/反馈隐藏，正文全宽单色 */
 @media print {
@@ -1482,7 +1523,7 @@ input[type="file"]::file-selector-button:hover { background: var(--primary-soft)
 	#compose-toolbar .ql-picker-label { color: var(--fg); }
 	#compose-toolbar .ql-picker-options { background: var(--surface); border-color: var(--border); }
 	#compose-toolbar .ql-picker-item { color: var(--fg); }
-	#compose-toolbar .ql-picker-item:hover { color: var(--primary); }
+	@media (hover: hover) { #compose-toolbar .ql-picker-item:hover { color: var(--primary); } } /* A-9 门控 */
 	/* 组F：工具栏/编辑区容器 snow 主题自带 #ccc 边框暗色重置（U22 补丁遗漏面——
 	 * 特异性 #compose-toolbar 前缀压过 .ql-toolbar.ql-snow，且 compose 页 snow
 	 * 样式于 body 尾部后加载亦被此特异性覆盖）。 */
@@ -1532,7 +1573,7 @@ input[type="file"]::file-selector-button:hover { background: var(--primary-soft)
 	color: var(--fg);
 	transition: border-color var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast) var(--ease-standard);
 }
-.hub-card:hover { border-color: var(--primary); box-shadow: var(--shadow-menu); }
+@media (hover: hover) { .hub-card:hover { border-color: var(--primary); box-shadow: var(--shadow-menu); } } /* A-9 门控 */
 /* C1（β 批）：枢纽卡片图标 SVG 化尺寸（emoji 废止——currentColor 暗色联动）。 */
 .hub-ic { width: var(--icon-lg); height: var(--icon-lg); display: inline-flex; color: var(--fg-secondary); }
 .hub-ic svg { width: 100%; height: 100%; }
@@ -1555,7 +1596,7 @@ input[type="file"]::file-selector-button:hover { background: var(--primary-soft)
 	color: var(--fg-muted);
 }
 .settings-nav a { text-decoration: none; }
-.settings-nav a:hover { color: var(--primary); background: var(--surface); }
+@media (hover: hover) { .settings-nav a:hover { color: var(--primary); background: var(--surface); } } /* A-9 门控 */
 .settings-nav span.active { color: var(--primary); background: var(--surface); font-weight: 600; }
 
 /* B5/E2（γ批——G2 批准 2026-10-15 01:22 三组候选全 A）：settings 分区分组折叠承载。
@@ -1618,10 +1659,12 @@ input[type="file"]::file-selector-button:hover { background: var(--primary-soft)
 	background: var(--surface);
 	padding: var(--sp-1) var(--sp-2);
 }
-#compose-toolbar button:hover { color: var(--primary) !important; }
-#compose-toolbar button:hover .ql-stroke { stroke: var(--primary); }
+@media (hover: hover) { /* A-9 门控 */
+	#compose-toolbar button:hover { color: var(--primary) !important; }
+	#compose-toolbar button:hover .ql-stroke { stroke: var(--primary); }
+}
 #compose-toolbar .ql-picker-label { color: var(--fg-muted); }
-#compose-toolbar .ql-picker-label:hover { color: var(--primary); }
+@media (hover: hover) { #compose-toolbar .ql-picker-label:hover { color: var(--primary); } } /* A-9 门控 */
 #compose-toolbar .ql-picker-options {
 	background: var(--surface);
 	border-color: var(--border);

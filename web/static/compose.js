@@ -211,8 +211,25 @@
 	grmailAdaptShortcutTitles();
 	document.getElementById('csv-parse-btn').addEventListener('click', grmailCsvImport);
 	document.getElementById('fullscreen-btn').addEventListener('click', grmailComposeFullscreen);
+	// A-1（前端报告批 E-1-A——G2 批准 2026-10-16 10:51）：提交前记录被点按钮的
+	// action 值。HTML 规范表单 entry list 构造于 submit 事件之后——B10 禁用按钮
+	// 会使按钮 name=action 不入数据集（第三方报告 P0-3：点击发送空体 400）。
+	// 捕获阶段 click 委托记录（Ctrl+Enter 的 send.click() 同径触发）。
+	var grmailSubmitAction = '';
+	document.getElementById('compose-form').addEventListener('click', function (e) {
+		var b = e.target.closest && e.target.closest('button[type=submit][name=action]');
+		if (b) { grmailSubmitAction = b.value; }
+	}, true);
 	document.getElementById('compose-form').addEventListener('submit', function () {
 		grmailComposeSync();
+		// A-1（E-1-A）：动态追加隐藏域承载 action——禁用按钮前入 DOM，随表单
+		// 提交出值（降级态 JS 未加载：无监听无禁用，按钮值自然提交——双保险）；
+		// 缺省 save_draft 对齐 D2 批隐式提交语义（直接回车=存草稿兜底）。
+		var h = document.createElement('input');
+		h.type = 'hidden';
+		h.name = 'action';
+		h.value = grmailSubmitAction || 'save_draft';
+		this.appendChild(h);
 		// B10（批一）：提交期禁用全部提交按钮——双击重复入队/重复存草稿防线
 		// （303 导航离开前的窗口期；校验失败重渲染为新 DOM 自然恢复）。
 		var btns = this.querySelectorAll('button[type=submit]');
@@ -240,11 +257,21 @@
 		var limit = 36700160;
 		var total = 0;
 		for (var i = 0; i < this.files.length; i++) { total += this.files[i].size; }
+		// A-8（前端报告批）：自定义附件控件文件名回显（原生控件视觉隐藏——
+		// 已选状态经 #attach-names 呈现，role=status 播报；多选经 data-files-fmt
+		// 双语回显——沿 attach-err dataset 先例）。
+		var names = document.getElementById('attach-names');
+		if (names) {
+			names.textContent = this.files.length === 0 ? '' :
+				(this.files.length === 1 ? this.files[0].name :
+				(this.files.length + (document.getElementById('compose-page').dataset.filesFmt || ' files selected')));
+		}
 		if (total > limit) {
 			var pageEl = document.getElementById('compose-page');
 			var msg = pageEl && pageEl.dataset ? pageEl.dataset.attachErr : '';
 			if (window.grmailShowToast) { window.grmailShowToast(msg || 'Attachments exceed limit (35MiB)', 'err'); }
 			this.value = '';
+			if (names) { names.textContent = ''; }
 		}
 	});
 

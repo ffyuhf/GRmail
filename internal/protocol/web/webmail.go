@@ -130,7 +130,11 @@ func (s *Server) loadMailListData(c *gin.Context, view *mailboxView, p listParam
 	appendItems := func(items []*storage.ListItem, total int64) {
 		data.Total = total
 		for _, it := range items {
-			sentAt, sentAtFull := "", ""
+			// A-3（前端报告批 E-3-A——G2 批准 2026-10-16 10:51）：零值占位「—」——
+			// Date 头缺失/畸形邮件列表时间列空单元格收口（第三方报告 P0-2 呈现面；
+			// 对齐详情页 fmtDateTime 零值「—」既有形态——detail.templ F04 先例；
+			// sent_at 列语义保持：Date 头时间，缺失=NULL 落库链既有零触碰）。
+			sentAt, sentAtFull := "—", ""
 			if !it.SentAt.IsZero() {
 				local := it.SentAt.Local()
 				sentAt = local.Format("2006-01-02 15:04")

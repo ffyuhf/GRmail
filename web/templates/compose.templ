@@ -39,7 +39,7 @@ templ ComposeView(d *ComposeData) {
 		// B3/B4（α 批）：data-attach-err（附件前端预检文案——err.attachTooLarge 既有键）/
 		// data-rcpt-err（收件人失焦提示文案——compose.rcptHint 本批新键）双语注入
 		//（compose.js dataset 消费——沿 data-csv-err 先例）。
-		<main class="main" id="compose-page" data-img-max-edge={ fmt.Sprintf("%d", d.ImgMaxEdgeAttr()) } data-jpeg-quality={ fmt.Sprintf("%g", d.JpegQualityAttr()) } data-csv-err={ Tr(lang, "compose.csvErr") } data-attach-err={ Tr(lang, "err.attachTooLarge") } data-rcpt-err={ Tr(lang, "compose.rcptHint") }>
+		<main class="main" id="compose-page" data-img-max-edge={ fmt.Sprintf("%d", d.ImgMaxEdgeAttr()) } data-jpeg-quality={ fmt.Sprintf("%g", d.JpegQualityAttr()) } data-csv-err={ Tr(lang, "compose.csvErr") } data-attach-err={ Tr(lang, "err.attachTooLarge") } data-rcpt-err={ Tr(lang, "compose.rcptHint") } data-files-fmt={ Tr(lang, "compose.filesFmt") }>
 			<form method="post" action="/compose" enctype="multipart/form-data" id="compose-form">
 				<input type="hidden" name="csrf_token" value={ d.CSRF }/>
 				if d.DraftID > 0 {
@@ -52,7 +52,10 @@ templ ComposeView(d *ComposeData) {
 					<div class="section-label">{ Tr(lang, "compose.rcpt") }</div>
 					<div class="compose-rcpt-grid">
 						// D2（批二）：地址输入 email 语义（inputmode/autocapitalize/spellcheck）。
-						<label>{ Tr(lang, "compose.to") }<input type="text" name="to" id="f-to" value={ d.To } placeholder="user@example.com" inputmode="email" autocapitalize="none" spellcheck="false"/></label>
+						// A-8（前端报告批）：首字段可视标签 sr-only 化——分区标题 compose.rcpt
+						// 「收件人」已承载语义（第三方报告 P1-5 标签重复收口；占位符保持输入
+						// 提示；读屏控件名经 sr-only 保持——沿批五 C2 先例）。
+						<label><span class="sr-only">{ Tr(lang, "compose.to") }</span><input type="text" name="to" id="f-to" value={ d.To } placeholder="user@example.com" inputmode="email" autocapitalize="none" spellcheck="false"/></label>
 						<label>{ Tr(lang, "compose.cc") }<input type="text" name="cc" id="f-cc" value={ d.Cc } inputmode="email" autocapitalize="none" spellcheck="false"/></label>
 						<label>{ Tr(lang, "compose.bcc") }<input type="text" name="bcc" id="f-bcc" value={ d.Bcc } inputmode="email" autocapitalize="none" spellcheck="false"/></label>
 					</div>
@@ -164,8 +167,15 @@ templ ComposeView(d *ComposeData) {
 				</section>
 				<section class="compose-section">
 					<div class="section-label">{ Tr(lang, "compose.attach") }</div>
-					// C2（批五）：空 label 补 sr-only 文本（同主题行——读屏控件名直达）。
-					<label><span class="sr-only">{ Tr(lang, "compose.attach") }</span><input type="file" name="attachments" multiple="multiple"/></label>
+					// A-8（前端报告批）：附件原生英文控件收口——input 视觉隐藏+label 承载
+					// 双语「选择文件」文案+已选文件名回显（#attach-names——compose.js change
+					// 联动；第三方报告 P1-5）；input 保持可聚焦（键盘路径），label 包裹点击
+					// 触发原生选择器；读屏控件名经 aria-label 保持（批五 C2 语义延续）。
+					<label class="file-pick">
+						<input type="file" name="attachments" multiple="multiple" aria-label={ Tr(lang, "compose.attach") }/>
+						<span class="btn-text">{ Tr(lang, "compose.attachBrowse") }</span>
+						<span id="attach-names" class="hint" role="status"></span>
+					</label>
 				</section>
 				<div class="compose-actions">
 					// D2/E-3-A（批五——干系人指示 2026-10-13 08:42:57 逐字「D2 回车误发缓解

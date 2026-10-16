@@ -191,6 +191,8 @@ var messages = map[string][2]string{
 	"compose.subject":        {"主题", "Subject"},
 	"compose.body":           {"正文（富文本）", "Body (rich text)"},
 	"compose.attach":         {"附件（可多选）", "Attachments (multiple)"},
+	"compose.attachBrowse":   {"选择文件…", "Browse files…"},    // A-8 前端报告批：附件自定义控件文案
+	"compose.filesFmt":       {" 个文件已选", " files selected"}, // A-8：多选回显（数字前接——zh「3 个文件已选」/en「3 files selected」）
 	"compose.fullscreen":     {"全屏书写", "Fullscreen"},
 	"compose.exitFullscreen": {"退出全屏", "Exit fullscreen"},
 	// ── 写信页编辑器工具栏（U17——自定义 toolbar 容器按钮 title 双语——G3 语言跟随；
