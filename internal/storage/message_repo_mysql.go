@@ -68,15 +68,6 @@ func (r *MySQLMessageRepo) StoreInbound(ctx context.Context, txmeta *InboundMeta
 	if err = archiveToInboxMySQL(ctx, qtx, txmeta.Recipients, msgPK, now); err != nil {
 		return err
 	}
-	if txmeta.Notice != nil {
-		noticePK, nerr := insertMessageRowMySQL(ctx, qtx, txmeta.Notice.Message, now)
-		if nerr != nil {
-			return nerr
-		}
-		if nerr = archiveToInboxMySQL(ctx, qtx, []RecipientTarget{{MailboxID: txmeta.Notice.MailboxID}}, noticePK, now); nerr != nil {
-			return nerr
-		}
-	}
 	if err = tx.Commit(); err != nil {
 		return fmt.Errorf("提交收信事务: %w", err)
 	}

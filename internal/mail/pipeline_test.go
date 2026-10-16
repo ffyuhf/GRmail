@@ -222,30 +222,29 @@ func TestDeliverInjectsTraceHeaders(t *testing.T) {
 	}
 }
 
-// TestDeliverShadowNotice 影子建立+postmaster 通知同事务（FR-004 判定①/TC-004/Q4-A）。
+// TestDeliverShadowNotice 影子建立+聚合副本承载（SRS v1.2.0 FR-004 判定①/TC-004 v1.2.0——
+// 通知邮件链已删除（两项变更实施批 E-3-A，G2 批准 2026-10-17 03:37；覆盖 U25 批 Q5
+// 「通知保留」裁决——P-012 承载）；影子建立序列保持（newguy+postmaster 聚合承载）。
 func TestDeliverShadowNotice(t *testing.T) {
-	svc, blobs, accounts, store := newTestPipeline()
+	svc, _, accounts, store := newTestPipeline()
 
 	if err := svc.Deliver(context.Background(), testDelivery("newguy@test.example"), sampleRaw()); err != nil {
 		t.Fatalf("投递失败: %v", err)
 	}
-	// 影子邮箱建立（不存在→建）
+	// 影子邮箱建立（不存在→建）+聚合承载 postmaster 影子（U25 聚合副本）
 	if len(accounts.Created) != 2 || accounts.Created[0] != "newguy@test.example" || accounts.Created[1] != "postmaster@test.example" {
 		t.Fatalf("影子建立序列错（newguy+postmaster）: %v", accounts.Created)
 	}
-	// 通知邮件与来信同事务
 	meta := store.saved[0]
-	if meta.Notice == nil {
-		t.Fatal("影子通知邮件缺失（Q4-A）")
+	// TC-004 v1.2.0 判定①：零通知邮件（Notice 字段已删除——编译期锚）；聚合副本 target 在位
+	var aggCount int
+	for _, r := range meta.Recipients {
+		if r.Aggregate {
+			aggCount++
+		}
 	}
-	if !strings.Contains(meta.Notice.Message.Subject, "newguy@test.example") {
-		t.Fatalf("通知主题缺影子地址: %s", meta.Notice.Message.Subject)
-	}
-	if _, ok := blobs.data[meta.Notice.Message.BlobKey]; !ok {
-		t.Fatal("通知邮件 blob 未写入（数据模型 1.3 顺序对全部邮件一致）")
-	}
-	if meta.Notice.MailboxID != accounts.mailboxes["postmaster@test.example"].ID {
-		t.Fatalf("通知目标邮箱错: %d", meta.Notice.MailboxID)
+	if aggCount != 1 {
+		t.Fatalf("聚合副本目标应恰 1（TC-004 v1.2.0 判定①聚合可见承载）: %+v", meta.Recipients)
 	}
 }
 
@@ -276,9 +275,7 @@ func TestDeliverMultiRecipientSingleTransaction(t *testing.T) {
 	if len(accounts.Created) != 1 || accounts.Created[0] != "postmaster@test.example" {
 		t.Fatalf("应仅新建 postmaster 聚合承载影子: %v", accounts.Created)
 	}
-	if meta.Notice != nil {
-		t.Fatal("无新建影子不应有通知邮件")
-	}
+	// TC-004 v1.2.0 判定①：零通知邮件（Notice 字段已删除——编译期锚；无新建影子=零通知语义保持）
 }
 
 // TestDeliverRetryableOnBlobFailure Blob 失败→ErrRetryable（TC-021 判定①：451 语义锚点）。

@@ -91,6 +91,19 @@ templ SettingsView(data SettingsData) {
 				<label>{ Tr(lang, "settings.dkimAlgo") }
 					<input type="text" name="dkimAlgorithm" value={ data.DKIMAlgo } placeholder={ Tr(lang, "settings.dkimAlgoPh") }/>
 				</label>
+				// 两项变更实施批（SRS v1.2.0 FR-009 档位语义——TC-029 热生效格；G2 批准 2026-10-17 03:37）
+				<fieldset>
+					<legend>{ Tr(lang, "settings.spfPolicyLegend") }</legend>
+					<p class="hint">{ Tr(lang, "settings.spfPolicyHint") }</p>
+					<label><input type="radio" name="spfPolicy" value="soft" { checkedAttrs(data.SPFPolicy == "soft")... }/> { Tr(lang, "settings.policySoft") }</label>
+					<label><input type="radio" name="spfPolicy" value="hard" { checkedAttrs(data.SPFPolicy == "hard")... }/> { Tr(lang, "settings.policyHard") }</label>
+				</fieldset>
+				<fieldset>
+					<legend>{ Tr(lang, "settings.dkimPolicyLegend") }</legend>
+					<p class="hint">{ Tr(lang, "settings.dkimPolicyHint") }</p>
+					<label><input type="radio" name="dkimPolicy" value="soft" { checkedAttrs(data.DKIMPolicy == "soft")... }/> { Tr(lang, "settings.policySoft") }</label>
+					<label><input type="radio" name="dkimPolicy" value="hard" { checkedAttrs(data.DKIMPolicy == "hard")... }/> { Tr(lang, "settings.policyHard") }</label>
+				</fieldset>
 				<button class="primary" type="submit">{ Tr(lang, "common.save") }</button>
 			</form>
 		</details>

@@ -19,6 +19,14 @@
 //	  Deliver 步 5.5 聚合副本 target（影子目标存在→postmaster 聚合文件夹副本行——
 //	  FR-003 承载扩展）；resolveRecipients 增 shadowPresent 返回；ensureAggregateTarget
 //	  目标解析；窄接口增 EnsureAggregateFolder（S3-W Q1-B/Q2-B1/Q3 裁决）
+//	2026-10-17 03:44:00 | 删除 | 两项变更实施批（G2 批准 2026-10-17 03:37「E-1 A / E-2 B /
+//	  E-3 A」——E-3-A 整链删除；SRS v1.2.0 FR-004 判定①承载修改/REQ-20261017-002/
+//	  S5-REV-20261017-001；覆盖 U25 批 Q5「通知保留」裁决——问题列表 v1.6.0 P-012）：
+//	  影子建立通知邮件生成链整体移除——Deliver 步 6（buildShadowNotice）删除，
+//	  buildShadowNotice/renderShadowNotice 两函数删除，Deliver 步 7.5 全 discard 分支
+//	  notice 判定与步 8 observer notice 追加删除；管理员感知经聚合文件夹（U25 聚合
+//	  副本步 5.5 既有）承载——TC-004 v1.2.0 判定「postmaster 收件箱无『新影子邮箱』
+//	  通知行；聚合文件夹含该邮件副本行」锚
 //
 //	2026-09-17 03:40:00 | 新建 | U4 SMTP 收信（计划书步骤 8）
 package mail
@@ -35,6 +43,7 @@ import (
 	"time"
 
 	"GRmail/internal/auth"
+	"GRmail/internal/config"
 	"GRmail/internal/storage"
 )
 
@@ -113,6 +122,8 @@ type InboundPipelineService struct {
 	sieve       SieveRunner       // Sieve 执行器（v1.8.0/U12，nil=未注入；SetSieveRunner）
 	redirects   redirectStore     // redirect 回流出站（v1.8.0/U12，nil=redirect 动作忽略）
 	pluginHooks []InboundHook     // 收信插件链（v1.11.0/U15，nil/空=未注入；SetPluginHooks）
+	// ── 两项变更实施批增量（E-1-A setter 注入快照函数——G2 批准 2026-10-17 03:37）──
+	rejectionPolicy func() config.AuthStack // 档位快照（nil/未注入=不拒收=现状等价；main 装配注入 watcher.Current 闭包）
 }
 
 // SetObserver 可选注入落库观察者（构造签名零变更——契约 v1.3.0 增量扩展形态；
@@ -120,6 +131,13 @@ type InboundPipelineService struct {
 // 参数：observer 观察者（nil=清除注入）。
 func (s *InboundPipelineService) SetObserver(observer DeliverObserver) {
 	s.observer = observer
+}
+
+// SetRejectionPolicy 可选注入拒收档位快照函数（E-1-A——沿 SetObserver/SetSieveRunner/
+// SetSTSValidator 三先例：构造签名零变更；nil/未注入=不拒收=现状等价）。
+// 参数：fn 档位快照函数（每次 Deliver 调用时读取——热加载生效，TC-029 热生效格）。
+func (s *InboundPipelineService) SetRejectionPolicy(fn func() config.AuthStack) {
+	s.rejectionPolicy = fn
 }
 
 // NewInboundPipelineService 构造收信管道。
@@ -146,6 +164,13 @@ func (s *InboundPipelineService) Deliver(ctx context.Context, in *Delivery, raw 
 	res, err := s.verifier.Verify(ctx, &auth.IncomingMail{Envelope: in.Envelope, Raw: raw})
 	if err != nil {
 		return fmt.Errorf("验证器调用失败: %w", err) // 非 Retryable：SMTP 层按 451 兜底（不回 250）
+	}
+
+	// 1.6 拒收判定（两项变更实施批——SRS v1.2.0 FR-008 判定③/NFR-004/建模 v1.2.0
+	// 增量一：P6 认证验证引擎输出后、插件链前短路返回——拒收即 5xx 零 Blob 零落库；
+	// temperror/permerror 恒照收、空路径恒豁免、未启用项不判定、DMARC/ARC 不参与）
+	if rej := s.checkRejectionPolicy(ctx, in, res); rej != nil {
+		return rej
 	}
 
 	// 1.5 插件链（v1.11.0/U15：FR-005「认证验证→插件链→Sieve→落库」——四项验证后
@@ -180,7 +205,7 @@ func (s *InboundPipelineService) Deliver(ctx context.Context, in *Delivery, raw 
 
 	// 5. 收件人三态解析：active/shadow 直接归档；不存在建影子（1.5③：先行独立事务，
 	// 两步间崩溃由对端重试收敛——重试时地址已存在(shadow)直达归档）
-	targets, newShadows, shadowPresent, err := s.resolveRecipients(ctx, in.Recipients)
+	targets, _, shadowPresent, err := s.resolveRecipients(ctx, in.Recipients)
 	if err != nil {
 		return err
 	}
@@ -200,16 +225,7 @@ func (s *InboundPipelineService) Deliver(ctx context.Context, in *Delivery, raw 
 		targets = append(targets, *agg)
 	}
 
-	// 6. 影子通知邮件（Q4-A：本次投递触发了影子建立才生成；1.5④：通知直接归档
-	// postmaster 邮箱，不再递归判定——通知邮件是落库数据而非一次新的投递）
-	var notice *storage.NoticeMeta
-	if len(newShadows) > 0 {
-		if notice, err = s.buildShadowNotice(ctx, newShadows); err != nil {
-			return err
-		}
-	}
-
-	// 7. 元数据事务（后）：来信行+全部关联行+通知行同事务原子提交（1.5②/④）
+	// 7. 元数据事务（后）：来信行+全部关联行同事务原子提交（1.5②）
 	meta := &storage.InboundMeta{
 		Message: storage.MessageMeta{
 			MessageID:         parsed.MessageID,
@@ -228,22 +244,19 @@ func (s *InboundPipelineService) Deliver(ctx context.Context, in *Delivery, raw 
 			AuthResultsHeader: res.AuthResultsHeader,
 		},
 		Recipients: targets,
-		Notice:     notice,
 	}
 	// 7.5 Sieve 执行（v1.8.0/U12：FR-005「认证验证→插件链→Sieve→落库」定死位——
 	// 收件人解析后、落库事务前逐收件邮箱执行激活脚本；CON-004：任何 Sieve 异常
 	// 按 implicit keep 兜底不阻断落库；redirect 回流经 StoreSubmission 直达；
-	// 全部收件人被 discard 时仅落影子通知行（若有）——rfc5228 §4.4 静默语义）
+	// 全部收件人被 discard 时零落库（rfc5228 §4.4 静默语义；v1.2.0 起影子通知
+	// 邮件链已删除——SRS v1.2.0 FR-004/两项变更实施批 E-3-A）
 	if s.sieve != nil {
 		targets = s.applySieve(ctx, targets, meta, storedRaw, in)
 		meta.Recipients = targets
 	}
 	if len(targets) == 0 {
-		if notice == nil {
-			// 候选全跳过（Sieve 前原判定已拦截常规场景；此处防御性兜底）
-			return fmt.Errorf("无有效收件人（%d 个候选全被跳过或 discard）", len(in.Recipients))
-		}
-		meta.Recipients = nil // 全 discard+有影子通知：仅落通知行
+		// 候选全跳过（Sieve 前原判定已拦截常规场景；此处防御性兜底）
+		return fmt.Errorf("无有效收件人（%d 个候选全被跳过或 discard）", len(in.Recipients))
 	}
 	if err = s.messages.StoreInbound(ctx, meta); err != nil {
 		// Blob 已落但事务回滚=孤儿 Blob，由对账清理（数据模型 1.3 场景 2）；451 促重试
@@ -255,12 +268,9 @@ func (s *InboundPipelineService) Deliver(ctx context.Context, in *Delivery, raw 
 
 	// 8. 落库通知（v1.3.0，Q2-A：U6 IDLE 事件源；尽力语义——回调异常仅告警不回滚）
 	if s.observer != nil {
-		ids := make([]int64, 0, len(targets)+1)
+		ids := make([]int64, 0, len(targets))
 		for _, t := range targets {
 			ids = append(ids, t.MailboxID)
-		}
-		if notice != nil {
-			ids = append(ids, notice.MailboxID)
 		}
 		s.observer.OnDelivered(ids)
 	}
@@ -328,60 +338,6 @@ func (s *InboundPipelineService) ensureAggregateTarget(ctx context.Context) (*st
 	}, nil
 }
 
-// buildShadowNotice 生成影子建立通知邮件（Q4-A：目标 postmaster@主域）。
-// 通知邮件字节同样先写 Blob（数据模型 1.3 顺序对全部邮件一致），元数据与来信同事务。
-func (s *InboundPipelineService) buildShadowNotice(ctx context.Context, newShadows []string) (*storage.NoticeMeta, error) {
-	postmaster := "postmaster@" + s.domain
-	m, err := s.accounts.GetMailbox(ctx, postmaster)
-	if err != nil {
-		if !errors.Is(err, storage.ErrMailboxNotFound) {
-			return nil, fmt.Errorf("查询 postmaster 邮箱: %w", err)
-		}
-		// postmaster 未注册：同样建影子归档（首封信即其归档信；1.5④ 不递归通知）
-		if m, err = s.accounts.CreateShadowMailbox(ctx, postmaster); err != nil {
-			return nil, fmt.Errorf("建立 postmaster 影子邮箱: %w", err)
-		}
-	}
-
-	raw := s.renderShadowNotice(postmaster, newShadows)
-	key := sha256Hex(raw)
-	if err = s.blobs.Write(ctx, key, raw); err != nil {
-		return nil, fmt.Errorf("%w: 通知邮件 blob 写入: %v", ErrRetryable, err)
-	}
-	now := time.Now().UTC()
-	return &storage.NoticeMeta{
-		Message: storage.MessageMeta{
-			MessageID: generateMessageID(s.domain),
-			BlobKey:   key,
-			RawSize:   int64(len(raw)),
-			Subject:   fmt.Sprintf("[GRmail] 新影子邮箱：%s", strings.Join(newShadows, ", ")),
-			FromAddr:  "mailer-daemon@" + s.domain,
-			ToAddrs:   fmt.Sprintf(`["%s"]`, postmaster),
-			BodyCache: BodyCacheOf(raw), // U16 Q3-A：通知正文缓存（同一致性）
-			SentAt:    now,
-		},
-		MailboxID: m.ID,
-	}, nil
-}
-
-// renderShadowNotice 渲染通知邮件 RFC 5322 字节（CRLF 行尾；UTF-8 正文）。
-func (s *InboundPipelineService) renderShadowNotice(postmaster string, newShadows []string) []byte {
-	now := time.Now().UTC().Format(time.RFC1123Z)
-	var b strings.Builder
-	fmt.Fprintf(&b, "Message-ID: %s\r\n", generateMessageID(s.domain))
-	fmt.Fprintf(&b, "From: GRmail <mailer-daemon@%s>\r\n", s.domain)
-	fmt.Fprintf(&b, "To: postmaster <+%s>\r\n", postmaster)
-	fmt.Fprintf(&b, "Subject: [GRmail] 新影子邮箱：%s\r\n", strings.Join(newShadows, ", "))
-	fmt.Fprintf(&b, "Date: %s\r\n", now)
-	b.WriteString("Content-Type: text/plain; charset=utf-8\r\n\r\n")
-	fmt.Fprintf(&b, "以下未注册地址收到首封来信，已自动建立影子邮箱并归档：\r\n")
-	for _, addr := range newShadows {
-		fmt.Fprintf(&b, "  - %s\r\n", addr)
-	}
-	b.WriteString("登录 Webmail 管理后台（影子邮箱面板）可查看来信并为地址激活设置凭据。\r\n")
-	return []byte(b.String())
-}
-
 // ───────────────────────── 字节辅助 ─────────────────────────
 
 // prependHeaders 将多个完整头行（无 CRLF 结尾）自上而下前置到消息字节最前
@@ -443,4 +399,53 @@ func generateMessageID(domain string) string {
 		}
 	}
 	return fmt.Sprintf("<grmail-%s-%d@%s>", hex.EncodeToString(b[:]), time.Now().UnixNano(), domain)
+}
+
+// ───────────────────────── 拒收判定（两项变更实施批——SRS v1.2.0 FR-008 判定③） ─────────────────────────
+
+// RejectPolicyError 拒收判定命中哨兵（E-2-B——550 5.7.0 独立安全策略族；SMTP 层识别 case）。
+type RejectPolicyError struct {
+	Reason string // 拒收原因（对端可见文案——含档位与验证项）
+	Code   int    // SMTP 应答码（550）
+}
+
+// Error 实现 error 接口。
+func (e *RejectPolicyError) Error() string { return "mail: 拒收（" + e.Reason + "）" }
+
+// checkRejectionPolicy 拒收判定（纯判定逻辑——SRS v1.2.0 FR-008 判定③/术语表「拒收档位」；
+// G1 Q1 裁决 2026-10-17 03:25 permerror 恒照收〔仅 A-R 标注〕；建模 v1.2.0 增量一定位
+// ——P6 认证验证结论后、插件链前短路返回；空路径（<>）恒豁免〔澄清答复 02:05 退信豁免〕；
+// temperror 恒照收〔DNS 瞬时故障〕；未启用项不判定；DMARC/ARC 仅标注不参与）。
+// 参数：ctx 上下文（日志）；in 投递输入；res 验证结论四元组。返回：命中拒收哨兵（nil=放行）。
+func (s *InboundPipelineService) checkRejectionPolicy(ctx context.Context, in *Delivery, res *auth.VerifyResults) error {
+	if s.rejectionPolicy == nil {
+		return nil // 未注入=不拒收=现状等价（E-1-A 渐进部署锚）
+	}
+	if in.Envelope.MailFrom == "" {
+		return nil // 空路径豁免（防丢投递失败通知——REQ-20261017-001 澄清答复）
+	}
+	stack := s.rejectionPolicy()
+	// SPF 档位判定（已启用；fail 两档均拒，softfail 仅硬档拒，none/permerror/temperror 恒照收）
+	if stack.SPFEnabled {
+		switch res.SPF {
+		case "fail":
+			return &RejectPolicyError{Reason: fmt.Sprintf("SPF fail 拒收（档位=%s）", stack.SPFPolicy), Code: 550}
+		case "softfail":
+			if stack.SPFPolicy == "hard" {
+				return &RejectPolicyError{Reason: "SPF softfail 拒收（档位=硬）", Code: 550}
+			}
+		}
+	}
+	// DKIM 档位判定（已启用；fail 两档均拒，none 仅硬档拒，temperror 恒照收）
+	if stack.DKIMEnabled {
+		switch res.DKIM {
+		case "fail":
+			return &RejectPolicyError{Reason: fmt.Sprintf("DKIM 验证失败拒收（档位=%s）", stack.DKIMPolicy), Code: 550}
+		case "none":
+			if stack.DKIMPolicy == "hard" {
+				return &RejectPolicyError{Reason: "DKIM 无签名拒收（档位=硬）", Code: 550}
+			}
+		}
+	}
+	return nil
 }

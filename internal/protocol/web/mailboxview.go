@@ -1,8 +1,9 @@
 // GRmail Web 主体→邮箱视图解析（U9 计划书步骤 4）。
 // 口径（计划书 1.5，从文档原文唯一推导）：mailbox 会话主体 → subject_id 即 mailboxID；
 // admin 会话主体无邮箱实体（users/mailboxes 分离建模 REQ-001），其 Webmail 邮件视图
-// 映射 postmaster@主域 邮箱——U4 影子通知投递目标（NoticeMeta 注释）且管道先行确保
-// 存在，亦为 FR-003 管理员特殊文件夹聚合语义的载体。
+// 映射 postmaster@主域 邮箱——FR-003 管理员特殊文件夹聚合语义的载体（U25 聚合副本
+// 运行期确保存在；两项变更实施批 E-3-A：影子通知邮件链已删除——SRS v1.2.0 FR-004
+// 判定①承载修改）。
 // 主体显示名：mailbox 主体通用文案「我的邮箱」（MailboxRepo 无按 ID 反查地址方法——
 // 契约 2.1 签名固定，零增量推导）；admin 主体显示 postmaster 地址。
 // 修改历史：

@@ -71,6 +71,8 @@ func (s *Server) buildSettingsData(c *gin.Context, cfg *config.Config, msg strin
 		DKIMSelector:       cfg.Auth.DKIM.Selector,
 		DKIMKeyPath:        cfg.Auth.DKIM.KeyPath,
 		DKIMAlgo:           cfg.Auth.DKIM.Algorithm,
+		SPFPolicy:          cfg.Auth.SPFPolicy,
+		DKIMPolicy:         cfg.Auth.DKIMPolicy,
 		CatchAll:           cfg.CatchAll,
 		MaxMessageSizeMB:   cfg.Mail.MaxMessageSizeBytes / (1024 * 1024),
 		RetryBaseSeconds:   cfg.Mail.Delivery.RetryBaseSeconds,
@@ -152,10 +154,22 @@ func (s *Server) adminSettingsPOST(c *gin.Context) {
 }
 
 // settingsSaveAuth 认证栈节保存（B5：dkimAlgo 枚举校验——规则零增减；未列字段保留现值）。
+// 两项变更实施批增量（SRS v1.2.0 FR-009 档位语义）：SPF/DKIM 拒收档位 radio
+// （soft|hard 枚举校验——非法值拒绝重渲染；缺省 soft 沿 Load 兜底先例）。
 func (s *Server) settingsSaveAuth(c *gin.Context) {
 	dkimAlgo := strings.TrimSpace(c.PostForm("dkimAlgorithm"))
 	if dkimAlgo != "" && !dkimAlgorithms[dkimAlgo] {
 		s.settingsReject(c, templates.Tr(langOf(c), "settings.errAlgo"))
+		return
+	}
+	spfPolicy := strings.TrimSpace(c.PostForm("spfPolicy"))
+	if spfPolicy != "soft" && spfPolicy != "hard" {
+		s.settingsReject(c, templates.Tr(langOf(c), "settings.errPolicy"))
+		return
+	}
+	dkimPolicy := strings.TrimSpace(c.PostForm("dkimPolicy"))
+	if dkimPolicy != "soft" && dkimPolicy != "hard" {
+		s.settingsReject(c, templates.Tr(langOf(c), "settings.errPolicy"))
 		return
 	}
 	if err := s.cfg.SaveConfig(func(cfg *config.Config) {
@@ -168,6 +182,8 @@ func (s *Server) settingsSaveAuth(c *gin.Context) {
 			KeyPath:   strings.TrimSpace(c.PostForm("dkimKeyPath")),
 			Algorithm: dkimAlgo,
 		}
+		cfg.Auth.SPFPolicy = spfPolicy
+		cfg.Auth.DKIMPolicy = dkimPolicy
 	}); err != nil {
 		s.settingsSaveFailed(c, "认证栈节", err)
 		return

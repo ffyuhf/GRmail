@@ -313,7 +313,8 @@ func (s *Service) EnsureAggregateFolder(ctx context.Context, mailboxID int64) er
 }
 
 // EnsurePostmasterMailbox 确保 postmaster@主域 邮箱存在并具备聚合文件夹（U25 回填
-// 任务消费——不存在建影子归档沿管道 buildShadowNotice 先例；文件夹确保幂等双保险）。
+// 任务消费——不存在建影子归档（两项变更实施批 E-3-A：影子通知邮件链已删除，聚合
+// 副本为 FR-003 承载扩展的现存语义）；文件夹确保幂等双保险）。
 // 参数：ctx 上下文；domain 主域。返回：postmaster 邮箱。
 func (s *Service) EnsurePostmasterMailbox(ctx context.Context, domain string) (*storage.Mailbox, error) {
 	postmaster := "postmaster@" + domain

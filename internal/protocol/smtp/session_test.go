@@ -331,3 +331,42 @@ var (
 	_ mail.InboundPipeline = (*stubPipeline)(nil)
 	_ MailboxResolver      = stubResolver{}
 )
+
+// TestRejectPolicyError550 拒收判定命中应答（两项变更实施批 E-2-B——SRS v1.2.0
+// FR-008 判定③：550 5.7.0 独立安全策略族；对端可见拒收原因文案——手册 4.11
+// 「对端发信服务器可见拒收原因」承载；TC-029 拒收格=DATA 结束后 5xx 应答且不落库）。
+func TestRejectPolicyError550(t *testing.T) {
+	client, server := net.Pipe()
+	pipe := &stubPipeline{
+		failErr: &mail.RejectPolicyError{Reason: "SPF fail 拒收（档位=soft）", Code: 550},
+	}
+	resolver := stubResolver{mailboxes: map[string]storage.MailboxStatus{"a@t.io": storage.MailboxStatusActive}}
+	cfg := ServerConfig{
+		Domain:          "t.io",
+		MaxMessageSize:  func() int64 { return 36700160 },
+		CatchAllEnabled: func() bool { return true },
+	}
+	srv := NewServer(cfg, pipe, resolver)
+	go srv.serveConn(server)
+	t.Cleanup(func() { _ = client.Close() })
+	h := &testHarness{client: client, reader: bufio.NewReader(client), pipe: pipe, srv: srv, t: t}
+	h.expect("220") // 横幅
+
+	h.dialog("EHLO tester", "250")
+	h.dialog("MAIL FROM:<s@example.com>", "250")
+	h.dialog("RCPT TO:<a@t.io>", "250")
+	h.dialog("DATA", "354")
+	h.sendRaw("Subject: test\r\n\r\nbody\r\n.\r\n")
+	resp := h.expect("550")
+	// 550 5.7.0 增强码+原因文案（对端可见——手册 4.11 承载）
+	if !strings.Contains(resp, "5.7.0") {
+		t.Fatalf("应答应含 5.7.0 增强码: %q", resp)
+	}
+	if !strings.Contains(resp, "SPF fail 拒收") {
+		t.Fatalf("应答应含拒收原因文案: %q", resp)
+	}
+	// 零落库（stub pipeline 未调用 Deliver——拒收判定在管道前短路）
+	if len(pipe.got) != 0 {
+		t.Fatalf("拒收应零落库: %d", len(pipe.got))
+	}
+}

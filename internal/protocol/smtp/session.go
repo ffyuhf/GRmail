@@ -345,9 +345,15 @@ func (sess *session) cmdData(ctx context.Context) bool {
 	// U15：插件拒绝识别（对端可见——计划偏离裁决 A 2026-09-24 10:53:12；纯增量
 	// case：无 PluginRejectError 时完全走原路径，行为与 U14b 末态一致）
 	var pluginRej *mail.PluginRejectError
+	// 两项变更实施批（E-2-B）：拒收判定命中识别（SRS v1.2.0 FR-008 判定③——550 5.7.0
+	// 独立安全策略族；对端可见拒收原因文案——手册 4.11「对端发信服务器可见拒收原因」承载）
+	var policyRej *mail.RejectPolicyError
 	switch {
 	case deliverErr == nil:
 		sess.reply(ctx, 250, "2.0.0 OK：投递已受理")
+	case errors.As(deliverErr, &policyRej):
+		slog.InfoContext(ctx, "SPF/DKIM 档位拒收（对端可见）", "reason", policyRej.Reason)
+		sess.reply(ctx, policyRej.Code, "5.7.0 "+policyRej.Reason)
 	case errors.As(deliverErr, &pluginRej):
 		slog.InfoContext(ctx, "插件拒绝投递（对端可见）", "plugin", pluginRej.Plugin, "code", pluginRej.Code)
 		sess.reply(ctx, pluginRej.Code, pluginRej.Message)

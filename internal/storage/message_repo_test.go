@@ -81,7 +81,10 @@ func TestStoreInboundMultiRecipientAtomic(t *testing.T) {
 	}
 }
 
-// TestStoreInboundNoticeSameTx 通知邮件与来信同事务（Q4-A：全有或全无）。
+// TestStoreInboundNoticeSameTx 通知邮件与来信同事务（Q4-A：全有或全无）——
+// 通知邮件链已删除（两项变更实施批 E-3-A——SRS v1.2.0 FR-004 判定①承载修改；
+// NoticeMeta/InboundMeta.Notice 已删除，本用例改为验证聚合副本与来信同事务——
+// U25 聚合副本为 FR-003 承载扩展的现存语义，断言意图锚保持「同事务原子提交」）。
 func TestStoreInboundNoticeSameTx(t *testing.T) {
 	repo, mbRepo := newMessageRepo(t)
 	ctx := context.Background()
@@ -94,22 +97,19 @@ func TestStoreInboundNoticeSameTx(t *testing.T) {
 		t.Fatalf("建影子目标: %v", err)
 	}
 
-	noticeBlob := "2222222222222222222222222222222222222222222222222222222222222222"
 	if err := repo.StoreInbound(ctx, &InboundMeta{
 		Message:    sampleMeta("3333333333333333333333333333333333333333333333333333333333333333"),
-		Recipients: []RecipientTarget{{MailboxID: target.ID}},
-		Notice: &NoticeMeta{
-			Message:   MessageMeta{MessageID: "<n@t.io>", BlobKey: noticeBlob, RawSize: 10, Subject: "通知"},
-			MailboxID: pm.ID,
-		},
+		Recipients: []RecipientTarget{{MailboxID: target.ID}, {MailboxID: pm.ID, FolderName: "Unregistered", Aggregate: true}},
 	}); err != nil {
 		t.Fatalf("StoreInbound: %v", err)
 	}
 
-	var pmRows int
+	// 聚合副本与来信同事务——两 mailbox_messages 行（target 收件箱+pm 聚合文件夹）
+	var rows int
 	if err := repo.db.QueryRow(`SELECT COUNT(*) FROM mailbox_messages mm
-		JOIN messages m ON m.id = mm.message_id WHERE m.blob_key = ?`, noticeBlob).Scan(&pmRows); err != nil || pmRows != 1 {
-		t.Fatalf("通知邮件应归档 1 行: n=%d err=%v", pmRows, err)
+		JOIN messages m ON m.id = mm.message_id WHERE m.blob_key = ?`,
+		"3333333333333333333333333333333333333333333333333333333333333333").Scan(&rows); err != nil || rows != 2 {
+		t.Fatalf("来信+聚合副本应 2 行: n=%d err=%v", rows, err)
 	}
 }
 

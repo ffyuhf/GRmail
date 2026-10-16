@@ -87,19 +87,15 @@ type RecipientTarget struct {
 	Aggregate bool
 }
 
-// NoticeMeta 影子邮箱通知邮件（Q4-A 裁决 2026-09-17 03:06:39：与来信元数据同事务落库，
-// 目标 postmaster@主域——TC-004 判定①「管理员收到通知」的实体判定物）。
-type NoticeMeta struct {
-	Message   MessageMeta // 通知邮件的 messages 行
-	MailboxID int64       // postmaster 邮箱 ID（管道先行确保存在）
-}
-
 // InboundMeta 单次收信落库事务的完整输入（契约 2.1 StoreInbound 入参载体）：
-// 单条 messages 行+多条 mailbox_messages 行+可选通知邮件行，单事务原子提交。
+// 单条 messages 行+多条 mailbox_messages 行，单事务原子提交。
+// （两项变更实施批 E-3-A——G2 批准 2026-10-17 03:37；SRS v1.2.0 FR-004 判定①承载
+// 修改/REQ-20261017-002/S5-REV-20261017-001：影子建立通知邮件生成链整体移除，
+// NoticeMeta 类型与 Notice 字段删除——管理员感知经聚合文件夹承载〔U25 聚合副本〕，
+// 覆盖 U25 批 Q5「通知保留」裁决〔问题列表 v1.6.0 P-012〕）
 type InboundMeta struct {
 	Message    MessageMeta       // 来信元数据（全部收件人共享，流程设计第一章要点 4）
 	Recipients []RecipientTarget // 各收件人 mailbox_messages 行输入
-	Notice     *NoticeMeta       // 本次投递触发影子建立时的通知邮件（无则为 nil）
 }
 
 // ───────────────────────── 契约引用类型（U6/U9 扩展位） ─────────────────────────
@@ -348,17 +344,6 @@ func (r *SQLiteMessageRepo) StoreInbound(ctx context.Context, txmeta *InboundMet
 	// 2. 各收件人 mailbox_messages 行（收件箱 kind=inbox 固定；UID 事务内递增分配）
 	if err := archiveToInbox(ctx, qtx, txmeta.Recipients, msgPK, now); err != nil {
 		return err
-	}
-
-	// 3. 影子通知邮件行（Q4-A：与来信同事务；通知目标 postmaster 邮箱由管道先行确保）
-	if txmeta.Notice != nil {
-		noticePK, nerr := insertMessageRow(ctx, qtx, txmeta.Notice.Message, now)
-		if nerr != nil {
-			return nerr
-		}
-		if nerr = archiveToInbox(ctx, qtx, []RecipientTarget{{MailboxID: txmeta.Notice.MailboxID}}, noticePK, now); nerr != nil {
-			return nerr
-		}
 	}
 
 	if err = tx.Commit(); err != nil {

@@ -287,6 +287,10 @@ func TestU10AdminSettingsFullConfig(t *testing.T) {
 		"dkimSelector":  {"s2048"},
 		"dkimKeyPath":   {"data/dkim.pem"},
 		"dkimAlgorithm": {"ed25519-sha256"},
+		// 两项变更实施批适配（G2 批准 2026-10-17 03:37；SRS v1.2.0 FR-009 档位语义）：
+		// auth 节表单增 SPF/DKIM 拒收档位 radio（soft/hard——缺省 soft 沿 Load 兜底先例）
+		"spfPolicy":  {"soft"},
+		"dkimPolicy": {"soft"},
 	}
 	if resp := postForm(t, env.ts, "/admin/settings", authForm, cookie); resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("认证栈节保存应 303，得 %d", resp.StatusCode)

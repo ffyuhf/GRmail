@@ -526,7 +526,8 @@ func insertSystemFolders(ctx context.Context, q *dbgen.Queries, mailboxID int64,
 }
 
 // postmasterLocalPart 聚合承载邮箱的本地部分（U25——运行期聚合投递目标
-// postmaster@主域，与 buildShadowNotice 通知目标同载体）。
+// postmaster@主域；两项变更实施批 E-3-A：影子通知邮件链已删除，聚合副本为 FR-003
+// 承载扩展的现存语义）。
 const postmasterLocalPart = "postmaster"
 
 // insertAggregateFolder 写入聚合文件夹单行（U25：Create 事务内 / EnsureAggregateFolder

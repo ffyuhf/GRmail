@@ -47,6 +47,10 @@ type AuthStack struct {
 	DMARCEnabled bool     `json:"dmarcEnabled"` // DMARC 验证开关（rfc9989，自研包）
 	ARCEnabled   bool     `json:"arcEnabled"`   // ARC 验证/封装开关（rfc8617）
 	DKIM         DKIMConf `json:"dkim"`         // 出站 DKIM 签名键配置（Q1-A 裁决 2026-09-17 02:08:38）
+	// ── 两项变更实施批增量（G2 批准 2026-10-17 03:37「E-1 A / E-2 B / E-3 A」；
+	// SRS v1.2.0 FR-008 判定③/FR-009 档位语义/术语表「拒收档位」——S5-REV-20261017-001）──
+	SPFPolicy  string `json:"spfPolicy"`  // SPF 拒收档位："soft"（缺省——fail 拒收、softfail/none 照收）|"hard"（fail+softfail 拒收、none 照收）；非法值兜底 soft（Load）
+	DKIMPolicy string `json:"dkimPolicy"` // DKIM 拒收档位："soft"（缺省——有签名且验证失败拒收、无签名照收）|"hard"（无签名亦拒收）；非法值兜底 soft（Load）
 }
 
 // DKIMConf 出站 DKIM 签名配置（Q1-A：config.json 扩展 selector/私钥路径/算法；
@@ -195,9 +199,12 @@ func Default() *Config {
 	return &Config{
 		Server:   ServerConf{Domain: "localhost", HTTPPort: 443, SMTPPort: 25, SubmissionPort: 587, SubmissionTLSPort: 465, IMAPPort: 993, POP3Port: 995, ManageSievePort: 4190},
 		Database: DatabaseConf{Driver: "sqlite", DSN: "data/grmail.db"},
-		Auth:     AuthStack{SPFEnabled: true, DKIMEnabled: true, DMARCEnabled: true, ARCEnabled: true},
-		Log:      LogConf{Level: "info", SqlSlowMs: 500, LogFileMaxMB: 100, LogFileBackups: 5, LogRetainDays: 30}, // U21/U23 缺省档+L-E 保留窗缺省 30 天（旧 JSON 缺键零值=0 不清理——键存在性不区分，保守侧保留全部）
-		Blob:     BlobConf{Dir: "data/blobs"},
+		Auth: AuthStack{
+			SPFEnabled: true, DKIMEnabled: true, DMARCEnabled: true, ARCEnabled: true,
+			SPFPolicy: "soft", DKIMPolicy: "soft", // 两项变更实施批：档位缺省 soft（用户手册 v1.2.0 4.11「软（默认）」定档）
+		},
+		Log:  LogConf{Level: "info", SqlSlowMs: 500, LogFileMaxMB: 100, LogFileBackups: 5, LogRetainDays: 30}, // U21/U23 缺省档+L-E 保留窗缺省 30 天（旧 JSON 缺键零值=0 不清理——键存在性不区分，保守侧保留全部）
+		Blob: BlobConf{Dir: "data/blobs"},
 		Mail: MailConf{
 			MaxMessageSizeBytes: 36700160,                                                                                  // 35MiB（Q2-A 缺省档）
 			Delivery:            DeliveryConf{RetryBaseSeconds: 60, RetryFactor: 2, RetryCapSeconds: 3600, MaxAttempts: 8}, // Q5-C 缺省档（候选 A 值）
@@ -248,6 +255,13 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.MTASts.MaxAgeSeconds <= 0 || cfg.MTASts.MaxAgeSeconds > 31557600 {
 		cfg.MTASts.MaxAgeSeconds = 604800
+	}
+	// 两项变更实施批：档位键非法值兜底（沿 MTASts.Mode 先例——零值/非枚举=缺省档）
+	if cfg.Auth.SPFPolicy != "soft" && cfg.Auth.SPFPolicy != "hard" {
+		cfg.Auth.SPFPolicy = "soft"
+	}
+	if cfg.Auth.DKIMPolicy != "soft" && cfg.Auth.DKIMPolicy != "hard" {
+		cfg.Auth.DKIMPolicy = "soft"
 	}
 	return cfg, nil
 }

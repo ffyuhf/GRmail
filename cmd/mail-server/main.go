@@ -352,6 +352,10 @@ func main() {
 
 	// 7.2 收信管道（契约 v1.1.0 2.3：验证→trace 注入→CAS 双写→影子判定→通知→事务）
 	pipeline := mail.NewInboundPipelineService(verifier, accounts, blobStore, messageRepo, cfg.Server.Domain)
+	// 两项变更实施批（E-1-A setter 注入——G2 批准 2026-10-17 03:37；SRS v1.2.0 FR-008
+	// 判定③/FR-009 档位语义）：拒收档位快照函数——每次 Deliver 调用时读取 config 快照
+	// 热生效（TC-029 热生效格：档位切换后下一封来信行为即时变化，无重启）
+	pipeline.SetRejectionPolicy(func() config.AuthStack { return configWatcher.Current().Auth })
 
 	// 7.3 SMTP 服务端（Q3-B：明文 25 收信；SIZE/CatchAll 经快照热生效——U4 计划书 1.5⑪；
 	// U10 Q8-A：TLSConfig 快照注入——证书就绪时 EHLO 通告 STARTTLS、可选升级不强制本地投递，

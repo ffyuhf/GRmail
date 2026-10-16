@@ -8,14 +8,15 @@ package mail
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"GRmail/internal/storage"
 )
 
 // TestU25ShadowDeliverAppendsAggregateTarget 影子投递（新建+既有 postmaster）→聚合
-// target 追加（FolderName=Unregistered+Aggregate 置位+postmaster 邮箱承载）；通知保留。
+// target 追加（FolderName=Unregistered+Aggregate 置位+postmaster 邮箱承载）；
+// 通知邮件链已删除（两项变更实施批 E-3-A——SRS v1.2.0 FR-004 判定①承载修改；
+// 覆盖 U25 批 Q5「通知保留」裁决——P-012 承载）。
 func TestU25ShadowDeliverAppendsAggregateTarget(t *testing.T) {
 	svc, _, accounts, store := newTestPipeline()
 	accounts.mailboxes["postmaster@test.example"] = &storage.Mailbox{ID: 50, Address: "postmaster@test.example", Status: storage.MailboxStatusShadow}
@@ -37,9 +38,7 @@ func TestU25ShadowDeliverAppendsAggregateTarget(t *testing.T) {
 	if agg.FolderName != "Unregistered" || agg.Address != "postmaster@test.example" || agg.MailboxID != 50 {
 		t.Fatalf("聚合 target 形态错: %+v", agg)
 	}
-	if meta.Notice == nil || !strings.Contains(meta.Notice.Message.Subject, "newguy@test.example") {
-		t.Fatalf("影子通知应保留（Q5 裁决）: %+v", meta.Notice)
-	}
+	// TC-004 v1.2.0 判定①：零通知邮件（Notice 字段已删除——编译期锚）
 }
 
 // TestU25ExistingShadowNewMailAlsoAggregates 既有影子的新来信同样聚合（FR-003
@@ -68,9 +67,7 @@ func TestU25ExistingShadowNewMailAlsoAggregates(t *testing.T) {
 	if len(accounts.Created) != 1 || accounts.Created[0] != "postmaster@test.example" {
 		t.Fatalf("应仅新建 postmaster 影子: %v", accounts.Created)
 	}
-	if meta.Notice != nil {
-		t.Fatal("既有影子无新建——不应有通知邮件（Q4-A 语义保持）")
-	}
+	// TC-004 v1.2.0 判定①：零通知邮件（Notice 字段已删除——编译期锚；既有影子无新建=零通知语义保持）
 }
 
 // TestU25ActiveOnlyNoAggregate 纯 active 投递零聚合 target（非影子路径零变化）。

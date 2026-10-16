@@ -380,7 +380,15 @@ var messages = map[string][2]string{
 	"settings.stsHint":     {"策略端点：", "Policy endpoint:"},
 	"settings.stsSanHint":  {"（证书须含 mta-sts 主域前缀 SAN——ACME 模式自动扩展）", "(certificate must cover mta-sts subdomain SAN — auto-extended in ACME mode)"},
 	"settings.errAlgo":     {"DKIM 算法必须为 rsa-sha256 或 ed25519-sha256（留空=未配置）", "DKIM algorithm must be rsa-sha256 or ed25519-sha256 (blank = unset)"},
-	"settings.errSave":     {"保存失败（系统故障），请重试", "Save failed (system error), please retry"},
+	// ── 两项变更实施批增量（SRS v1.2.0 FR-009 档位语义——G2 批准 2026-10-17 03:37）──
+	"settings.spfPolicyLegend":  {"SPF 拒收档位", "SPF rejection policy"},
+	"settings.spfPolicyHint":    {"软=fail 拒收、softfail/none 照收；硬=fail/softfail 拒收、none 照收；temperror/空路径恒照收", "Soft: reject fail only; Hard: reject fail+softfail; none/temperror/null-path always accepted"},
+	"settings.dkimPolicyLegend": {"DKIM 拒收档位", "DKIM rejection policy"},
+	"settings.dkimPolicyHint":   {"软=有签名且验证失败拒收、无签名照收；硬=无签名亦拒收；temperror/空路径恒照收", "Soft: reject failed signatures only; Hard: reject unsigned too; temperror/null-path always accepted"},
+	"settings.policySoft":       {"软（默认）", "Soft (default)"},
+	"settings.policyHard":       {"硬", "Hard"},
+	"settings.errPolicy":        {"拒收档位必须为 soft 或 hard", "Rejection policy must be soft or hard"},
+	"settings.errSave":          {"保存失败（系统故障），请重试", "Save failed (system error), please retry"},
 	// F01 扩展：保存成功 notice+校验拒绝串 Tr 化（settingsReject 11 处——Webmail界面精修批次 2026-10-03）
 	"settings.saved":          {"已保存（热加载生效）", "Saved (hot-reload applied)"},
 	"settings.errMaxSize":     {"邮件大小上限必须为正整数（MiB）", "Max message size must be a positive integer (MiB)"},

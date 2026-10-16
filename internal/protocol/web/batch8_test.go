@@ -65,9 +65,12 @@ func TestBatch8B5SectionSubmit(t *testing.T) {
 	}
 
 	// ② auth 节保存——仅本节落库；未提交节保留现值（delivery 默认限值不动锚）
+	// 两项变更实施批适配（G2 批准 2026-10-17 03:37；SRS v1.2.0 FR-009 档位语义）：
+	// auth 节表单增 SPF/DKIM 拒收档位 radio（soft/hard——缺省 soft 沿 Load 兜底先例）
 	if resp := postForm(t, env.ts, "/admin/settings", url.Values{
 		"csrf_token": {"csrf-b8"}, "section": {"auth"},
 		"spfEnabled": {"on"}, "arcEnabled": {"on"},
+		"spfPolicy": {"soft"}, "dkimPolicy": {"soft"},
 	}, cookie); resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("auth 节保存应 303，得 %d", resp.StatusCode)
 	}

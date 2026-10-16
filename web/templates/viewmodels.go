@@ -185,6 +185,9 @@ type SettingsData struct {
 	DKIMSelector string
 	DKIMKeyPath  string
 	DKIMAlgo     string
+	// ── 两项变更实施批增量（G2 批准 2026-10-17 03:37；SRS v1.2.0 FR-009 档位语义）──
+	SPFPolicy  string // SPF 拒收档位："soft"|"hard"（缺省 soft——手册 4.11）
+	DKIMPolicy string // DKIM 拒收档位："soft"|"hard"（缺省 soft）
 	// catch-all 与邮件限值节
 	CatchAll         bool
 	MaxMessageSizeMB int64
