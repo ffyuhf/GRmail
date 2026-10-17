@@ -10,6 +10,9 @@
 // 修改历史：
 //
 //	2026-10-17 23:04:00 | 新建 | DMARC处置实施批（计划书步骤 4）
+//	2026-10-18 00-40-00 | 扩展 | DMARC收尾批（计划书步骤 4）：新增
+//	  TestDMARCQuarantineEmptyPathExempt——空路径×p=quarantine 恒豁免格（DMARC 批
+//	  G3 漏检格堵口；SRS v1.3.0 FR-008 判定③/REQ-20261017-006）
 package mail
 
 import (
@@ -226,6 +229,24 @@ func TestDMARCDispositionHotToggle(t *testing.T) {
 	}
 	if f := store.saved[1].Recipients[0].FolderName; f != "" {
 		t.Fatalf("关闭态应恢复收件箱默认（热生效）: %q", f)
+	}
+}
+
+// TestDMARCQuarantineEmptyPathExempt 空路径 × p=quarantine 恒豁免（DMARC收尾批——
+// SRS v1.3.0 FR-008 判定③/REQ-20261017-006：空路径（<>）来信既不拒收也不隔离，
+// 恒照常投递收件箱；DMARC 批 G3 漏检格堵口——步 1.7 修正前该场景被误改写落 Junk）。
+func TestDMARCQuarantineEmptyPathExempt(t *testing.T) {
+	svc, _, accounts, store := newTestPipeline()
+	accounts.mailboxes["bob@test.example"] = &storage.Mailbox{ID: 1, Address: "bob@test.example", Status: storage.MailboxStatusActive}
+
+	deliver := newDeliverWithDisposition(t, svc, "quarantine")
+	deliver.Envelope.MailFrom = "" // 空路径（<>）——退信场景（REQ-20261017-006 恒豁免）
+	if err := svc.Deliver(context.Background(), deliver, sampleRaw()); err != nil {
+		t.Fatalf("空路径来信应照常投递: %v", err)
+	}
+	meta := store.saved[0]
+	if len(meta.Recipients) != 1 || meta.Recipients[0].FolderName != "" {
+		t.Fatalf("空路径豁免隔离——应收件箱默认（FolderName 空）非 Junk: %+v", meta.Recipients)
 	}
 }
 

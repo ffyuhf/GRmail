@@ -1,5 +1,5 @@
 // mail 域收信管道类型：投递输入载体与契约接口。
-// 依据：模块接口契约 v1.1.0 2.3 节（Q1-A 裁决 2026-09-17 03:06:39：
+// 依据：模块接口契约 v1.55.0 2.3 节（Q1-A 裁决 2026-09-17 03:06:39：
 // Deliver 入参由 env *Envelope 变更为 in *Delivery——v1.0.0 的 Envelope 无收件人
 // 字段致投递判定无法进行；Delivery 嵌入 auth.Envelope 信封三元组+收件人列表，
 // 多收件人单事务语义由本结构承载）；
@@ -8,6 +8,8 @@
 // 修改历史：
 //
 //	2026-09-17 03:25:00 | 新建 | U4 SMTP 收信（计划书步骤 4，Q1-A 裁决落码）
+//	2026-10-18 00-40-00 | 修正 | DMARC收尾批：接口注释通知链残留清理
+//	  （E-3-A 删除后语义漂移）+契约版本引用刷新 v1.55.0（纯注释零行为）
 package mail
 
 import (
@@ -22,8 +24,8 @@ import (
 // InboundPipeline 收信管道（SMTP 服务端注入）。
 type InboundPipeline interface {
 	// Deliver 多收件人单事务投递：RCPT 三态判定（active→正常；shadow→影子归档；
-	// 不存在→建影子+通知，REQ-019/020）；一次 Blob 写入（CAS 去重）+ 单条 messages 行
-	// +多条 mailbox_messages 行 + 影子通知邮件行同事务（关键流程设计第一章要点 4）。
+	// 不存在→建影子+聚合副本，REQ-019/020）；一次 Blob 写入（CAS 去重）+ 单条 messages 行
+	// +多条 mailbox_messages 行 + 聚合副本行同事务（关键流程设计第一章要点 4）。
 	// 返回 SMTP 应答语义：落库失败→RetryableError（451），禁止虚假 250（CON-004）
 	Deliver(ctx context.Context, in *Delivery, raw []byte) error
 }

@@ -4,6 +4,9 @@
 // 修改历史：
 //
 //	2026-09-17 02:50:00 | 新建 | U3 auth 基础（计划书步骤 8）
+//	2026-10-18 00-40-00 | 扩展 | DMARC收尾批（计划书步骤 3）：
+//	  TestVerifyDMARCDisposition——verify 侧 DMARCDisposition 三态预计算单元锚
+//	  （DMARC 批 G3 遗留登记项兑现；E-1-A 承载形态直测）
 package auth
 
 import (
@@ -267,6 +270,58 @@ func TestNormalizedSystemNameserversEmptyEnv(t *testing.T) {
 	// 以行为解析路径覆盖；不可移植的路径覆盖不注入——读失败形态经代码路径审读锚定）
 	if got := normalizedSystemNameservers(); got != nil && len(got) == 0 {
 		t.Fatal("空列表应返回 nil 而非空切片（ravendns 零值兜底链保持）")
+	}
+}
+
+// TestVerifyDMARCDisposition verify 侧 DMARCDisposition 预计算单元锚（DMARC收尾批——
+// E-1-A 承载形态直测：DMARC 批 G3 遗留登记项兑现。六态：p=reject 且 fail→"reject"；
+// p=quarantine 且 fail→"quarantine"；p=none→""；无记录→""；结论 pass→""；结论
+// temperror→""。fail 场景构造：From=example.com＋非对齐 SPF 域（other.net 通过但
+// 组织域不同）→无对齐通过项；pass 场景：对齐 SPF 通过。disposition 不入 A-R 头。
+// SRS：FR-008 判定③（REQ-20261017-005/006）；NFR-015（stub DNS 离线驱动）。
+func TestVerifyDMARCDisposition(t *testing.T) {
+	alignedEnv := incoming("mail.example.com", net.ParseIP("192.0.2.1"), "user@example.com", sampleMessage("example.com"))
+	misalignedEnv := incoming("mail.other.net", net.ParseIP("192.0.2.1"), "user@other.net", sampleMessage("example.com"))
+
+	cases := []struct {
+		name      string
+		policy    string // _dmarc.example.com 记录值
+		noRecord  bool   // true=不登记 _dmarc 记录（无记录态）
+		temp      bool   // true=_dmarc 查询瞬时故障
+		env       *IncomingMail
+		wantDMARC string
+		wantDisp  string
+	}{
+		{"p=reject且fail→reject", "v=DMARC1; p=reject", false, false, misalignedEnv, "fail", "reject"},
+		{"p=quarantine且fail→quarantine", "v=DMARC1; p=quarantine", false, false, misalignedEnv, "fail", "quarantine"},
+		{"p=none且fail→不分派", "v=DMARC1; p=none", false, false, misalignedEnv, "fail", ""},
+		{"无记录→none不分派", "", true, false, misalignedEnv, "none", ""},
+		{"结论pass→不分派", "v=DMARC1; p=reject", false, false, alignedEnv, "pass", ""},
+		{"结论temperror→不分派", "v=DMARC1; p=reject", false, true, alignedEnv, "temperror", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resolver := newStubResolver().
+				withTXT("example.com", "v=spf1 ip4:192.0.2.0/24 -all").
+				withTXT("other.net", "v=spf1 ip4:192.0.2.0/24 -all")
+			if !tc.noRecord {
+				resolver = resolver.withTXT("_dmarc.example.com", tc.policy)
+			}
+			if tc.temp {
+				resolver = resolver.withTemp("_dmarc.example.com")
+			}
+			v := NewVerifierService(resolver, "mx.local", allOnStack())
+			res, err := v.Verify(context.Background(), tc.env)
+			if err != nil {
+				t.Fatalf("验证失败: %v", err)
+			}
+			if res.DMARC != tc.wantDMARC {
+				t.Fatalf("DMARC 结论不符: got=%s want=%s（A-R: %s）", res.DMARC, tc.wantDMARC, res.AuthResultsHeader)
+			}
+			if res.DMARCDisposition != tc.wantDisp {
+				t.Fatalf("DMARCDisposition 不符: got=%q want=%q", res.DMARCDisposition, tc.wantDisp)
+			}
+		})
 	}
 }
 

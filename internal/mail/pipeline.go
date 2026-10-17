@@ -1,6 +1,6 @@
-// mail 域收信管道：InboundPipeline 实现（验证→trace 注入→CAS 双写→影子判定→通知→事务落库）。
-// 依据：模块接口契约 v1.1.0 2.3 节（Deliver 签名逐字，Q1-A）；
-// 关键流程设计 v1.0.0 第一章（收信时序：DATA 后 Verify→Blob 先写→DB 事务→影子判定+通知）
+// mail 域收信管道：InboundPipeline 实现（验证→拒收判定→trace 注入→CAS 双写→影子判定→聚合副本→事务落库）。
+// 依据：模块接口契约 v1.55.0 2.3 节（Deliver 签名逐字，Q1-A）；
+// 关键流程设计 v1.0.0 第一章（收信时序：DATA 后 Verify→Blob 先写→DB 事务→影子判定+聚合副本）
 // ＋第二章（RCPT 三态：active 正常/shadow 归档/不存在建影子+通知）＋第四章（CAS 对账前提）；
 // 数据库表结构 v1.0.0 1.3 节（写入顺序固定：BlobStore.Write 先、元数据事务后；
 // Blob 失败或 DB 失败均不得回 250——451 促对端重试）；
@@ -15,6 +15,12 @@
 // ④postmaster 通知邮件与来信元数据同事务、通知投递不再递归判定。
 // 修改历史：
 //
+//	2026-10-18 00-40-00 | 修正 | DMARC收尾批（G2 批准 2026-10-18 00:32「批准：全A」；
+//	  G1 裁决 Q1-A——SRS v1.3.0 FR-008 判定③/REQ-20261017-006 空路径恒豁免）：步 1.7
+//	  quarantined 增加空路径前置条件（信封 MailFrom 非空）——空路径来信不再被隔离
+//	  落 Junk（DMARC 批 G3 漏检格收口）；非空路径行为零变化；checkRejectionPolicy
+//	  判定顺序字节级保持（Q2-B 登记偏差零改动）；头部与编排注释通知链残留清理+契约
+//	  版本引用刷新 v1.55.0（纯注释）
 //	2026-10-17 23:00:00 | 扩展 | DMARC处置实施批（G2 批准 2026-10-17 22:46「全A批准：
 //	  E-1 A / E-2 A / E-3 A / E-4 A / E-5 A」；SRS v1.3.0 FR-008 判定③ DMARC p 值
 //	  处置三终态/S5-REV-20261017-002）：①checkRejectionPolicy 增 DMARC p=reject
@@ -160,9 +166,9 @@ func NewInboundPipelineService(verifier auth.Verifier, accounts shadowAccounts,
 // 编译期断言：契约 v1.1.0 2.3 接口实现锁定。
 var _ InboundPipeline = (*InboundPipelineService)(nil)
 
-// Deliver 收信投递（契约 v1.1.0 2.3：多收件人单事务；落库失败 RetryableError→451）。
-// 编排（流程设计第一章）：Verify→A-R 前置注入→SHA-256→Blob 写（先）→缓存列解析→
-// 收件人三态解析（不存在者建影子，1.5③）→影子通知邮件生成（Q4-A）→StoreInbound（后）。
+// Deliver 收信投递（契约 v1.55.0 2.3：多收件人单事务；落库失败 RetryableError→451）。
+// 编排（流程设计第一章）：Verify→拒收判定→A-R 前置注入→SHA-256→Blob 写（先）→缓存列解析→
+// 收件人三态解析（不存在者建影子，1.5③）→聚合副本 target（U25）→StoreInbound（后）。
 // 参数：ctx 上下文（携带 LogID logger）；in 投递输入（Q1-A Delivery）；raw DATA 完成后的原始字节。
 // 返回：nil=可回 250；ErrRetryable=应回 451（CON-004）；其他错误=管道异常（同样不得回 250）。
 func (s *InboundPipelineService) Deliver(ctx context.Context, in *Delivery, raw []byte) error {
@@ -183,8 +189,11 @@ func (s *InboundPipelineService) Deliver(ctx context.Context, in *Delivery, raw 
 		return rej
 	}
 	// 1.7 DMARC 隔离分派标记（DMARC处置实施批 E-3-A——SRS v1.3.0 FR-008 判定③
-	// p=quarantine 且 fail：非拒收路径，落点改写于步 5.7 承载、Sieve 跳过于步 7.5 承载）
-	quarantined := res.DMARCDisposition == "quarantine"
+	// p=quarantine 且 fail：非拒收路径，落点改写于步 5.7 承载、Sieve 跳过于步 7.5 承载）。
+	// DMARC收尾批修正（G1 裁决 Q1-A——REQ-20261017-006 空路径恒豁免覆盖隔离终态）：
+	// 空路径（<>）来信恒不分派隔离——步 1.6 的 early return 仅豁免拒收，此处补齐隔离
+	// 豁免前置条件（DMARC 批 G3 漏检格收口；非空路径行为零变化）
+	quarantined := in.Envelope.MailFrom != "" && res.DMARCDisposition == "quarantine"
 
 	// 1.5 插件链（v1.11.0/U15：FR-005「认证验证→插件链→Sieve→落库」——四项验证后
 	// 立即执行；REJECT→PluginRejectError 对端可见（计划偏离裁决 A 2026-09-24 10:53:12）；

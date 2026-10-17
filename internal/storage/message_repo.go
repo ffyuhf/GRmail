@@ -1,10 +1,10 @@
 // Package storage 追加邮件元数据仓储：MessageRepo 接口族与 SQLite 实现（收信+访问路径）。
-// 依据：模块接口契约 v1.3.0 第 2.1 节（十一方法签名逐字复刻——v1.3.0 增 StoreAppend/
+// 依据：模块接口契约 v1.55.0 第 2.1 节（十一方法签名逐字复刻——v1.3.0 增 StoreAppend/
 // IMAPSearch 两方法与 FlagPatch.Deleted 字段，Q3-A 裁决 2026-09-18 00:06:55）；
 // 数据库表结构 v1.0.0 第 3.4/3.5 节（messages/mailbox_messages，U1 迁移已建）＋1.3 节
 // （双写顺序：Blob 先、DB 后；messages+mailbox_messages 同事务）；
 // 关键流程设计 v1.0.0 第一章要点 4（单邮件多收件人：一次 Blob 写入、多条 mailbox_messages 同事务）。
-// 覆盖条目：FR-005（收信落库）/FR-003/FR-004（影子归档+通知邮件行）/NFR-007（事务原子性锚点）/
+// 覆盖条目：FR-005（收信落库）/FR-003/FR-004（影子归档+聚合副本行）/NFR-007（事务原子性锚点）/
 // FR-006（IMAP 访问路径：PageList/GetDetail/SetFlags/Move/SoftDelete/HardDelete/StoreAppend/IMAPSearch）。
 // 实现范围（U6 计划书步骤 3 + U9 计划书步骤 3）：U6 补齐 IMAP 路径八实现（PageList/
 // GetDetail/SetFlags/Move/SoftDelete/HardDelete/StoreAppend/IMAPSearch）；U9 落地 Search
@@ -14,6 +14,8 @@
 // IMAPSearch 经 Bob 动态构建（架构选型 #8；实现见 imap_search.go，storage 零协议类型依赖）。
 // 修改历史：
 //
+//	2026-10-18 00-40-00 | 修正 | DMARC收尾批：头注与 StoreInbound 注释通知链残留
+//	  清理+契约版本引用刷新 v1.55.0（纯注释零行为——含 S4 复核新发现的第八处漂移点披露）
 //	2026-09-17 03:30:00 | 新建 | U4 SMTP 收信（计划书步骤 6，G2 批准 2026-09-17 03:12:40）
 //	2026-09-18 00:16:00 | 扩展 | U6 IMAP 集成（计划书步骤 3，G2 批准 2026-09-18 00:09:22）
 //	2026-09-19 10:10:00 | 扩展 | U9 Webmail 核心（计划书步骤 3，G2 批准 2026-09-19 10:00:41）：
@@ -322,7 +324,7 @@ func NewSQLiteMessageRepo(db *sql.DB) *SQLiteMessageRepo {
 }
 
 // StoreInbound 收信落库单事务：来信 messages 行→各收件人 mailbox_messages 行（UID 事务内
-// MAX+1 分配，SQLite 写事务串行保证 UNIQUE(mailbox_id,uid) 不冲突）→可选影子通知邮件行。
+// MAX+1 分配，SQLite 写事务串行保证 UNIQUE(mailbox_id,uid) 不冲突）。
 // 任一步失败整体回滚（零半截数据——CON-004 防丢信：调用方据此返回 451 促对端重试）。
 // 参数：ctx 上下文（携带 LogID logger）；txmeta 落库输入。返回：事务失败原因。
 func (r *SQLiteMessageRepo) StoreInbound(ctx context.Context, txmeta *InboundMeta) error {
