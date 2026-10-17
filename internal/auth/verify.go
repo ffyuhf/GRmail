@@ -9,6 +9,10 @@
 //
 //	2026-09-17 02:40:00 | 新建 | U3 auth 基础（计划书步骤 6）
 //	2026-10-08 13:10:00 | 修正 | 文档治理批 C1：头注契约版本引用刷新 v1.0.0→v1.37.0（注释漂移收口；纯注释零行为变更）
+//	2026-10-17 22:58:00 | 扩展 | DMARC处置实施批（G2 批准 2026-10-17 22:46「全A批准」；
+//	  SRS v1.3.0 FR-008 判定③ DMARC p 值处置＋E-1-A）：VerifyResults 增 DMARCDisposition
+//	  字段——Evaluate 返回的 Discovery p 值消费（结论 fail 且 p=reject|quarantine 预计算
+//	  分派结论；空=不分派）；A-R 头零变化（disposition 不入头——照收格零变化锚）
 package auth
 
 import (
@@ -40,6 +44,13 @@ type Verifier interface {
 type VerifyResults struct {
 	SPF, DKIM, DMARC, ARC string // none|pass|fail|softfail|temperror|permerror...
 	AuthResultsHeader     string // 序列化后的 Authentication-Results 头
+	// DMARCDisposition DMARC 处置分派结论（DMARC处置实施批 E-1-A——SRS v1.3.0 FR-008
+	// 判定③/REQ-20261017-005）：值域 "reject"|"quarantine"|""（空=不分派——结论非
+	// fail、p=none、无记录、未启用项四种情形恒空；none/temperror/permerror 恒照收
+	// 仅 A-R 标注——REQ-20261017-006）；预计算仅结论 fail 且发现记录 p=reject|
+	// quarantine 时置位；管道消费（拒收短路/隔离落 Junk 三终态分派）；零值=现状
+	// 等价（既有 stub/测试构造零影响）；不入 A-R 头（头内容零变化锚）
+	DMARCDisposition string
 }
 
 // ───────────────────────── 哨兵错误 ─────────────────────────
@@ -168,9 +179,19 @@ func (v *VerifierService) Verify(ctx context.Context, msg *IncomingMail) (*Verif
 			// B-S批 F6（裁决 B 2026-10-09 13:34——仅缓存无总预算）：Tree Walk 请求级
 			// 缓存——Verify 单次调用内构造 cachedTXT，Discover 与 OrganizationalDomain
 			// 共享同一实例，重复 _dmarc TXT 查询复用；跨调用零共享零污染
-			dmResult, _, _ := dmarc.Evaluate(ctx, &cachedTXT{inner: txtResolverAdapter{r: v.resolver}},
+			dmResult, disc, _ := dmarc.Evaluate(ctx, &cachedTXT{inner: txtResolverAdapter{r: v.resolver}},
 				fromDomain, dkimSigs, spfPass, spfDomain)
 			res.DMARC = string(dmResult)
+			// DMARC处置实施批（E-1-A——SRS v1.3.0 FR-008 判定③）：p 值分派结论预计算
+			// ——仅结论 fail 且发现记录 p=reject|quarantine 时置位（temperror 时
+			// disc 可非 nil 但结论非 fail 不置位；none/无记录 disc=nil；开关关闭整块
+			// 不达——零值恒不分派）
+			if dmResult == dmarc.ResultFail && disc != nil {
+				switch disc.Record.Policy {
+				case "reject", "quarantine":
+					res.DMARCDisposition = disc.Record.Policy
+				}
+			}
 		}
 	}
 

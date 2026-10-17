@@ -79,7 +79,9 @@ func TestRejectionPolicyMatrix(t *testing.T) {
 			res := &auth.VerifyResults{SPF: tc.spf, DKIM: tc.dkim, DMARC: "none", ARC: "none"}
 			in := testDelivery("x@test.example")
 			in.Envelope.MailFrom = tc.mailFrom
-			err := svc.checkRejectionPolicy(context.Background(), in, res)
+			// DMARC处置实施批适配：checkRejectionPolicy 增 raw 参数（私有签名机械适配——
+			// 断言语义零变化；矩阵用例 DMARCDisposition 零值=不分派，TC-029 格行为零影响）
+			err := svc.checkRejectionPolicy(context.Background(), in, res, sampleRaw())
 			if tc.wantReject {
 				if err == nil {
 					t.Fatalf("应拒收: %+v", tc)
@@ -129,13 +131,13 @@ func TestRejectionPolicyHotReload(t *testing.T) {
 	res := &auth.VerifyResults{SPF: "softfail", DKIM: "pass", DMARC: "none", ARC: "none"}
 	in := testDelivery("x@test.example")
 
-	// 软档：softfail 照收
-	if err := svc.checkRejectionPolicy(context.Background(), in, res); err != nil {
+	// 软档：softfail 照收（raw 参数为 DMARC处置实施批签名适配——机械传递）
+	if err := svc.checkRejectionPolicy(context.Background(), in, res, sampleRaw()); err != nil {
 		t.Fatalf("软档 softfail 应照收: %v", err)
 	}
 	// 切换硬档→立即生效（无重启）
 	policy = "hard"
-	err := svc.checkRejectionPolicy(context.Background(), in, res)
+	err := svc.checkRejectionPolicy(context.Background(), in, res, sampleRaw())
 	if err == nil {
 		t.Fatal("硬档 softfail 应拒收（热生效——切换后下一封行为变化）")
 	}
@@ -145,7 +147,7 @@ func TestRejectionPolicyHotReload(t *testing.T) {
 	}
 	// 切回软档→恢复照收
 	policy = "soft"
-	if err := svc.checkRejectionPolicy(context.Background(), in, res); err != nil {
+	if err := svc.checkRejectionPolicy(context.Background(), in, res, sampleRaw()); err != nil {
 		t.Fatalf("切回软档应恢复照收: %v", err)
 	}
 }

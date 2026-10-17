@@ -15,6 +15,14 @@
 // ④postmaster 通知邮件与来信元数据同事务、通知投递不再递归判定。
 // 修改历史：
 //
+//	2026-10-17 23:00:00 | 扩展 | DMARC处置实施批（G2 批准 2026-10-17 22:46「全A批准：
+//	  E-1 A / E-2 A / E-3 A / E-4 A / E-5 A」；SRS v1.3.0 FR-008 判定③ DMARC p 值
+//	  处置三终态/S5-REV-20261017-002）：①checkRejectionPolicy 增 DMARC p=reject
+//	  拒收分支（E-2-A 复用 RejectPolicyError——550 通用文案 session 既有 case 零改动；
+//	  启停经 dmarcEnabled→验证器 disposition 空值承载，独立于档位快照注入）②Deliver
+//	  增步 5.7 隔离落点改写（E-3-A——FolderName="Junk" 复用 archiveToInbox 既有解析链
+//	  零新查询）③隔离邮件跳过 Sieve（E-4-A——落点固定 Junk 沿 U25 聚合跳过先例）；
+//	  照收格 A-R 头与档位行为零变化锚保持
 //	2026-10-03 06:35:00 | 扩展 | U25影子邮箱聚合可达（G2 批准 2026-10-02 19:41:00）：
 //	  Deliver 步 5.5 聚合副本 target（影子目标存在→postmaster 聚合文件夹副本行——
 //	  FR-003 承载扩展）；resolveRecipients 增 shadowPresent 返回；ensureAggregateTarget
@@ -166,12 +174,17 @@ func (s *InboundPipelineService) Deliver(ctx context.Context, in *Delivery, raw 
 		return fmt.Errorf("验证器调用失败: %w", err) // 非 Retryable：SMTP 层按 451 兜底（不回 250）
 	}
 
-	// 1.6 拒收判定（两项变更实施批——SRS v1.2.0 FR-008 判定③/NFR-004/建模 v1.2.0
-	// 增量一：P6 认证验证引擎输出后、插件链前短路返回——拒收即 5xx 零 Blob 零落库；
-	// temperror/permerror 恒照收、空路径恒豁免、未启用项不判定、DMARC/ARC 不参与）
-	if rej := s.checkRejectionPolicy(ctx, in, res); rej != nil {
+	// 1.6 拒收判定（两项变更实施批——SRS v1.2.0 FR-008 判定③档位拒收/NFR-004/建模
+	// v1.2.0 增量一＋DMARC处置实施批 v1.3.0 FR-008 判定③ p=reject 拒收：P6 认证
+	// 验证引擎输出后、插件链前短路返回——拒收即 5xx 零 Blob 零落库；temperror/
+	// permerror 恒照收、空路径恒豁免、未启用项不判定；档位与 DMARC 拒收并行判定
+	// （档位命中优先短路）；ARC 仅标注不参与〔S1 Q3=A 维持〕）
+	if rej := s.checkRejectionPolicy(ctx, in, res, raw); rej != nil {
 		return rej
 	}
+	// 1.7 DMARC 隔离分派标记（DMARC处置实施批 E-3-A——SRS v1.3.0 FR-008 判定③
+	// p=quarantine 且 fail：非拒收路径，落点改写于步 5.7 承载、Sieve 跳过于步 7.5 承载）
+	quarantined := res.DMARCDisposition == "quarantine"
 
 	// 1.5 插件链（v1.11.0/U15：FR-005「认证验证→插件链→Sieve→落库」——四项验证后
 	// 立即执行；REJECT→PluginRejectError 对端可见（计划偏离裁决 A 2026-09-24 10:53:12）；
@@ -213,6 +226,17 @@ func (s *InboundPipelineService) Deliver(ctx context.Context, in *Delivery, raw 
 		return fmt.Errorf("无有效收件人（%d 个候选全被跳过）", len(in.Recipients))
 	}
 
+	// 5.7 DMARC 隔离投递落点改写（DMARC处置实施批 E-3-A——SRS v1.3.0 FR-008 判定③/
+	// FR-012 Junk 伴随：p=quarantine 且 fail 的来信全部收件人目标落 Junk 系统文件夹
+	// 而非收件箱——FolderName 复用 Sieve fileinto 既有解析链〔archiveToInbox
+	// GetFolderByName，零新查询零 storage 改动〕；聚合 target〔步 5.5 追加〕自带
+	// Unregistered 落点不受改写；邮件不丢弃可经 Junk 查看/恢复——用户手册 4.12）
+	if quarantined {
+		for i := range targets {
+			targets[i].FolderName = junkFolderName
+		}
+	}
+
 	// 5.5 U25 聚合副本 target（FR-003「转交管理员」承载扩展——存在影子目标即向
 	// postmaster 聚合文件夹追加副本行：同一 messages 主体+blob CAS 复用零字节重复；
 	// StoreInbound 同事务落库〔CON-004〕；Sieve 跳过由 Aggregate 标记承载——S3-W
@@ -250,7 +274,11 @@ func (s *InboundPipelineService) Deliver(ctx context.Context, in *Delivery, raw 
 	// 按 implicit keep 兜底不阻断落库；redirect 回流经 StoreSubmission 直达；
 	// 全部收件人被 discard 时零落库（rfc5228 §4.4 静默语义；v1.2.0 起影子通知
 	// 邮件链已删除——SRS v1.2.0 FR-004/两项变更实施批 E-3-A）
-	if s.sieve != nil {
+	// E-4-A（DMARC处置实施批——G2 批准 2026-10-17 22:46）：隔离邮件跳过 Sieve——
+	// quarantined 为全邮件级判定（全部收件目标均为隔离目标），整体跳过等价于逐目标
+	// 跳过；落点固定 Junk 不被收件人脚本 fileinto 重排（沿 U25 聚合跳过先例——
+	// TC-033 隔离格「落入 Junk 非收件箱」判定全场景稳定锚）
+	if s.sieve != nil && !quarantined {
 		targets = s.applySieve(ctx, targets, meta, storedRaw, in)
 		meta.Recipients = targets
 	}
@@ -314,6 +342,12 @@ func (s *InboundPipelineService) resolveRecipients(ctx context.Context, recipien
 // aggregateFolderName 聚合文件夹存储名（U25——与迁移 00010/InsertAggregateFolder
 // SQL 字面量一致；系统文件夹不可改名，名称即稳定键）。
 const aggregateFolderName = "Unregistered"
+
+// junkFolderName 垃圾邮件（Junk）系统文件夹存储名（DMARC处置实施批 E-3-A——
+// SRS v1.3.0 FR-008 判定③隔离投递落点；与 account systemFolderCanonicalNames 及
+// 迁移 InsertSystemFolders 行名 "Junk" 一致——系统文件夹不可改名，名称即稳定键；
+// folder_id 解析复用 archiveToInbox GetFolderByName 既有链）。
+const junkFolderName = "Junk"
 
 // ensureAggregateTarget 聚合副本目标解析（U25——postmaster 邮箱确保+聚合文件夹
 // 确保+目标构造）。postmaster 不存在时建影子归档（沿 buildShadowNotice 1.5④ 不递归
@@ -415,17 +449,34 @@ type RejectPolicyError struct {
 // Error 实现 error 接口。
 func (e *RejectPolicyError) Error() string { return "mail: 拒收（" + e.Reason + "）" }
 
-// checkRejectionPolicy 拒收判定（纯判定逻辑——SRS v1.2.0 FR-008 判定③/术语表「拒收档位」；
-// G1 Q1 裁决 2026-10-17 03:25 permerror 恒照收〔仅 A-R 标注〕；建模 v1.2.0 增量一定位
-// ——P6 认证验证结论后、插件链前短路返回；空路径（<>）恒豁免〔澄清答复 02:05 退信豁免〕；
-// temperror 恒照收〔DNS 瞬时故障〕；未启用项不判定；DMARC/ARC 仅标注不参与）。
-// 参数：ctx 上下文（日志）；in 投递输入；res 验证结论四元组。返回：命中拒收哨兵（nil=放行）。
-func (s *InboundPipelineService) checkRejectionPolicy(ctx context.Context, in *Delivery, res *auth.VerifyResults) error {
-	if s.rejectionPolicy == nil {
-		return nil // 未注入=不拒收=现状等价（E-1-A 渐进部署锚）
-	}
+// checkRejectionPolicy 拒收判定（纯判定逻辑——SRS v1.2.0 FR-008 判定③档位拒收/术语表
+// 「拒收档位」＋DMARC处置实施批 v1.3.0 FR-008 判定③ p=reject 拒收；G1 Q1 裁决
+// 2026-10-17 03:25 permerror 恒照收〔仅 A-R 标注〕；建模 v1.2.0 增量一定位——P6
+// 认证验证结论后、插件链前短路返回；空路径（<>）恒豁免〔澄清答复 02:05 退信豁免，
+// REQ-20261017-006 空路径恒豁免覆盖 DMARC〕；temperror 恒照收〔DNS 瞬时故障〕；
+// 未启用项不判定；ARC 仅标注不参与〔S1 Q3=A 维持〕）。
+// 参数：ctx 上下文（日志）；in 投递输入；res 验证结论四元组（含 DMARCDisposition
+// 分派结论——E-1-A 验证器预计算）；raw 原始消息字节（DMARC 拒收 Reason 提取 From 域）。
+// 返回：命中拒收哨兵（nil=放行）。
+func (s *InboundPipelineService) checkRejectionPolicy(ctx context.Context, in *Delivery, res *auth.VerifyResults, raw []byte) error {
 	if in.Envelope.MailFrom == "" {
-		return nil // 空路径豁免（防丢投递失败通知——REQ-20261017-001 澄清答复）
+		return nil // 空路径豁免（防丢投递失败通知——REQ-20261017-001 澄清答复；v1.3.0 起覆盖 DMARC 处置）
+	}
+	// DMARC p=reject 处置拒收（DMARC处置实施批 E-2-A——SRS v1.3.0 FR-008 判定③/
+	// REQ-20261017-005；启停经 dmarcEnabled 由验证器 disposition 空值承载——独立于
+	// 档位快照注入〔档位机制两项变更批先例，测试渐进态无需 SetRejectionPolicy〕；
+	// 复用 RejectPolicyError：session cmdData 既有 case 应答 550 5.7.0 通用文案
+	// 〔R-006/E-5-A 口径——p 值细节不向对端泄露〕；From 域二次提取入 Reason 仅供
+	// 服务端日志可观测〔手册 4.12 运维定位链〕）
+	if res.DMARCDisposition == "reject" {
+		fromDom := ""
+		if fd, ferr := auth.FromDomain(raw); ferr == nil {
+			fromDom = fd
+		}
+		return &RejectPolicyError{Reason: fmt.Sprintf("DMARC p=reject 且 fail 拒收（From 域=%s）", fromDom), Code: 550}
+	}
+	if s.rejectionPolicy == nil {
+		return nil // 未注入=档位不拒收=现状等价（E-1-A 渐进部署锚——DMARC 分派独立于档位注入）
 	}
 	stack := s.rejectionPolicy()
 	// SPF 档位判定（已启用；fail 两档均拒，softfail 仅硬档拒，none/permerror/temperror 恒照收）
