@@ -5,18 +5,27 @@
 // byte-stuffing CRLF.CRLF 终止）、§4（超时≥10min 到期不进 UPDATE 直接断连）、
 // §5（STAT drop listing "+OK nn mm"/LIST scan listing/RETR/DELE 标记/NOOP/RSET）、
 // §6（QUIT UPDATE：删除失败 -ERR some deleted messages not removed，绝不删未标记消息；
-// AUTHORIZATION 态 QUIT 不进 UPDATE）、§7（USER/PASS——Q2-A 裁决不实现）、
+// AUTHORIZATION 态 QUIT 不进 UPDATE）、§7（USER/PASS——复测核查修复批 E-4-A 实现
+// 〔G2 批准 2026-10-17 15:47，覆盖 U7 Q2-A「仅 AUTH PLAIN」裁决〕：rfc1939 §7 原文
+// L702-782——USER 恒 +OK 防枚举〔L724-726「may return a positive response even
+// though no such mailbox exists」〕；PASS 仅在成功 USER 后〔L754-756〕，参数可为含
+// 空格密码原文〔L764-766〕；明文连接 USER/PASS 一律 -ERR〔Q4-A/FR-007 锚保持〕）、
 // §8（TOP 头+空行+体前 n 行/UIDL 1-70 字符 0x21-0x7E 持久唯一）、§11（octet 计数=存储字节）；
 // rfc2449 §5（CAPA 双态可用；AUTHORIZATION 态能力必须双态通告）§6.6（PIPELINING 逐条处理）；
 // rfc5034 §4（AUTH mechanism [initial-response]/'+ ' challenge/'*' 取消/base64 失败 -ERR/
 // 成功后再 AUTH 必须 -ERR/仅 AUTHORIZATION 态/TLS+PLAIN 最低义务/明文会话禁明文密码机制）。
-// 用户裁决：Q1-A QUIT=HardDelete；Q2-A 仅 AUTH PLAIN；Q3-A UIDL=uid；Q4-A 非 *tls.Conn 拒 AUTH。
+// 用户裁决：Q1-A QUIT=HardDelete；Q3-A UIDL=uid；Q4-A 非 *tls.Conn 拒 AUTH；
+// Q2-A 仅 AUTH PLAIN——已被复测核查修复批 E-4-A 覆盖（G2 批准 2026-10-17 15:47
+// 「E-4 A」：TLS 态 USER/PASS 与 AUTH PLAIN 并列，SASL 通道零变化）。
 // 修改历史：
 //
 //	2026-09-19 04:09:01 | 新建 | U7 POP3 自研（计划书 v1.0.0 步骤 3，G2 批准）
 //	2026-09-27 06:20:00 | 扩展 | U21 可观测性增强：命令响应面协议 debug 条件输出
 //	（readLine/writeLine 两埋点+debugFrame 辅助——H5 等价）
 //	（来源：G2 批准 2026-09-27 06:13:36，U21 计划书 v1.0.0 步骤 4/1.5⑤）
+//	2026-10-17 16:12:00 | 扩展 | 复测核查修复批 T-005/E-4-A：AUTHORIZATION 态增
+//	USER/PASS 命令（rfc1939 §7——TLS 态；poplib/老旧客户端登录路径；G2 批准
+//	2026-10-17 15:47「E-4 A 必须读取规范原文进行」——rfc1939 §4/§7 原文回读履行）
 //	2026-10-08 18-30-00 | 修正 | B-FUNC功能缺陷修复批 F3（B-F7）：AUTH 零长
 //	initial-response "=" 归一——rfc5034 §4 L245-247「If the client needs to send
 //	a zero-length initial response, it MUST transmit the response as a single
@@ -76,6 +85,11 @@ type session struct {
 	mbox *storage.Mailbox // 认证后邮箱（nil=AUTHORIZATION 态）
 	msgs []pop3Msg        // maildrop 快照（message-number=index+1）
 
+	// userPending USER/PASS 认证路径的 USER 暂存名（T-005/E-4-A——rfc1939 §7：
+	// PASS 仅在成功 USER 后；空=未发起。失败/换名重发 USER 覆盖——L708-710
+	// 「after an unsuccessful USER or PASS command」重试语义）。
+	userPending string
+
 	// lockedMailbox 持有 maildrop 锁的邮箱 ID（0=未持锁）——F4/A-13④。
 	lockedMailbox int64
 }
@@ -133,17 +147,22 @@ func (ss *session) dispatchAuthorization(keyword, arg string) bool {
 		ss.cmdCAPA()
 	case "AUTH": // rfc5034 §4：仅 AUTHORIZATION 态
 		ss.cmdAuth(arg)
+	case "USER": // rfc1939 §7：T-005/E-4-A——USER/PASS 认证路径第一段
+		ss.cmdUser(arg)
+	case "PASS": // rfc1939 §7：T-005/E-4-A——仅在成功 USER 后
+		ss.cmdPass(arg)
 	case "QUIT": // rfc1939 §6：AUTHORIZATION 态 QUIT 不进 UPDATE
 		ss.writeLine("+OK POP3 server signing off")
 		return false
-	default: // rfc1939 §3：状态错误命令 -ERR（含 USER/PASS——Q2-A 不实现）
+	default: // rfc1939 §3：状态错误命令 -ERR
 		ss.writeLine("-ERR command not valid in AUTHORIZATION state")
 	}
 	return true
 }
 
 // cmdCAPA 能力通告（rfc2449 §5；AUTHORIZATION 态能力必须双态通告——TOP/UIDL/
-// PIPELINING/SASL/IMPLEMENTATION 均双态）。Q3-A 全量；Q2-A 无 USER tag、SASL 仅 PLAIN。
+// PIPELINING/SASL/USER/IMPLEMENTATION 均双态）。Q3-A 全量；SASL 仅 PLAIN；
+// USER tag 增补（T-005/E-4-A——覆盖 Q2-A「无 USER tag」口径：USER/PASS 可用通告）。
 // F-P5（RFCSHOULD修正批次）：补 EXPIRE NEVER——本服务消息无限期保留（POP3 删除仅经
 // 显式 DELE；IMAP 侧同存储），rfc2449 §6.7 L628-629「Sites which permit users to
 // retain messages indefinitely SHOULD announce this with the EXPIRE NEVER response」。
@@ -154,8 +173,80 @@ func (ss *session) cmdCAPA() {
 	ss.writeLine("PIPELINING")
 	ss.writeLine("EXPIRE NEVER") // F-P5：无限期保留策略通告（rfc2449 §6.7 L595-596/L628-629）
 	ss.writeLine("SASL PLAIN")
+	ss.writeLine("USER") // T-005/E-4-A：rfc2449 §6.8 USER 能力（USER/PASS 可用）
 	ss.writeLine("IMPLEMENTATION GRmail-POP3-U7")
 	ss.writeLine(".")
+}
+
+// cmdUser USER 命令（T-005/E-4-A——rfc1939 §7 L702-746：AUTHORIZATION 态认证第一段）。
+// 语义（L724-726 原文「The server may return a positive response even though no
+// such mailbox exists」——存在性零泄露防枚举锚）：登记待认证名恒 +OK；明文连接
+// 一律 -ERR（Q4-A/FR-007「明文连接上的认证请求一律拒绝」——USER 为认证请求组成段，
+// 与 AUTH 同口径拒绝）。参数：arg 邮箱名原文（空参 -ERR 语法错误）。
+func (ss *session) cmdUser(arg string) {
+	if _, isTLS := ss.conn.(*tls.Conn); !isTLS {
+		ss.writeLine("-ERR TLS required before authentication")
+		return
+	}
+	name := strings.TrimSpace(arg)
+	if name == "" {
+		ss.writeLine("-ERR user name required")
+		return
+	}
+	ss.userPending = name // 暂存（PASS 消费；失败重试覆盖——rfc1939 §7 重试语义）
+	ss.writeLine("+OK name is a valid mailbox")
+}
+
+// cmdPass PASS 命令（T-005/E-4-A——rfc1939 §7 L748-782：仅在成功 USER 后）。
+// 验证链与 cmdAuth 同源（SASLprep 身份准备+VerifyCredentials 防枚举统一拒绝+
+// maildrop 独占锁+快照载入——两条认证路径共用终态序列）；密码参数取原始剩余段
+// （L764-766「may treat spaces in the argument as part of the password」——含空格
+// 密码原文保留）。明文连接一律 -ERR（Q4-A 锚）。
+func (ss *session) cmdPass(arg string) {
+	if _, isTLS := ss.conn.(*tls.Conn); !isTLS {
+		ss.writeLine("-ERR TLS required before authentication")
+		return
+	}
+	if ss.userPending == "" {
+		ss.writeLine("-ERR USER command required first")
+		return
+	}
+	passwd := strings.TrimLeft(strings.TrimRight(arg, "\r\n"), " ") // 命令分隔首空格剥离；含空格密码原文保留（rfc1939 §7 L764-766）
+	// SASLprep 身份准备（与 cmdAuth F-P7 同源——rfc5034 §4 L287-289；USER/PASS
+	// 路径等价承载：准备失败按认证失败处理）
+	prep, perr := auth.SASLprep(ss.userPending)
+	if perr != nil {
+		ss.userPending = ""
+		ss.writeLine("-ERR authentication failed")
+		return
+	}
+	mbox, err := ss.server.accounts.VerifyCredentials(ss.ctx(), prep, passwd)
+	if err != nil {
+		ss.userPending = "" // 失败清暂存（rfc1939 §7：失败后须重新 USER——L708-710）
+		slog.Warn("POP3 USER/PASS 认证失败", "logid", ss.logID)
+		ss.writeLine("-ERR authentication failed") // 防枚举统一口径（U2——与 cmdAuth 同文本）
+		return
+	}
+	ss.mbox = mbox
+	// 以下与 cmdAuth 成功路径同序列（F4 maildrop 独占锁+快照载入）
+	if !ss.server.locks.tryLock(mbox.ID) {
+		ss.mbox = nil
+		ss.userPending = ""
+		ss.writeLine("-ERR unable to lock maildrop")
+		return
+	}
+	ss.lockedMailbox = mbox.ID
+	if err := ss.loadMaildrop(); err != nil {
+		ss.mbox = nil
+		ss.userPending = ""
+		ss.releaseMaildrop()
+		slog.Error("POP3 maildrop 载入失败", "logid", ss.logID, "error", err)
+		ss.writeLine("-ERR unable to open maildrop")
+		return
+	}
+	ss.userPending = "" // 认证完成清暂存
+	slog.Info("POP3 USER/PASS 认证成功", "logid", ss.logID, "mailbox", mbox.Address)
+	ss.writeLine("+OK maildrop locked and ready")
 }
 
 // cmdAuth AUTH 命令（rfc5034 §4 逐条）。

@@ -1,11 +1,16 @@
 // pop3 端到端单测（FR-007 判定锚点：下载/删除流程+明文连接拒绝认证；
 // TC-006 POP 格/TC-001 POP 入口/TC-024 POP 格离线半场）。
 // NFR-015：TCP loopback + 临时 SQLite 库 + 内存自签证书全离线（对齐 U5/U6 先例）。
-// 覆盖裁决：Q1-A QUIT=HardDelete（重登不可见锚定）/Q2-A 仅 AUTH PLAIN（CAPA 无 USER tag）/
-// Q3-A UIDL=uid+TOP 截断+PIPELINING/Q4-A 非 TLS 连接 AUTH 一律 -ERR。
+// 覆盖裁决：Q1-A QUIT=HardDelete（重登不可见锚定）/Q2-A 仅 AUTH PLAIN——已被
+// 复测核查修复批 E-4-A 覆盖（G2 批准 2026-10-17 15:47：TLS 态 USER/PASS 并列增补，
+// CAPA 通告 USER tag；AUTH PLAIN 通道零变化）/Q3-A UIDL=uid+TOP 截断+PIPELINING/
+// Q4-A 非 TLS 连接 AUTH/USER/PASS 一律 -ERR。
 // 修改历史：
 //
 //	2026-09-19 04:09:01 | 新建 | U7 POP3 自研（计划书 v1.0.0 步骤 5，G2 批准）
+//	2026-10-17 16:16:00 | 修正 | 复测核查修复批 T-005/E-4-A：CAPA 断言改向
+//	（USER tag 通告——Q2-A「无 USER tag」锚随覆盖废止；批准行为变化支撑的
+//	断言适配）+新增 USER/PASS e2e 用例（TLS 登录/明文拒绝/防枚举/失败重试）
 //	2026-09-29 12:20:00 | 修正 | RFC规范修正批次 G3 整改（审计项 10 补测试锚——计划书
 //	  v1.0.0 G2 批准 2026-09-28 22:16:57+G3 审计 4.3 整改要求+整改批准 2026-09-29 12:18:52）：
 //	  F-P1 收敛锚（POP3 size=CRLF 存储字节——rfc1939 §11）用例落本文件（import mail 构造收敛态）
@@ -235,7 +240,7 @@ func TestPOP3FullFlow(t *testing.T) {
 	env := newTestEnv(t)
 	c := dialPOP3(t, env.addr)
 
-	// CAPA：Q3-A 全量+Q2-A 无 USER tag（rfc5034 §3 SASL 能力+rfc2449 §6.1/6.8/6.6）
+	// CAPA：Q3-A 全量+USER tag 通告（T-005/E-4-A——Q2-A「无 USER tag」锚废止）
 	c.send("CAPA")
 	if head := c.readLine(); !strings.HasPrefix(head, "+OK") {
 		t.Fatalf("CAPA 应 +OK: %q", head)
@@ -250,8 +255,8 @@ func TestPOP3FullFlow(t *testing.T) {
 			t.Fatalf("CAPA 缺能力 %q: %v", want, caps)
 		}
 	}
-	if strings.Contains(joined, "USER") {
-		t.Fatalf("Q2-A：不应通告 USER 能力: %v", caps)
+	if !strings.Contains(joined, "USER") {
+		t.Fatalf("T-005/E-4-A：应通告 USER 能力: %v", caps)
 	}
 
 	// AUTHORIZATION 态命令状态错误（rfc1939 §3）
@@ -519,6 +524,58 @@ func TestPOP3AuthEqualsZeroLength(t *testing.T) {
 	got := c.cmd("AUTH PLAIN =")
 	if got != "-ERR invalid PLAIN credentials" {
 		t.Fatalf("零长 initial-response 应经 PLAIN 三段校验拒绝（F3）: %q", got)
+	}
+	_ = c.cmd("QUIT")
+}
+
+// TestPOP3UserPass T-005/E-4-A（复测核查修复批——rfc1939 §7：USER 恒 +OK 防枚举/
+// PASS 仅在成功 USER 后/明文连接一律 -ERR〔Q4-A 锚〕/失败后重新 USER；poplib 类
+// 客户端登录路径）。SRS：FR-007（判定标准「提供 rfc1939 命令集与 SASL 认证」——
+// USER/PASS 承载+「明文连接上的认证请求一律拒绝」锚保持）；TC-006 伴随。
+func TestPOP3UserPass(t *testing.T) {
+	env := newTestEnv(t)
+
+	// 明文连接：USER/PASS 一律 -ERR（Q4-A/FR-007 锚——与 AUTH 同口径）
+	pc := dialPOP3Plain(t, env.server)
+	if got := pc.cmd("USER u@t.io"); !strings.HasPrefix(got, "-ERR") {
+		t.Fatalf("明文 USER 应拒绝（Q4-A 锚保持）: %q", got)
+	}
+	if got := pc.cmd("PASS pw123456"); !strings.HasPrefix(got, "-ERR") {
+		t.Fatalf("明文 PASS 应拒绝（Q4-A 锚保持）: %q", got)
+	}
+	_ = pc.cmd("QUIT")
+
+	// TLS 态全流程（rfc1939 §7）
+	c := dialPOP3(t, env.addr)
+	// PASS 无先行 USER（L754-756 Restrictions）
+	if got := c.cmd("PASS pw123456"); !strings.HasPrefix(got, "-ERR") {
+		t.Fatalf("无先行 USER 的 PASS 应 -ERR: %q", got)
+	}
+	// USER 空参
+	if got := c.cmd("USER"); !strings.HasPrefix(got, "-ERR") {
+		t.Fatalf("USER 空参应 -ERR: %q", got)
+	}
+	// USER 不存在名恒 +OK（L724-726 防枚举——存在性零泄露）
+	if got := c.cmd("USER nobody@t.io"); !strings.HasPrefix(got, "+OK") {
+		t.Fatalf("USER 不存在名应 +OK（防枚举）: %q", got)
+	}
+	// 失败密码（防枚举统一 -ERR authentication failed——与 cmdAuth 同文本）
+	if got := c.cmd("PASS wrongpass"); got != "-ERR authentication failed" {
+		t.Fatalf("错误密码应统一拒绝文本: %q", got)
+	}
+	// 失败后须重新 USER（L708-710 重试语义——暂存已清）
+	if got := c.cmd("PASS pw123456"); !strings.HasPrefix(got, "-ERR") {
+		t.Fatalf("失败后未重新 USER 的 PASS 应 -ERR: %q", got)
+	}
+	// 正确序列（USER+PASS 登录成功进 TRANSACTION）
+	if got := c.cmd("USER u@t.io"); !strings.HasPrefix(got, "+OK") {
+		t.Fatalf("USER 应 +OK: %q", got)
+	}
+	if got := c.cmd("PASS pw123456"); !strings.HasPrefix(got, "+OK") {
+		t.Fatalf("PASS 正确密码应 +OK（E-4-A 登录路径）: %q", got)
+	}
+	if got := c.cmd("STAT"); !strings.HasPrefix(got, "+OK 2 ") {
+		t.Fatalf("登录后 STAT 应两封: %q", got)
 	}
 	_ = c.cmd("QUIT")
 }

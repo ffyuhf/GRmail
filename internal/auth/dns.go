@@ -6,11 +6,23 @@
 // 修改历史：
 //
 //	2026-09-17 02:22:00 | 新建 | U3 auth 基础（计划书步骤 3，G2 批准 2026-09-17 02:13:45）
+//	2026-10-17 16:08:00 | 修正 | 复测核查修复批 T-003/E-1-A：NewResolver 增
+//	nameserver 显式规范化注入——raven v1.6.1 getSystemNameservers（dns/resolver.go
+//	L72-75）对 IPv6 递归地址不加端口不加方括号（仅对不含 ":" 者拼 :53），IPv6-only
+//	或 IPv6 前置环境产生非法拨号串（"fdae::1" 形态——miekg ExchangeContext too
+//	many colons）→TXT 查询全败→DKIM/DMARC per-signature 恒 temperror→拒收臂
+//	（soft 档 fail 分支）永不触发（第三方报告 T-003 三构造 250 照收根因）。
+//	生产缺陷修复批 B（daneServerAddr JoinHostPort——同实例 resolv.conf IPv6
+//	nameserver fdae:6a60:38ca::1 实证）的 transport 侧修复收口至 auth 装配侧：
+//	显式读系统 nameserver 列表经 net.JoinHostPort 规范化后注入 raven，绕开
+//	vendor 内部缺陷（G2 批准 2026-10-17 15:47「E-1 A」；探针实测：合法 base64
+//	伪造 b= 经正常 resolver 返回 DKIM=fail——verify/aggregate/拒收链自身正确）
 package auth
 
 import (
 	"context"
 	"net"
+	"os"
 	"strings"
 
 	ravendns "github.com/synqronlabs/raven/dns"
@@ -33,10 +45,48 @@ type Resolver interface {
 	LookupAddr(ctx context.Context, ip net.IP) (ravendns.Result[string], error)
 }
 
-// NewResolver 生产 DNS 解析器（ravendns 实现，内部 miekg/dns；系统 resolv.conf 名单，
-// 超时/重试取库默认档 5s/2 次）。返回：Resolver 接口实例。
+// NewResolver 生产 DNS 解析器（ravendns 实现，内部 miekg/dns）。
+// T-003 修复形态：nameserver 列表显式规范化注入（normalizedSystemNameservers——
+// IPv6 裸地址经 net.JoinHostPort 产出 "[v6]:53" 合法拨号串），不再透传零值配置
+// 交由 raven 内部读取（其 getSystemNameservers 对 IPv6 地址的拨号串缺陷致查询
+// 全败→DKIM/DMARC 恒 temperror）；超时/重试取库默认档 5s/2 次。
+// 返回：Resolver 接口实例。
 func NewResolver() Resolver {
-	return ravendns.NewResolver(ravendns.ResolverConfig{})
+	return ravendns.NewResolver(ravendns.ResolverConfig{Nameservers: normalizedSystemNameservers()})
+}
+
+// resolvConfPath 系统 resolver 配置路径（与 raven/miekg ClientConfigFromFile 同源）。
+const resolvConfPath = "/etc/resolv.conf"
+
+// defaultDNSPort resolv.conf 无 port 指令时的默认端口（raven getSystemNameservers
+// 与 miekg 同口径硬编码 53）。
+const defaultDNSPort = "53"
+
+// normalizedSystemNameservers 读取系统 nameserver 列表并逐个规范化为合法拨号串。
+// 规范化语义（沿生产缺陷修复批 daneServerAddr 先例——rfc3986 §3.2.2 host:port
+// 字面量）：IPv4/主机名→"host:53"；IPv6 裸地址→"[v6]:53"（net.JoinHostPort 承载）；
+// 已带端口形态原样保留（resolv.conf 标准语法无端口位——防御性透传）。
+// 解析失败/空列表返回 nil（ravendns 零值 Nameservers 兜底链——保持库默认行为）。
+func normalizedSystemNameservers() []string {
+	data, err := os.ReadFile(resolvConfPath)
+	if err != nil {
+		return nil
+	}
+	var servers []string
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 || fields[0] != "nameserver" {
+			continue
+		}
+		servers = append(servers, joinHostPort(fields[1], defaultDNSPort))
+	}
+	return servers
+}
+
+// joinHostPort 拨号串规范化（net.JoinHostPort 薄封装——独立函数承载供单测锚定：
+// IPv6 裸地址/IPv4/已含端口三形态）。
+func joinHostPort(host, port string) string {
+	return net.JoinHostPort(host, port)
 }
 
 // 编译期断言：生产实现满足本包 Resolver 接口（dkim/arc 消费口径）

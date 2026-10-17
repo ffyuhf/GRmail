@@ -333,8 +333,10 @@ var (
 )
 
 // TestRejectPolicyError550 拒收判定命中应答（两项变更实施批 E-2-B——SRS v1.2.0
-// FR-008 判定③：550 5.7.0 独立安全策略族；对端可见拒收原因文案——手册 4.11
-// 「对端发信服务器可见拒收原因」承载；TC-029 拒收格=DATA 结束后 5xx 应答且不落库）。
+// FR-008 判定③：550 5.7.0 独立安全策略族；TC-029 拒收格=DATA 结束后 5xx 应答且不落库）。
+// 复测核查修复批 R-006/E-5-A（G2 批准 2026-10-17 15:47，覆盖 E-2-B「文案载明
+// 具体原因」形态）：对外应答收口为通用文案（档位细节仅入服务端日志——R-006
+// 档位探测面收口）；断言锚随批准行为变化适配（意图锚「拒收应答可识别」保持）。
 func TestRejectPolicyError550(t *testing.T) {
 	client, server := net.Pipe()
 	pipe := &stubPipeline{
@@ -358,12 +360,16 @@ func TestRejectPolicyError550(t *testing.T) {
 	h.dialog("DATA", "354")
 	h.sendRaw("Subject: test\r\n\r\nbody\r\n.\r\n")
 	resp := h.expect("550")
-	// 550 5.7.0 增强码+原因文案（对端可见——手册 4.11 承载）
+	// 550 5.7.0 增强码+通用文案（R-006/E-5-A：档位细节不对外——原「SPF fail 拒收」
+	// 文案断言随 E-2-B 形态覆盖废止）
 	if !strings.Contains(resp, "5.7.0") {
 		t.Fatalf("应答应含 5.7.0 增强码: %q", resp)
 	}
-	if !strings.Contains(resp, "SPF fail 拒收") {
-		t.Fatalf("应答应含拒收原因文案: %q", resp)
+	if !strings.Contains(resp, "message rejected by local policy") {
+		t.Fatalf("应答应含通用拒收文案（E-5-A）: %q", resp)
+	}
+	if strings.Contains(resp, "档位") {
+		t.Fatalf("对外应答不应泄露档位细节（R-006）: %q", resp)
 	}
 	// 零落库（stub pipeline 未调用 Deliver——拒收判定在管道前短路）
 	if len(pipe.got) != 0 {

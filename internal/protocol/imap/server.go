@@ -3,7 +3,14 @@
 // 推荐 Implicit TLS 优先；无明文端口即无 STARTTLS/LOGINDISABLED 义务链，rfc9051 §5）、
 // v2 Session 体系映射 account/storage（契约 v1.37.0 2.4——U6 以来历版注记承载）、
 // IDLE 事件驱动推送（Q2-A 2026-09-18 00:01:30，rfc2177 §3）。
-// 能力集：IMAP4rev2/IDLE/LITERAL+(rfc7888)/UTF8=ACCEPT(rfc6855)/MOVE(rfc6851)/NAMESPACE；
+// 能力集：IMAP4rev2/IMAP4rev1（复测核查修复批 E-3-A——G2 批准 2026-10-17 15:47；
+// rfc9051 附录 A L7863-7864「can advertise both IMAP4rev1 and IMAP4rev2」+L6433-6434
+// 「Servers that offer RFC 3501 compatibility MUST list "IMAP4rev1"」——Python stdlib
+// imaplib（AllowedVersions 无 rev2）类客户端连接可达；rev1 会话兼容行为〔obsolete
+// RECENT/认证后能力集/ENABLE 语义〕由 go-imap v2 库层自动承载〔imapserver/capability.go
+// :42-64/select.go:44——beta.8 源码亲读〕；rev2 客户端零影响——未 ENABLE IMAP4rev2 的
+// rev1 会话按 rfc3501 应答，已 ENABLE 者按 rfc9051）/IDLE/LITERAL+(rfc7888)/
+// UTF8=ACCEPT(rfc6855)/MOVE(rfc6851)/NAMESPACE；
 // CONDSTORE(rfc7162)/QUOTA(rfc9208) 非 FR-006 判定必需不实现（计划书 1.2 不改清单，阶段二）。
 // FLAGS 五系统标志映射（契约 v1.16.0 2.4 终态——Q2-A 2026-09-29 五标志 RFC 化，v1.3.0 三标志口径废止）：\Seen↔is_read、\Flagged↔is_flagged、
 // \Deleted↔status=deleted、\Answered↔is_answered、\Draft↔is_draft（五标志全部持久化）。
@@ -18,6 +25,9 @@
 //	go-imap v2 imapserver.Options 原生 DebugWriter io.Writer 字段——go doc 实录）
 //	2026-10-08 13:10:00 | 修正 | 文档治理批 C1：头注契约版本引用刷新 v1.3.0→v1.37.0+FLAGS
 //	口径按 v1.16.0 五标志终态改写（原三标志口径已废止——裁决索引覆盖链 2；纯注释零行为变更）
+//	2026-10-17 15:55:00 | 扩展 | 复测核查修复批 T-006/E-3-A：Caps 增列 CapIMAP4rev1
+//	（第三方报告 T-006——imaplib 类客户端「server not IMAP4 compliant」拒绝收口；
+//	G2 批准 2026-10-17 15:47「E-3 A」）
 package imap
 
 import (
@@ -135,10 +145,13 @@ func NewServer(cfg ServerConfig, accounts *account.Service, messages storage.Mes
 		// 生效；false 时丢弃返回——零输出零行为变化）。注：raw 帧含凭据等敏感信息，
 		// 仅排障时开启（go-imap v2 Options 字段原文警示）。
 		DebugWriter: &debugWriter{enabled: cfg.ProtocolDebug},
-		// 能力集：IMAP4rev2 为基线（必需其一）；IDLE/MOVE/UTF8=ACCEPT/LITERAL+ 为
-		// FR-006 判定扩展；NAMESPACE 为 IMAP4rev2 内含能力（v2 Options 注释口径）
+		// 能力集：IMAP4rev2 为基线（必需其一）；IMAP4rev1 并列通告（T-006/E-3-A——
+		// rfc9051 附录 A 双通告兼容形态；库层 beta.8 原生承载 rev1 会话行为）；IDLE/
+		// MOVE/UTF8=ACCEPT/LITERAL+ 为 FR-006 判定扩展；NAMESPACE 为 IMAP4rev2 内含
+		// 能力（v2 Options 注释口径）
 		Caps: imap.CapSet{
 			imap.CapIMAP4rev2:   {},
+			imap.CapIMAP4rev1:   {}, // T-006/E-3-A：rev1 兼容通告（imaplib 类客户端可达）
 			imap.CapIdle:        {},
 			imap.CapLiteralPlus: {},
 			imap.CapUTF8Accept:  {},

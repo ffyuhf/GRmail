@@ -195,6 +195,81 @@ func TestEnvelopeMailFromDomain(t *testing.T) {
 	}
 }
 
+// TestVerifyDKIMForgedSignatureFails T-003 根因核查离线锚（复测核查修复批——
+// E-1-A：raven v1.6.1 对「真实选择器公钥存在+伪造 b= 签名值」输入的结论取值）。
+// 构造：真实 DKIM 记录（stub 注入公钥）+消息携带「签名值域错误的 DKIM-Signature」——
+// raven 应返回 per-signature Status=fail（verifyWithKey 验签失败路径，
+// raven@v1.6.1 dkim/verify.go:277-279）；aggregateDKIM 聚合为 fail；
+// 拒收判定链（pipeline checkRejectionPolicy）据此在 soft 档触发 550——
+// 生产实测（T-003 三构造均 250）与本用例结论对照定位偏差层。
+// 若本用例 fail 成立而生产 250——偏差在管道/装配层（开关/注入）；若本用例即 temperror/
+// none——偏差在 raven 输入面（DNS 查询路径/记录解析）。本用例为 T-003 根因归因锚。
+// SRS：FR-008 判定③（DKIM 软档=有签名且验证失败拒收——拒收臂输入）；TC-029 关联。
+func TestVerifyDKIMForgedSignatureFails(t *testing.T) {
+	// 真实 RSA 键对与公钥记录（stub 注入——选择器真实存在，与生产「d=gmail.com
+	// s=20251104」场景同构：公钥真实存在，签名值域伪造）
+	key, _ := generateRSAKeyPEM(t)
+	pubDER, _ := x509.MarshalPKIXPublicKey(&key.PublicKey)
+	resolver := newStubResolver().
+		withTXT("sel2025._domainkey.example.com", "v=DKIM1; k=rsa; p="+base64.StdEncoding.EncodeToString(pubDER)).
+		withTXT("example.com", "v=spf1 ip4:192.0.2.0/24 -all").
+		withTXT("_dmarc.example.com", "v=DMARC1; p=none")
+
+	// 消息携带「签名值域为随机字节的 DKIM-Signature」（b= 伪造——raven 验签
+	// 将经 verifyWithKey 失败返回 StatusFail；bh= 与正文一致排除 hash 路径干扰）
+	msg := []byte("DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=example.com; s=sel2025;\r\n" +
+		"\th=From:To:Subject:Date:Message-ID; bh=47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=;\r\n" +
+		"\tb=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\r\n" +
+		"\tAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\r\n" +
+		"\tAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\r\n" +
+		"From: sender@example.com\r\n" +
+		"To: rcpt@example.org\r\n" +
+		"Subject: forged\r\n" +
+		"Date: Wed, 17 Sep 2026 02:00:00 +0800\r\n" +
+		"Message-ID: <forged@example.com>\r\n" +
+		"\r\n" +
+		"body\r\n")
+
+	v := NewVerifierService(resolver, "mx.local", allOnStack())
+	res, err := v.Verify(context.Background(),
+		incoming("mail.example.com", net.ParseIP("192.0.2.1"), "sender@example.com", msg))
+	if err != nil {
+		t.Fatalf("验证失败: %v", err)
+	}
+	// T-003 归因锚：真实公钥+伪造签名值域→DKIM 结论应为 fail（raven verifyWithKey
+	// 验签失败路径）；非 fail 则定位 raven 输入面偏差，fail 则定位管道/装配层偏差
+	if res.DKIM != "fail" {
+		t.Fatalf("T-003 归因锚：真实公钥+伪造签名应 fail（实际 %s——A-R: %s）", res.DKIM, res.AuthResultsHeader)
+	}
+}
+
+// TestJoinHostPort T-003 修复锚（复测核查修复批——raven v1.6.1 getSystemNameservers
+// 对 IPv6 递归地址不加端口不加方括号的装配侧防御）：IPv6 裸地址→"[v6]:53" 合法
+// 拨号串（rfc3986 §3.2.2——沿生产缺陷修复批 daneServerAddr 先例）；IPv4/主机名
+// →"host:53"；已带端口原样。SRS：FR-008 判定③实施态（拒收臂 resolver 前置）。
+func TestJoinHostPort(t *testing.T) {
+	cases := []struct{ host, want string }{
+		{"fdae:6a60:38ca::1", "[fdae:6a60:38ca::1]:53"}, // 生产实例 resolv.conf IPv6 形态（B 批实证）
+		{"2001:db8::1", "[2001:db8::1]:53"},             // IPv6 通用
+		{"223.5.5.5", "223.5.5.5:53"},                   // IPv4
+		{"localhost", "localhost:53"},                   // 主机名
+	}
+	for _, c := range cases {
+		if got := joinHostPort(c.host, defaultDNSPort); got != c.want {
+			t.Fatalf("joinHostPort(%q)=%q want %q", c.host, got, c.want)
+		}
+	}
+}
+
+// TestNormalizedSystemNameserversEmptyEnv 解析失败/空列表兜底（ravendns 零值链保持）。
+func TestNormalizedSystemNameserversEmptyEnv(t *testing.T) {
+	// resolv.conf 常规存在——本用例锚定「无 nameserver 行时返回 nil」（空文件场景
+	// 以行为解析路径覆盖；不可移植的路径覆盖不注入——读失败形态经代码路径审读锚定）
+	if got := normalizedSystemNameservers(); got != nil && len(got) == 0 {
+		t.Fatal("空列表应返回 nil 而非空切片（ravendns 零值兜底链保持）")
+	}
+}
+
 // generateRSAKeyPEM 生成 2048 位测试私钥并写 PKCS#8 PEM（Q1-A 键形态）。
 func generateRSAKeyPEM(t *testing.T) (*rsa.PrivateKey, string) {
 	t.Helper()

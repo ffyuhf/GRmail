@@ -404,8 +404,11 @@ func generateMessageID(domain string) string {
 // ───────────────────────── 拒收判定（两项变更实施批——SRS v1.2.0 FR-008 判定③） ─────────────────────────
 
 // RejectPolicyError 拒收判定命中哨兵（E-2-B——550 5.7.0 独立安全策略族；SMTP 层识别 case）。
+// R-006/E-5-A 注记（复测核查修复批，G2 批准 2026-10-17 15:47——覆盖两项变更实施批
+// E-2-B 文案形态）：Reason 含档位细节仅供服务端日志消费；对外应答已收口为通用文案
+// （smtp session cmdData——档位探测面收口）。
 type RejectPolicyError struct {
-	Reason string // 拒收原因（对端可见文案——含档位与验证项）
+	Reason string // 拒收原因（服务端日志消费——含档位与验证项；对外不可见 R-006/E-5-A）
 	Code   int    // SMTP 应答码（550）
 }
 
