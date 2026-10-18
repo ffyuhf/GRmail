@@ -80,15 +80,15 @@ templ DetailView(lang Lang, msg *storage.Detail, disp *mail.Display, safeBody st
 			// src 指向同源正文代理端点（响应头独立 CSP style-src 'unsafe-inline'——全浏览器
 			// 内联样式恢复；原 srcdoc 继承父页 CSP 剥离全部内联样式且 iframe csp 属性
 			// Firefox/Safari 未实现——MDN BCD 实证）；sandbox 属性保持（沙箱隔离不降级）。
-			<iframe sandbox="" src={ fmt.Sprintf("/mails/%d/body", msg.ID) } title={ Tr(lang, "detail.bodyFrame") }></iframe>
+			<iframe sandbox="" loading="lazy" referrerpolicy="no-referrer" src={ fmt.Sprintf("/mails/%d/body", msg.ID) } title={ Tr(lang, "detail.bodyFrame") }></iframe>
 		} else {
 			<pre>{ safeBody }</pre>
 		}
 		if len(disp.Attachments) > 0 {
 			<h3>{ Tr(lang, "detail.attach") }</h3>
-			<div class="attach-list">
+			<div class="attach-list" role="list">
 				for _, a := range disp.Attachments {
-					<div class="attach">
+					<div class="attach" role="listitem">
 						<a href={ fmt.Sprintf("/attachments/%d?part=%d", msg.ID, a.Part) }>
 							<span class="ic" aria-hidden="true">@templ.Raw(iconAttach)</span>
 							{ attachLabel(lang, a.Filename, a.ContentType, a.Size) }

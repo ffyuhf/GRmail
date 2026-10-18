@@ -1,0 +1,63 @@
+// GRmail 应用外壳组件（应用栏 / 抽屉 / 菜单 / 品牌位）。
+// 由 AppLayout 组合；页面级模板不直接引用，避免骨架重复实现。
+package templates
+
+// AppBar 顶部应用栏：品牌位 + 写信主按钮 + 管理菜单（admin 主体）+ 账户菜单。
+// 参数：lang 界面语言；label 主体呈现名；isAdmin 管理员主体标记；csrf 会话 token。
+templ AppBar(lang Lang, label string, isAdmin bool, csrf string) {
+			<header class="app-bar">
+			// G2（批二）：抽屉开关键盘可达（label tabindex=0+role=button+Enter/Space
+			// 触发归 grmail.js；aria-label Tr 化——E5 硬编码 "menu" 收口）。
+			<label class="nav-toggle" for="nav-toggle" role="button" tabindex="0" aria-label={ Tr(lang, "top.menu") } aria-controls="main-content" aria-expanded="true"><span class="ic" aria-hidden="true">@templ.Raw(iconMenu)</span></label>
+			<a class="app-bar-brand" href="/">GRmail<span class="app-bar-label">{ label }</span></a>
+			<div class="app-bar-actions" role="group">
+				<a class="primary" href="/compose">
+					<span class="ic" aria-hidden="true">@templ.Raw(iconEdit)</span>
+					{ Tr(lang, "top.compose") }
+				</a>
+				if isAdmin {
+					// G12（批二）：summary 增 aria-haspopup（开合态 aria-expanded 由
+					// grmail.js details toggle 事件维护——纯静态无法反射）。
+					<details class="menu-host">
+						<summary aria-haspopup="menu" aria-expanded="false">
+							<span class="ic" aria-hidden="true">@templ.Raw(iconShield)</span>
+							{ Tr(lang, "top.manage") }
+							<span class="ic ic-caret" aria-hidden="true">@templ.Raw(iconCaret)</span>
+						</summary>
+						<div class="menu" role="menu">
+							<a href="/admin/mailboxes" role="menuitem">{ Tr(lang, "top.adminMail") }</a>
+							<a href="/admin/settings" role="menuitem">{ Tr(lang, "top.settings") }</a>
+							<a href="/admin/2fa" role="menuitem">{ Tr(lang, "hub.twofactor") }</a>
+						</div>
+					</details>
+				}
+				<details class="menu-host">
+					<summary aria-label={ Tr(lang, "top.account") } aria-haspopup="menu" aria-expanded="false">
+						<span class="ic" aria-hidden="true">@templ.Raw(iconMore)</span>
+					</summary>
+					<div class="menu" role="menu">
+						if isAdmin {
+							<a href="/admin/password" role="menuitem">{ Tr(lang, "top.password") }</a>
+						} else {
+							<a href="/settings" role="menuitem">{ Tr(lang, "top.settingsHub") }</a>
+							// F6（批二）：mailbox 主体 2FA 直达入口（原仅 hub 页分区
+							// 可达——顶栏直达补齐；iconShield 复用）。
+							<a href="/settings/2fa" role="menuitem">{ Tr(lang, "top.twofactor") }</a>
+						}
+						<a href={ langSwitchHref(lang, "") } role="menuitem">
+							<span class="ic" aria-hidden="true">@templ.Raw(iconLang)</span>
+							{ Tr(lang, "top.lang") }
+						</a>
+						<hr/>
+						<form method="post" action="/logout">
+							<input type="hidden" name="csrf_token" value={ csrf }/>
+							<button type="submit" class="menu-danger">
+								<span class="ic" aria-hidden="true">@templ.Raw(iconLogout)</span>
+								{ Tr(lang, "common.logout") }
+							</button>
+						</form>
+					</div>
+				</details>
+			</div>
+		</header>
+}

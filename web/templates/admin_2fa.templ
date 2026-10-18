@@ -41,7 +41,7 @@ templ AdminTwoFactorView(d TwoFactorData) {
 				<p>{ Tr(d.Lang, "twofactor.qr") }</p>
 				// E5（批二）：alt 硬编码 Tr 化（原英文 "TOTP QR"）。
 				if d.QRDataURI != "" {
-					<span class="qr-box"><img src={ d.QRDataURI } alt={ Tr(d.Lang, "twofactor.qrAlt") } width="256" height="256"/></span>
+					<span class="qr-box"><img src={ d.QRDataURI } alt={ Tr(d.Lang, "twofactor.qrAlt") } width="256" height="256" decoding="async"/></span>
 				}
 				<p>{ Tr(d.Lang, "twofactor.secret") }{ colonFor(d.Lang) } <code>{ d.Secret }</code></p>
 				<form method="post" action="/admin/2fa/confirm">

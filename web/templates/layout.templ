@@ -23,15 +23,7 @@ templ Layout(lang Lang, title string, errText string) {
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
 			<title>{ title }</title>
-			<link rel="stylesheet" href={ StaticURL("/static/app.css") }/>
-			// H3（批二）：favicon+theme-color（Layout 骨架页同享——404 消除）；
-			// A1（β 批）：theme-color 双 media 拆分；E4（β 批）：manifest 引用补挂
-			//（Layout 骨架六页对齐 AppLayout 既有形态）；δ批 D-4：色值随墨石方向更新
-			//（亮 #17181c/暗 #101113——样张批准形态，与 app.templ 同步）。
-			<link rel="icon" href={ StaticURL("/static/favicon.svg") } type="image/svg+xml"/>
-			<link rel="manifest" href={ StaticURL("/static/manifest.webmanifest") }/>
-			<meta name="theme-color" content="#17181c" media="(prefers-color-scheme: light)"/>
-			<meta name="theme-color" content="#101113" media="(prefers-color-scheme: dark)"/>
+			@headAssets()
 		</head>
 		<body>
 			if errText != "" {

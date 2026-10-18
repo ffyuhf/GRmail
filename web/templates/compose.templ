@@ -56,8 +56,8 @@ templ ComposeView(d *ComposeData) {
 						// 「收件人」已承载语义（第三方报告 P1-5 标签重复收口；占位符保持输入
 						// 提示；读屏控件名经 sr-only 保持——沿批五 C2 先例）。
 						<label><span class="sr-only">{ Tr(lang, "compose.to") }</span><input type="text" name="to" id="f-to" value={ d.To } placeholder="user@example.com" inputmode="email" autocapitalize="none" spellcheck="false"/></label>
-						<label>{ Tr(lang, "compose.cc") }<input type="text" name="cc" id="f-cc" value={ d.Cc } inputmode="email" autocapitalize="none" spellcheck="false"/></label>
-						<label>{ Tr(lang, "compose.bcc") }<input type="text" name="bcc" id="f-bcc" value={ d.Bcc } inputmode="email" autocapitalize="none" spellcheck="false"/></label>
+						<label><span>{ Tr(lang, "compose.cc") }</span><input type="text" name="cc" id="f-cc" value={ d.Cc } inputmode="email" autocapitalize="none" spellcheck="false"/></label>
+						<label><span>{ Tr(lang, "compose.bcc") }</span><input type="text" name="bcc" id="f-bcc" value={ d.Bcc } inputmode="email" autocapitalize="none" spellcheck="false"/></label>
 					</div>
 					<details>
 						<summary>{ Tr(lang, "compose.csvImport") }</summary>
@@ -74,7 +74,7 @@ templ ComposeView(d *ComposeData) {
 						<div id="csv-result" aria-live="polite"></div>
 					</details>
 					if d.IsAdmin {
-						<label>{ Tr(lang, "compose.from") }<input type="text" name="from" id="f-from" value={ d.From } placeholder={ Tr(lang, "compose.fromPh") } data-domain={ d.Domain } autocomplete="off" inputmode="email" autocapitalize="none" spellcheck="false"/></label>
+						<label><span>{ Tr(lang, "compose.from") }</span><input type="text" name="from" id="f-from" value={ d.From } placeholder={ Tr(lang, "compose.fromPh") } data-domain={ d.Domain } autocomplete="off" inputmode="email" autocapitalize="none" spellcheck="false"/></label>
 					}
 				</section>
 				<section class="compose-section">

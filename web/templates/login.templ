@@ -23,11 +23,14 @@ templ AdminLoginView(lang Lang, errText string) {
 	// C6（批二）：错误提示入卡片语境（Layout errText 位 body 首与居中卡片脱节——
 	// 空传 Layout 位+卡片内呈现）；D2：用户名 inputmode；F4：交叉链接。
 	@Layout(lang, Tr(lang, "login.adminTitle"), "") {
-		<div class="card">
-			// δ批 D-3：品牌区（字标+品牌语+hr——chip 主体类型保持既定裁决面）。
-			<div class="card-head"><h1 class="wordmark">GRmail</h1><span class="chip">{ Tr(lang, "home.adminKind") }</span></div>
-			<p class="brandline">{ Tr(lang, "brand.tagline") }</p>
-			<hr/>
+		<div class="auth">
+			<div class="card auth-card">
+				// 登录页：品牌区与表单同处一张居中卡片（与页面底色形成明确分层）。
+				<div class="auth-brand">
+					<div class="auth-brand-head"><h1 class="wordmark">GRmail</h1><span class="chip">{ Tr(lang, "home.adminKind") }</span></div>
+					<p class="brandline">{ Tr(lang, "brand.tagline") }</p>
+					<hr/>
+				</div>
 			if errText != "" {
 				<p class="error" role="alert">{ errText }</p>
 			}
@@ -38,18 +41,21 @@ templ AdminLoginView(lang Lang, errText string) {
 				</form>
 				<p class="hint lang-switch"><a href={ langSwitchHref(lang, "/login") }>{ Tr(lang, "top.lang") }</a> · <a href="/webmail/login">{ Tr(lang, "login.crossMailbox") }</a></p>
 			</div>
-		}
+		</div>
+	}
 	}
 
 // MailboxLoginView 邮箱账号登录页（/webmail/login：地址含 @，走 account.VerifyCredentials）。
 // 参数：lang 界面语言；errText 同 AdminLoginView（统一模糊口径复用 U2 防枚举语义）。
 templ MailboxLoginView(lang Lang, errText string) {
 	@Layout(lang, Tr(lang, "login.mailTitle"), "") {
-		<div class="card">
-			// δ批 D-3：品牌区（与 AdminLoginView 同构——样张①批准形态）。
-			<div class="card-head"><h1 class="wordmark">GRmail</h1><span class="chip">{ Tr(lang, "home.mailKind") }</span></div>
-			<p class="brandline">{ Tr(lang, "brand.tagline") }</p>
-			<hr/>
+		<div class="auth">
+			<div class="card auth-card">
+				<div class="auth-brand">
+					<div class="auth-brand-head"><h1 class="wordmark">GRmail</h1><span class="chip">{ Tr(lang, "home.mailKind") }</span></div>
+					<p class="brandline">{ Tr(lang, "brand.tagline") }</p>
+					<hr/>
+				</div>
 			if errText != "" {
 				<p class="error" role="alert">{ errText }</p>
 			}
@@ -60,5 +66,6 @@ templ MailboxLoginView(lang Lang, errText string) {
 				</form>
 				<p class="hint lang-switch"><a href={ langSwitchHref(lang, "/webmail/login") }>{ Tr(lang, "top.lang") }</a> · <a href="/login">{ Tr(lang, "login.crossAdmin") }</a></p>
 			</div>
-		}
+		</div>
+	}
 	}

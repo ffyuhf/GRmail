@@ -34,8 +34,15 @@ package templates
 templ SetupView(data SetupData) {
 	{{ lang := NormalizeLang(data.Lang) }}
 	@Layout(lang, Tr(lang, "setup.title"), "") {
-		<div class="card setup-card">
-		<h1>{ Trf(lang, "setup.h1", data.Step, data.Total, data.Title) }</h1>
+		<div class="wizard">
+		<header class="wizard-head">
+			<span class="wizard-brand">GRmail</span>
+			<span class="wizard-count">
+				<span class="sr-only">{ Trf(lang, "setup.h1", data.Step, data.Total, data.Title) }</span>
+				<span aria-hidden="true">{ strconvItoa(data.Step) } / { strconvItoa(data.Total) }</span>
+			</span>
+		</header>
+		<h1 class="wizard-title">{ data.Title }</h1>
 		// E11（批二）：向导错误统一卡片内呈现（原 Layout errText 位于卡片外 body 顶部
 		// ——步5 卡片内错误双位置层次不一收口）。
 		if data.Error != "" {
@@ -196,22 +203,22 @@ templ SetupView(data SetupData) {
 					<legend>{ Tr(lang, "setup.s6Legend") }</legend>
 					<p class="desc">{ Tr(lang, "setup.s6Intro") }</p>
 					<ul class="setup-summary">
-						<li>{ Tr(lang, "setup.s6Domain") }<code>{ data.DomainFinal }</code></li>
-						<li><strong>{ Tr(lang, "setup.restartTitle") }</strong>——{ Tr(lang, "setup.s6Restart") }</li>
-						<li>{ Tr(lang, "setup.visitTitle") }：{ Tr(lang, "setup.visitDesc") } <code>https://{ data.DomainFinal }</code></li>
-						<li><strong>{ Tr(lang, "setup.loginTitle") }</strong>——{ Tr(lang, "setup.loginAdmin") }</li>
-						<li><strong>{ Tr(lang, "setup.acmeWaitTitle") }</strong>——{ Tr(lang, "setup.acmeWaitDesc") }（{ Tr(lang, "setup.s6Acme") }）</li>
+						<li><span class="k">{ Tr(lang, "setup.s6Domain") }</span><code>{ data.DomainFinal }</code></li>
+						<li class="wide"><strong>{ Tr(lang, "setup.restartTitle") }</strong><span>{ Tr(lang, "setup.s6Restart") }</span></li>
+						<li class="wide"><strong>{ Tr(lang, "setup.visitTitle") }</strong><span>{ Tr(lang, "setup.visitDesc") } <code>https://{ data.DomainFinal }</code></span></li>
+						<li class="wide"><strong>{ Tr(lang, "setup.loginTitle") }</strong><span>{ Tr(lang, "setup.loginAdmin") }</span></li>
+						<li class="wide"><strong>{ Tr(lang, "setup.acmeWaitTitle") }</strong><span>{ Tr(lang, "setup.acmeWaitDesc") }（{ Tr(lang, "setup.s6Acme") }）</span></li>
 					</ul>
 				</fieldset>
 				<fieldset>
 					<legend>{ Tr(lang, "setup.portLegend") }</legend>
 					<ul class="port-list">
-						<li><code>25</code> { Tr(lang, "setup.port25") }</li>
-						<li><code>465</code> { Tr(lang, "setup.port465") }</li>
-						<li><code>587</code> { Tr(lang, "setup.port587") }</li>
-						<li><code>993</code> { Tr(lang, "setup.port993") }</li>
-						<li><code>995</code> { Tr(lang, "setup.port995") }</li>
-						<li><code>443</code> { Tr(lang, "setup.port443") }</li>
+						<li>{ Tr(lang, "setup.port25") }</li>
+						<li>{ Tr(lang, "setup.port465") }</li>
+						<li>{ Tr(lang, "setup.port587") }</li>
+						<li>{ Tr(lang, "setup.port993") }</li>
+						<li>{ Tr(lang, "setup.port995") }</li>
+						<li>{ Tr(lang, "setup.port443") }</li>
 					</ul>
 				</fieldset>
 				<fieldset>

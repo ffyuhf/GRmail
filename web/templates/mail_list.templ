@@ -44,8 +44,8 @@ var iconStar = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="m12 2 3.09
 templ MailPageView(d *MailListData) {
 	@AppFrame(NormalizeLang(d.Lang), Tr(NormalizeLang(d.Lang), "mail.title"), d.Label, d.IsAdmin, d.CSRF, d) {
 		<main class="main" id="main-content">
-			<div id="folder-hint" class="hint"></div>
-			<div id="mail-list" aria-live="polite">
+			<div id="folder-hint" class="hint" role="status" aria-live="polite"></div>
+			<div id="mail-list" aria-live="polite" aria-busy="false">
 				@MailListFragment(d)
 			</div>
 			<div id="mail-loading" class="htmx-indicator" aria-hidden="true">
@@ -59,76 +59,12 @@ templ MailPageView(d *MailListData) {
 	}
 }
 
-// Sidebar 侧边栏（平铺无嵌套——REQ-021 红线；文件夹切换 hx-get 片段；「管理文件夹」
-// 单一聚合折叠区：创建表单+逐自定义文件夹紧凑管理行——重命名/删除收纳于二级展开）。
-// 参数：d 列表数据（Folders/ActiveFolder/CSRF/Lang）。
-// D5（2026-10-05）：系统文件夹名按 kind 经 folderDisplayName 本地化（custom 回退原 Name）；
-// D3（2026-10-05）：Sidebar 自本批次起为全站侧栏（AppFrame 承载——设置族页统一导航）。
-templ Sidebar(d *MailListData) {
-	{{ lang := NormalizeLang(d.Lang) }}
-	<nav class="sidebar" aria-label={ Tr(lang, "mail.folders") }>
-		<div class="side-caption">{ Tr(lang, "mail.folders") }</div>
-		for _, f := range d.Folders {
-			// F1（批二）：语境开关——列表页携带 hx-get 局部更新；设置族页侧栏
-			// （IsListPage=false）仅 href 整页导航（原 hx-target 缺失语境下点击被
-			// htmx preventDefault 吞掉无反应收口）；G5：aria-current="page" 当前项。
-			<a class={ "folder-item", templ.KV("active", f.Active) } tabindex="0"
-				if f.Active {
-					aria-current="page"
-				}
-				href={ fmt.Sprintf("/?folder=%d&page=1&pagesize=%d", f.ID, d.Pagesize) }
-				if d.IsListPage {
-					hx-get={ fmt.Sprintf("/mails?folder=%d&page=1&pagesize=%d", f.ID, d.Pagesize) }
-					hx-push-url="true"
-					hx-target="#mail-list" hx-indicator="#mail-loading"
-				}
-				>
-				if f.Kind == "custom" {
-					<span class="ficon" aria-hidden="true">@templ.Raw(iconMailFolder)</span>
-				} else {
-					<span class="ficon" aria-hidden="true">@templ.Raw(iconMailBox)</span>
-				}
-				<span class="fname">{ folderDisplayName(lang, f.Kind, f.Name) }</span>
-				if f.Unread > 0 {
-					<span class="unread">{ fmt.Sprintf("%d", f.Unread) }</span>
-				}
-			</a>
-		}
-		<details>
-			<summary>{ Tr(lang, "mail.manageFolders") }</summary>
-			<form method="post" action="/folders">
-				<input type="hidden" name="csrf_token" value={ d.CSRF }/>
-				<input type="text" name="name" required="required" maxlength="255" aria-label={ Tr(lang, "mail.folderName") } placeholder={ Tr(lang, "mail.folderName") }/>
-				<button class="btn-sm" type="submit">{ Tr(lang, "common.create") }</button>
-			</form>
-			for _, f := range d.Folders {
-				if f.Kind == "custom" {
-					<details>
-						<summary>{ f.Name }</summary>
-						<div class="folder-manage-row">
-							<form method="post" action={ fmt.Sprintf("/folders/%d/rename", f.ID) }>
-								<input type="hidden" name="csrf_token" value={ d.CSRF }/>
-								<input type="text" name="name" required="required" maxlength="255" aria-label={ Tr(lang, "mail.newName") } placeholder={ Tr(lang, "mail.newName") }/>
-								<button class="btn-sm" type="submit">{ Tr(lang, "common.rename") }</button>
-							</form>
-							<form method="post" action={ fmt.Sprintf("/folders/%d/delete", f.ID) }>
-								<input type="hidden" name="csrf_token" value={ d.CSRF }/>
-								<button class="btn-sm danger" type="submit">{ Tr(lang, "common.delete") }</button>
-							</form>
-						</div>
-					</details>
-				}
-			}
-		</details>
-	</nav>
-}
-
 // MailListFragment 列表片段（HTMX 目标 #mail-list——翻页/过滤/搜索/批量后替换）。
 // 结构：工具条（搜索+筛选+计数）→ 选中上下文批量条（.batch-bar——:has 显隐）→
 // 列表/空状态 → 分页。批量表单 id=batch-form（行内 checkbox form 属性关联——既有机制）。
 templ MailListFragment(d *MailListData) {
 	{{ lang := NormalizeLang(d.Lang) }}
-	<div class="list-area">
+	<section class="list-area" aria-label={ Tr(lang, "mail.title") }>
 		if d.Noticed == "created" {
 			<p class="notice" role="status">{ Tr(lang, "mail.noticedCreated") }</p>
 		} else if d.Noticed == "renamed" {
@@ -136,7 +72,7 @@ templ MailListFragment(d *MailListData) {
 		} else if d.Noticed == "deleted" {
 			<p class="notice" role="status">{ Tr(lang, "mail.noticedDeleted") }</p>
 		}
-		<div class="tool-bar">
+		<div class="tool-bar" role="search">
 			// B4（批四）：搜索表单补 hx-push-url（批一 D5-A 九锚清单覆盖缺口——第十锚）：
 			// 搜索提交后地址栏更新为 /search?keyword=…，刷新/分享保持结果（原停留 /mails
 			// 刷新丢结果）；action 降级锚既有保持。
@@ -217,7 +153,7 @@ templ MailListFragment(d *MailListData) {
 			</form>
 		</div>
 		if len(d.Items) == 0 {
-			<div class="empty-state">
+			<div class="empty-state" role="status">
 				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 9l9-6 9 6v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="m3 10 9 6 9-6"/></svg>
 				if d.IsSearch {
 					<h3>{ Tr(lang, "mail.noResultTitle") }</h3>
@@ -236,8 +172,9 @@ templ MailListFragment(d *MailListData) {
 		} else {
 			<div class="table-wrap">
 				<table class="mails">
+					<caption class="sr-only">{ Tr(lang, "mail.title") }</caption>
 					<thead>
-						<tr><th scope="col"><span class="sr-only">{ Tr(lang, "common.selectAllCol") }</span></th><th scope="col">{ Tr(lang, "mail.colStatus") }</th><th scope="col">{ Tr(lang, "mail.colSubject") }</th><th scope="col">{ Tr(lang, "mail.colFrom") }</th><th scope="col">{ Tr(lang, "mail.colTime") }</th></tr>
+						<tr><th scope="col"><span class="sr-only">{ Tr(lang, "common.selectAllCol") }</span></th><th scope="col"><span class="sr-only">{ Tr(lang, "mail.colStatus") }</span></th><th scope="col">{ Tr(lang, "mail.colFrom") }</th><th scope="col">{ Tr(lang, "mail.colSubject") }</th><th scope="col">{ Tr(lang, "mail.colTime") }</th></tr>
 					</thead>
 					<tbody>
 						for _, m := range d.Items {
@@ -251,15 +188,15 @@ templ MailListFragment(d *MailListData) {
 										<span class="dot" title={ Tr(lang, "mail.unreadDot") } role="img" aria-label={ Tr(lang, "mail.unreadDot") }></span>
 									}
 								</td>
+								<td class="cell-trunc from-cell"><span title={ m.FromAddr }>{ m.FromAddr }</span></td>
 								<td class="cell-trunc"><a href={ fmt.Sprintf("/mails/%d", m.ID) } hx-get={ fmt.Sprintf("/mails/%d", m.ID) } hx-push-url="true" hx-target="#mail-list" title={ subjectOr(lang, m.Subject) }>{ subjectOr(lang, m.Subject) }</a></td>
-								<td class="cell-trunc"><span title={ m.FromAddr }>{ m.FromAddr }</span></td>
 								<td class="time-cell"><span title={ m.SentAtFull }>{ m.SentAt }</span></td>
 							</tr>
 						}
 					</tbody>
 				</table>
 			</div>
-			<div class="pager">
+			<nav class="pager">
 				if d.Page > 1 {
 					<a href={ pageHref(d, d.Page-1) } hx-get={ pageHref(d, d.Page-1) } hx-push-url="true" hx-target="#mail-list" hx-indicator="#mail-loading">{ Tr(lang, "mail.prevPage") }</a>
 				}
@@ -279,9 +216,9 @@ templ MailListFragment(d *MailListData) {
 						>{ fmt.Sprintf("%d", n) }</a>
 					}
 				</span>
-			</div>
+			</nav>
 		}
-	</div>
+	</section>
 }
 
 // pageHref 翻页链接（当前上下文保留：folder/unread/keyword；组D：keyword 经

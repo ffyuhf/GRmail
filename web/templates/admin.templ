@@ -106,7 +106,7 @@ templ AdminMailboxesView(lang Lang, rows []*AdminMailboxRow, errText string, not
 					<tbody id="admin-rows">
 						for _, m := range rows {
 							<tr data-addr={ strings.ToLower(m.Address) } data-status={ m.Status }>
-								<td>
+								<td data-label={ Tr(lang, "admin.colAddr") }>
 									<details class="row-details">
 										<summary>{ m.Address }</summary>
 										<div class="row-details-body">
@@ -117,10 +117,10 @@ templ AdminMailboxesView(lang Lang, rows []*AdminMailboxRow, errText string, not
 										</div>
 									</details>
 								</td>
-								<td><span class={ "badge", m.Status }>{ statusLabel(lang, m.Status) }</span></td>
-								<td>{ twoFALabel(lang, m) }{ twoFAExtra(lang, m) }</td>
-								<td>{ m.CreatedAt }</td>
-								<td>
+								<td data-label={ Tr(lang, "mail.colStatus") }><span class={ "badge", m.Status }>{ statusLabel(lang, m.Status) }</span></td>
+								<td data-label="2FA">{ twoFALabel(lang, m) }{ twoFAExtra(lang, m) }</td>
+								<td data-label={ Tr(lang, "admin.colCreated") }>{ m.CreatedAt }</td>
+								<td data-label={ Tr(lang, "admin.colAction") }>
 									<form method="post" action="/admin/mailboxes" class="inline">
 										<input type="hidden" name="csrf_token" value={ csrf }/>
 										<input type="hidden" name="address" value={ m.Address }/>
@@ -217,7 +217,7 @@ templ AdminUnregisteredView(lang Lang, list []*AdminMailboxRow, csrf string, nav
 							for _, m := range list {
 								<tr>
 									<td>{ m.Address }</td>
-									<td><span class={ "badge", m.Status }>{ statusLabel(lang, m.Status) }</span></td>
+									<td data-label={ Tr(lang, "mail.colStatus") }><span class={ "badge", m.Status }>{ statusLabel(lang, m.Status) }</span></td>
 									<td>{ fmt.Sprintf(Tr(lang, "admin.shadowFmt"), m.MailboxID) }</td>
 								</tr>
 							}
