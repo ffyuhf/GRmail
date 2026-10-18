@@ -1,12 +1,21 @@
 // auth 来信验证器：SPF/DKIM/ARC（raven）+ DMARC（自研包）四项编排、
 // Authentication-Results 头组装（rfc8601）与认证栈开关热加载订阅（TC-009）。
-// 依据：SRS FR-008（四项验证+A-R 头）/FR-009（开关热加载，订阅侧）/NFR-004/NFR-005；
-// 模块接口契约 v1.55.0 2.2 节（Verifier/VerifyResults 签名逐字落地，compile-time 断言锁定）；
+// 依据：SRS FR-008（四项验证+A-R 头＋判定③ permerror 不触发拒收——permerror可见性批）/FR-009（开关热加载，订阅侧）/NFR-004/NFR-005；
+// 模块接口契约 v1.57.0 2.2 节（Verifier/VerifyResults 签名逐字落地，compile-time 断言锁定）；
 // 关键流程设计 v1.0.0 第一章（验证在 DATA 后、落库前，A-R 注入）；
 // rfc8601 2.2（authres-header-field ABNF）/2.7.1（dkim=header.d）/2.7.2（spf=smtp.mailfrom）；
 // 架构总览 v1.0.0 5.2（组件禁止缓存旧配置指针——开关经 RWMutex 快照读取）。
 // 修改历史：
 //
+//	2026-10-18 10-32-00 | 修正 | permerror可见性批（G2 批准 2026-10-18 10:28:07
+//	  「E-1 A / E-2 A / E-3 A / F-1 B」；V批 G3 遗留登记①/S4-W Q1=B）：①aggregateDKIM
+//	  增 permerror 显式分支——解析失败〔Signature=nil〕不再落 none、公钥/参数永久
+//	  错误〔Signature 非 nil〕不再落 fail（SRS v1.3.0 FR-008 判定③「permerror 不触发
+//	  拒收」实施态收敛——硬档误拒与 soft 档误拒双路径收口）；聚合序 pass→temperror→
+//	  fail→permerror→none（E-1-A fail 优先——伪造 b= 验签失败路径拒收臂输入最大化，
+//	  与解析失败 permerror 区分）②buildAuthResultsHeader permerror 呈现（E-2-A——
+//	  有签名上下文取 header.d〔沿 B-S批 F5 temperror 先例〕；全 nil 裸
+//	  dkim=permerror〔rfc8601 §2.2 propspec 可选合法形态〕）——消费者可见性收口
 //	2026-10-18 00-40-00 | 修正 | DMARC收尾批：头注契约版本引用刷新 v1.37.0→v1.55.0
 //	  （注释漂移收口——纯注释零行为）
 //	2026-10-18 06:20:00 | 扩展 | V批核查修复批 E-3（G2 批准 2026-10-18 05:13→
@@ -327,9 +336,15 @@ func spfArgs(msg *IncomingMail, localHostname string) ravenspf.Args {
 // trimBrackets 去除 HELO IP 字面量的方括号（IPv6 形如 [::1]）。
 func trimBrackets(s string) string { return strings.Trim(s, "[]") }
 
-// aggregateDKIM 聚合多签名 DKIM 结论（聚合口径登记于 U3 修改文档第 3 章）：
-// 任一 pass→pass（报告域取首个通过签名的 d=）；无签名→none；
-// 任一 temperror→temperror；存在签名但均未通过→fail（报告域取首个签名 d=）。
+// aggregateDKIM 聚合多签名 DKIM 结论（聚合口径登记于 U3 修改文档第 3 章＋permerror可见性批）：
+// 任一 pass→pass（报告域取首个通过签名的 d=）；任一 temperror→temperror（B-S批 F5）；
+// 任一验签失败（fail）→fail（E-1-A——fail 优先于 permerror：伪造 b= 验签失败路径为
+// 拒收臂输入，TC-029「有签名且验证失败拒收」语义输入面最大化）；
+// 任一 permerror→permerror（permerror可见性批 E-3-A——SRS v1.3.0 FR-008 判定③
+// 「验证临时故障（temperror）与 permerror 不触发拒收」：解析失败〔Signature=nil，
+// raven ParseSignature 错误路径〕与公钥/参数永久错误〔Signature 非 nil——checkSignatureParams/
+// lookup 永久错/公钥吊销等〕两路径均不再落 none/fail——报告域沿 B-S批 F5 先例取首个
+// 含签名结果的 d=，全 nil 时空〔呈现层裸条目承载〕）；无签名→none。
 func aggregateDKIM(results []ravendkim.Result) (conclusion, reportDomain string) {
 	if len(results) == 0 {
 		return "none", ""
@@ -355,6 +370,31 @@ func aggregateDKIM(results []ravendkim.Result) (conclusion, reportDomain string)
 		}
 	}
 	for _, r := range results {
+		// permerror可见性批：fail 判定收紧为 Status==Fail（携签名）——带签名的
+		// permerror 不再落入本分支（原「存在签名即 fail」口径致公钥永久错误被拒）
+		if r.Signature != nil && r.Status == ravendkim.StatusFail {
+			return "fail", r.Signature.Domain
+		}
+	}
+	for _, r := range results {
+		if r.Status == ravendkim.StatusPermerror {
+			// permerror可见性批 E-3-A/E-2-A：报告域沿 B-S批 F5 先例——有签名上下文
+			// 取首个含签名结果的 d=（含 permerror 自身携签名形态）；全部 Signature=nil
+			// （解析失败）则空——buildAuthResultsHeader 裸条目呈现承载
+			dom := ""
+			for _, r2 := range results {
+				if r2.Signature != nil {
+					dom = r2.Signature.Domain
+					break
+				}
+			}
+			return "permerror", dom
+		}
+	}
+	for _, r := range results {
+		// 防御兜底（零变化锚）：带签名的其余状态（policy/neutral——GRmail 未设
+		// Verifier.Policy，实际不可达）维持原「存在签名即 fail」归类——本批仅收拢
+		// permerror 两路径，其余状态归制不变
 		if r.Signature != nil {
 			return "fail", r.Signature.Domain
 		}
@@ -452,8 +492,16 @@ func buildAuthResultsHeader(authservID string, stack config.AuthStack, res *Veri
 	if stack.SPFEnabled && spfDomain != "" {
 		fmt.Fprintf(&b, ";\r\n\tspf=%s %s=%s", res.SPF, spfProp, spfDomain)
 	}
-	if stack.DKIMEnabled && dkimDomain != "" {
-		fmt.Fprintf(&b, ";\r\n\tdkim=%s header.d=%s", res.DKIM, dkimDomain)
+	if stack.DKIMEnabled && (dkimDomain != "" || res.DKIM == "permerror") {
+		// permerror可见性批 E-2-A：permerror 无签名上下文（全 nil 解析失败）时以裸
+		// resinfo 呈现——rfc8601 §2.2 ABNF「resinfo = ";" method "=" result [propspec]」
+		// propspec 可选，裸 dkim=permerror 为合法形态（消费者可见性——dkim=none 与
+		// 签名损坏可区分）；其余结论（pass/fail/temperror 带上下文）既有形态零变化
+		if dkimDomain != "" {
+			fmt.Fprintf(&b, ";\r\n\tdkim=%s header.d=%s", res.DKIM, dkimDomain)
+		} else {
+			fmt.Fprintf(&b, ";\r\n\tdkim=%s", res.DKIM)
+		}
 	}
 	if stack.DMARCEnabled && fromDomain != "" {
 		fmt.Fprintf(&b, ";\r\n\tdmarc=%s header.from=%s", res.DMARC, fromDomain)
