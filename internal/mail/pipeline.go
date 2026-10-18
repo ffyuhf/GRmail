@@ -21,6 +21,14 @@
 //	  落 Junk（DMARC 批 G3 漏检格收口）；非空路径行为零变化；checkRejectionPolicy
 //	  判定顺序字节级保持（Q2-B 登记偏差零改动）；头部与编排注释通知链残留清理+契约
 //	  版本引用刷新 v1.55.0（纯注释）
+//	2026-10-18 06:22:00 | 扩展 | V批核查修复批 E-3②（G2 批准 2026-10-18 05:47
+//	  「Sender 头 没有了，直接拒收」＋05:48:30 §11.5 逐域终态）：checkRejectionPolicy
+//	  空路径豁免后增 FromHeaderViolation 拒收分支（多地址 From 无 Sender 头或多
+//	  From 头行——rfc5322bis §3.6.2 L1263-1265 MUST 违规＋rfc9989 §11.5 L2488-
+//	  2493 威胁识别＋L2498-2499「a Mail Receiver may make a negative disposition
+//	  decision for the message prior to and instead of its being subjected
+//	  to DMARC processing」授权否定处置；550 通用文案 R-006 口径）；单地址 From
+//	  全场景零变化锚保持
 //	2026-10-17 23:00:00 | 扩展 | DMARC处置实施批（G2 批准 2026-10-17 22:46「全A批准：
 //	  E-1 A / E-2 A / E-3 A / E-4 A / E-5 A」；SRS v1.3.0 FR-008 判定③ DMARC p 值
 //	  处置三终态/S5-REV-20261017-002）：①checkRejectionPolicy 增 DMARC p=reject
@@ -470,6 +478,24 @@ func (e *RejectPolicyError) Error() string { return "mail: 拒收（" + e.Reason
 func (s *InboundPipelineService) checkRejectionPolicy(ctx context.Context, in *Delivery, res *auth.VerifyResults, raw []byte) error {
 	if in.Envelope.MailFrom == "" {
 		return nil // 空路径豁免（防丢投递失败通知——REQ-20261017-001 澄清答复；v1.3.0 起覆盖 DMARC 处置）
+	}
+	// 多地址 From 违规拒收（V批核查修复批 E-3②——G2 批准 2026-10-18 05:47「Sender
+	// 头 没有了，直接拒收」）：多地址 From 无 Sender 头或多 From 头行——rfc5322bis
+	// §3.6.2 L1263-1265「If the from field contains more than one mailbox
+	// specification in the mailbox-list, then the sender field ... MUST appear
+	// in the message」违规事实＋rfc9989 §11.5 L2488-2493「care must be taken by
+	// the Mail Receiver to recognize such messages as the threats they might
+	// be and handle them appropriately」威胁识别＋L2498-2499「a Mail Receiver
+	// may make a negative disposition decision for the message prior to and
+	// instead of its being subjected to DMARC processing」授权否定处置（DMARC
+	// 处理前直接拒收）；对外 550 通用文案（R-006/E-5-A 口径——细节仅服务端日志）；
+	// 验证侧置位（VerifyResults.FromHeaderViolation——DMARC 结论 permerror
+	// 〔rfc9989 §5.3.1 验证不可能终止〕）；单地址 From 场景恒 false 零影响
+	if res.FromHeaderViolation {
+		return &RejectPolicyError{
+			Reason: "多地址 From 缺 Sender 头或多 From 头行（rfc5322 §3.6.2 MUST 违规）拒收",
+			Code:   550,
+		}
 	}
 	// DMARC p=reject 处置拒收（DMARC处置实施批 E-2-A——SRS v1.3.0 FR-008 判定③/
 	// REQ-20261017-005；启停经 dmarcEnabled 由验证器 disposition 空值承载——独立于

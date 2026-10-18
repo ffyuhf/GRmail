@@ -265,3 +265,37 @@ func newDeliverWithDisposition(t *testing.T, svc *InboundPipelineService, dispos
 	in.Envelope.MailFrom = "alice@example.com"
 	return in
 }
+
+// TestMultiFromViolationRejected E-3② Deliver 级（V批核查修复批——G2 批准
+// 2026-10-18 05:47「Sender 头 没有了，直接拒收」）：多地址 From 无 Sender 头
+// （FromHeaderViolation 置位）→ 拒收短路＋零落库＋零 Blob（rfc5322bis §3.6.2
+// MUST 违规＋rfc9989 §11.5 L2498-2499 授权否定处置）。
+func TestMultiFromViolationRejected(t *testing.T) {
+	svc, blobs, accounts, store := newTestPipeline()
+	accounts.mailboxes["bob@test.example"] = &storage.Mailbox{ID: 1, Address: "bob@test.example", Status: storage.MailboxStatusActive}
+
+	svc.verifier = stubVerifier{results: &auth.VerifyResults{
+		SPF: "pass", DKIM: "pass", DMARC: "permerror", ARC: "none",
+		AuthResultsHeader:   "Authentication-Results: mx.test; dmarc=permerror header.from=example.com",
+		FromHeaderViolation: true,
+	}}
+	in := testDelivery("bob@test.example")
+	in.Envelope.MailFrom = "alice@example.com"
+	err := svc.Deliver(context.Background(), in, sampleRaw())
+	if err == nil {
+		t.Fatal("violation 应拒收")
+	}
+	var rej *RejectPolicyError
+	if !errors.As(err, &rej) || rej.Code != 550 {
+		t.Fatalf("应 RejectPolicyError 550: %T %v", err, err)
+	}
+	if !contains(rej.Reason, "Sender") {
+		t.Fatalf("Reason 应含 Sender 违规语义: %q", rej.Reason)
+	}
+	if len(store.saved) != 0 {
+		t.Fatalf("拒收零落库: %d", len(store.saved))
+	}
+	if len(blobs.data) != 0 {
+		t.Fatalf("拒收零 Blob: %d", len(blobs.data))
+	}
+}

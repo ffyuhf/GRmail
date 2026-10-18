@@ -9,6 +9,18 @@
 //
 //	2026-10-18 00-40-00 | 修正 | DMARC收尾批：头注契约版本引用刷新 v1.37.0→v1.55.0
 //	  （注释漂移收口——纯注释零行为）
+//	2026-10-18 06:20:00 | 扩展 | V批核查修复批 E-3（G2 批准 2026-10-18 05:13→
+//	  05:48:30 三段终态；S4-W 材料更正链 06:14/06:19「B B」闭合）：VerifyResults
+//	  增 FromHeaderViolation 字段＋DMARC 块三段判定（rfc9989 §5.3.1 L1640-1644
+//	  「If zero or more than one domain is extracted ... DMARC validation is
+//	  not possible and the process terminates」＋§11.5 L2495-2504 逐域评估最
+//	  严格策略＋rfc5322bis §3.6.2 L1263-1265 多地址 MUST 携带 Sender）——
+//	  ①单地址=既有单域路径零变化②多地址无 Sender（或多 From 头行）=violation
+//	  拒收档（DMARC=permerror 不评估，管道 550）③多地址有 Sender=§11.5 L2501-
+//	  2504「apply the DMARC mechanism to each domain found in the RFC5322.From
+//	  field as the Author Domain and apply the most strict policy selected
+//	  among the checks that fail」逐域评估聚合（maxFromDomains=8 DoS 限数——
+//	  L2506-2510）；V-006 核查定论=拒收臂有效（渗透方载荷缺陷误报——零代码）
 //	2026-09-17 02:40:00 | 新建 | U3 auth 基础（计划书步骤 6）
 //	2026-10-08 13:10:00 | 修正 | 文档治理批 C1：头注契约版本引用刷新 v1.0.0→v1.37.0（注释漂移收口；纯注释零行为变更）
 //	2026-10-17 22:58:00 | 扩展 | DMARC处置实施批（G2 批准 2026-10-17 22:46「全A批准」；
@@ -53,6 +65,17 @@ type VerifyResults struct {
 	// quarantine 时置位；管道消费（拒收短路/隔离落 Junk 三终态分派）；零值=现状
 	// 等价（既有 stub/测试构造零影响）；不入 A-R 头（头内容零变化锚）
 	DMARCDisposition string
+	// FromHeaderViolation 多地址 From 无 Sender 头或多 From 头行标记（V批核查修复批
+	// E-3②——G2 批准 2026-10-18 05:47「Sender 头 没有了，直接拒收」）：rfc5322bis
+	// §3.6.2 L1263-1265「If the from field contains more than one mailbox
+	// specification in the mailbox-list, then the sender field ... MUST appear
+	// in the message」违规事实＋rfc9989 §11.5 L2488-2493 威胁识别与妥善处理＋
+	// L2498-2499「may make a negative disposition decision for the message prior
+	// to and instead of its being subjected to DMARC processing」授权否定处置；
+	// 置位时 DMARC 结论=permerror（§5.3.1 L1640-1644 验证不可能终止）、处置不
+	// 预计算（恒空）；管道 checkRejectionPolicy 空路径豁免后优先拒收（550 通用
+	// 文案——R-006/E-5-A 口径）；零值=现状等价（单地址 From 场景恒 false）
+	FromHeaderViolation bool
 }
 
 // ───────────────────────── 哨兵错误 ─────────────────────────
@@ -170,14 +193,37 @@ func (v *VerifierService) Verify(ctx context.Context, msg *IncomingMail) (*Verif
 		}
 	}
 
-	// DMARC（rfc9989 DMARCbis，自研包）：策略发现 + SPF/DKIM 对齐判定
+	// DMARC（rfc9989 DMARCbis，自研包）：策略发现 + SPF/DKIM 对齐判定。
+	// V批核查修复批 E-3（G2 批准 2026-10-18 05:13→05:48:30 三段终态——rfc9989
+	// §5.3.1 L1640-1644「If zero or more than one domain is extracted from the
+	// RFC5322.From header field, then DMARC validation is not possible and the
+	// process terminates. In the case where more than one domain is retrieved,
+	// the Mail Receiver MAY choose to go forward with DMARC validation anyway.
+	// See Section 11.5」＋§11.5 L2495-2504 逐域评估最严格策略＋rfc5322bis
+	// §3.6.2 多地址 From MUST 携带 Sender）：①单地址=既有单域路径（零变化锚）
+	// ②多地址无 Sender（或多 From 头行）=violation 拒收档（不评估，§5.3.1 终止）
+	// ③多地址有 Sender（5322 合法）=§11.5 L2501-2504「apply the DMARC mechanism
+	// to each domain found in the RFC5322.From field as the Author Domain and
+	// apply the most strict policy selected among the checks that fail」逐域
+	// 评估＋失败检查中最严格策略聚合；L2506-2510 DoS 限数（超 maxFromDomains
+	// 域不评估——评估不完整按已评估集聚合）。
 	var fromDomain string
 	if stack.DMARCEnabled {
-		fd, ferr := FromDomain(msg.Raw)
-		if ferr != nil {
-			res.DMARC = "permerror" // From 缺失/畸形（ErrMissingFrom 定档）
-		} else {
-			fromDomain = fd
+		fi, ferr := extractFromHeader(msg.Raw)
+		switch {
+		case ferr != nil:
+			res.DMARC = "permerror" // From 缺失/畸形（ErrMissingFrom 定档——现行语义保持）
+		case fi.violation():
+			// E-3②拒收档：5322 MUST 违规（多地址无 Sender/多 From 头行）——§5.3.1
+			// 验证不可能流程终止（不评估）；permerror 结论如实标注；管道拒收标记
+			res.DMARC = "permerror"
+			res.FromHeaderViolation = true
+			if len(fi.domains) > 0 {
+				fromDomain = fi.domains[0] // A-R header.from 首域呈现（单值限制）
+			}
+		case len(fi.domains) == 1:
+			// ①单地址（零变化锚——既有单域评估路径原样保持）
+			fromDomain = fi.domains[0]
 			// B-S批 F6（裁决 B 2026-10-09 13:34——仅缓存无总预算）：Tree Walk 请求级
 			// 缓存——Verify 单次调用内构造 cachedTXT，Discover 与 OrganizationalDomain
 			// 共享同一实例，重复 _dmarc TXT 查询复用；跨调用零共享零污染
@@ -193,6 +239,55 @@ func (v *VerifierService) Verify(ctx context.Context, msg *IncomingMail) (*Verif
 				case "reject", "quarantine":
 					res.DMARCDisposition = disc.Record.Policy
 				}
+			}
+		default:
+			// ③多地址有 Sender（5322 合法）：§11.5 L2501-2504 逐域评估——各域
+			// Evaluate（dkimSigs/spf 对齐输入共享，§4.4 对齐按各 Author Domain
+			// 独立判定）；失败检查中最严格策略（reject>quarantine）聚合为整封
+			// 处置；结论按 fail>temperror>pass>none 最严呈现；A-R header.from
+			// 首域（rfc8601 单值呈现限制）
+			fromDomain = fi.domains[0]
+			anyFail, anyTemp, anyPass := false, false, false
+			sawReject, sawQuarantine := false, false
+			evaluated := fi.domains
+			if len(evaluated) > maxFromDomains {
+				evaluated = evaluated[:maxFromDomains] // §11.5 L2506-2510 DoS 限数：超限域不评估
+			}
+			for _, dom := range evaluated {
+				dmResult, disc, _ := dmarc.Evaluate(ctx, &cachedTXT{inner: txtResolverAdapter{r: v.resolver}},
+					dom, dkimSigs, spfPass, spfDomain)
+				switch dmResult {
+				case dmarc.ResultFail:
+					anyFail = true
+					if disc != nil {
+						switch disc.Record.Policy {
+						case "reject":
+							sawReject = true
+						case "quarantine":
+							sawQuarantine = true
+						}
+					}
+				case dmarc.ResultTemperror:
+					anyTemp = true
+				case dmarc.ResultPass:
+					anyPass = true
+				}
+			}
+			switch {
+			case anyFail:
+				res.DMARC = "fail"
+			case anyTemp:
+				res.DMARC = "temperror"
+			case anyPass:
+				res.DMARC = "pass"
+			default:
+				res.DMARC = "none"
+			}
+			switch {
+			case sawReject:
+				res.DMARCDisposition = "reject"
+			case sawQuarantine:
+				res.DMARCDisposition = "quarantine"
 			}
 		}
 	}
@@ -267,9 +362,63 @@ func aggregateDKIM(results []ravendkim.Result) (conclusion, reportDomain string)
 	return "none", ""
 }
 
+// maxFromDomains 多地址 From 逐域评估的域数上限（V批 E-3③——rfc9989 §11.5
+// L2506-2510「Limiting the number of Author Domains processed will avoid this
+// risk. If not all Author Domains are processed, then the DMARC evaluation
+// is incomplete」：大量域的逐一 DNS Tree Walk 构成 DoS 攻击面；超限域不参与
+// 评估〔评估不完整——按已评估集聚合终态〕。8=DKIM 签名数/SPF 查询链常见工程
+// 上限档）。
+const maxFromDomains = 8
+
+// fromHeaderInfo RFC5322 From 头提取产物（V批 E-3——rfc5322bis §3.6.2+rfc9989
+// §5.3.1/§11.5 锚定）。
+type fromHeaderInfo struct {
+	domains   []string // From 头各地址的域（小写规范化；单地址=单元素）
+	hasSender bool     // Sender 头存在（多地址 From 时 rfc5322 §3.6.2 L1263-1265 MUST 携带）
+	multiFrom bool     // 多个 From 头行（rfc9989 §11.5 L2490「precisely one From: header field」〔引 RFC5322〕违反）
+}
+
+// violation 多地址 From 缺 Sender 头或多个 From 头行——rfc5322 §3.6.2 MUST 违规
+// （E-3② 拒收档判定；单地址场景恒 false——SHOULD NOT 使用 Sender，缺失正常）。
+func (f *fromHeaderInfo) violation() bool {
+	return f.multiFrom || (len(f.domains) > 1 && !f.hasSender)
+}
+
+// extractFromHeader 提取 From 头信息（From 缺失/不可解析返回 ErrMissingFrom——
+// 现行 FromDomain 定档语义保持）。
+// 参数：raw 原始消息字节。返回：提取产物；错误=From 头层不可用。
+func extractFromHeader(raw []byte) (*fromHeaderInfo, error) {
+	msg, err := mail.ReadMessage(strings.NewReader(string(raw)))
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrMissingFrom, err)
+	}
+	fromLines := msg.Header["From"] // net/mail.Header 为 map[string][]string（键经规范化）
+	if len(fromLines) == 0 {
+		return nil, fmt.Errorf("%w: From 头缺失", ErrMissingFrom)
+	}
+	addrs, err := mail.ParseAddressList(fromLines[0])
+	if err != nil || len(addrs) == 0 {
+		return nil, fmt.Errorf("%w: From 头不可解析", ErrMissingFrom)
+	}
+	fi := &fromHeaderInfo{
+		hasSender: strings.TrimSpace(msg.Header.Get("Sender")) != "",
+		multiFrom: len(fromLines) > 1,
+	}
+	for _, a := range addrs {
+		at := strings.LastIndex(a.Address, "@")
+		if at < 0 || at == len(a.Address)-1 {
+			return nil, fmt.Errorf("%w: From 地址无域", ErrMissingFrom)
+		}
+		fi.domains = append(fi.domains, strings.ToLower(a.Address[at+1:]))
+	}
+	return fi, nil
+}
+
 // FromDomain 提取 RFC5322 From 头域（DMARC Author Domain；rfc9989 4.2：
 // 取首个地址的域，小写规范化）。参数：raw 原始消息字节。
 // 返回：域；From 缺失/不可解析返回 ErrMissingFrom。
+// V批 E-3 注：多地址 From 场景本函数返回首域（管道 DMARC reject Reason 的
+// 可观测呈现用）；处置主链经 fromHeaderInfo 三段判定承载。
 func FromDomain(raw []byte) (string, error) {
 	msg, err := mail.ReadMessage(strings.NewReader(string(raw)))
 	if err != nil {

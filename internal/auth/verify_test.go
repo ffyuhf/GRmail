@@ -342,3 +342,106 @@ func generateRSAKeyPEM(t *testing.T) (*rsa.PrivateKey, string) {
 	}
 	return key, path
 }
+
+// ───────────────────── V批核查修复批 E-3：多地址 From 三段终态（rfc9989 §5.3.1/§11.5+rfc5322bis §3.6.2） ─────────────────────
+
+// multiFromMessage 构造多地址 From 测试消息（senderHeader 非空时携带 Sender 头）。
+func multiFromMessage(fromLine, senderHeader string) []byte {
+	var b strings.Builder
+	b.WriteString("From: " + fromLine + "\r\n")
+	if senderHeader != "" {
+		b.WriteString("Sender: " + senderHeader + "\r\n")
+	}
+	b.WriteString("To: rcpt@example.org\r\nSubject: mf\r\n\r\nbody\r\n")
+	return []byte(b.String())
+}
+
+// TestVerifyMultiFromNoSenderViolation E-3②：多地址 From 无 Sender 头——rfc5322bis
+// §3.6.2 L1263-1265 MUST 违规：violation 置位＋DMARC=permerror（rfc9989 §5.3.1
+// L1640-1644 验证不可能终止）＋处置不预计算（拒收归管道 checkRejectionPolicy）。
+func TestVerifyMultiFromNoSenderViolation(t *testing.T) {
+	resolver := newStubResolver().withTXT("_dmarc.example.com", "v=DMARC1; p=reject")
+	svc := NewVerifierService(resolver, "mx.test", config.AuthStack{DMARCEnabled: true})
+	res, err := svc.Verify(context.Background(), incoming("mail.example.com", net.ParseIP("192.0.2.1"),
+		"user@example.com", multiFromMessage("a@other.net, b@example.com", "")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.FromHeaderViolation {
+		t.Fatal("多地址 From 无 Sender 应置 FromHeaderViolation")
+	}
+	if res.DMARC != "permerror" {
+		t.Fatalf("§5.3.1 终止应 permerror: %q", res.DMARC)
+	}
+	if res.DMARCDisposition != "" {
+		t.Fatalf("violation 档不预计算处置: %q", res.DMARCDisposition)
+	}
+}
+
+// TestVerifyMultiFromHeaderLinesViolation 多个 From 头行（rfc9989 §11.5 L2490
+// 「precisely one From: header field」〔引 RFC5322〕违反）——同 violation 拒收档。
+func TestVerifyMultiFromHeaderLinesViolation(t *testing.T) {
+	raw := []byte("From: a@other.net\r\nFrom: b@example.com\r\nTo: x@example.org\r\n\r\nbody\r\n")
+	svc := NewVerifierService(newStubResolver(), "mx.test", config.AuthStack{DMARCEnabled: true})
+	res, err := svc.Verify(context.Background(), incoming("mail.example.com", net.ParseIP("192.0.2.1"),
+		"user@example.com", raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.FromHeaderViolation || res.DMARC != "permerror" {
+		t.Fatalf("多 From 头行应 violation+permerror: %+v", res)
+	}
+}
+
+// TestVerifyMultiFromWithSenderStrictest E-3③：多地址＋Sender（5322 合法）——
+// rfc9989 §11.5 L2501-2504「apply the DMARC mechanism to each domain ... and
+// apply the most strict policy selected among the checks that fail」逐域评估
+// 最严格聚合。信封 mailfrom=user@other.net（SPF 对齐 other.net pass）；From
+// 双域：other.net（对齐 pass）与 example.com（不对齐 fail——按其 _dmarc p 值取最严）。
+func TestVerifyMultiFromWithSenderStrictest(t *testing.T) {
+	eval := func(examplePolicy string) *VerifyResults {
+		resolver := newStubResolver().
+			withTXT("other.net", "v=spf1 ip4:192.0.2.0/24 -all").
+			withTXT("_dmarc.example.com", examplePolicy)
+		svc := NewVerifierService(resolver, "mx.test",
+			config.AuthStack{SPFEnabled: true, DMARCEnabled: true})
+		res, err := svc.Verify(context.Background(), incoming("mail.other.net", net.ParseIP("192.0.2.1"),
+			"user@other.net", multiFromMessage("a@other.net, b@example.com", "s@other.net")))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res
+	}
+	// 失败域 p=reject → 整封 fail＋最严 reject
+	if r := eval("v=DMARC1; p=reject"); r.DMARC != "fail" || r.DMARCDisposition != "reject" {
+		t.Fatalf("reject 最严: DMARC=%q disp=%q", r.DMARC, r.DMARCDisposition)
+	}
+	// 失败域 p=quarantine → 整封 fail＋quarantine
+	if r := eval("v=DMARC1; p=quarantine"); r.DMARC != "fail" || r.DMARCDisposition != "quarantine" {
+		t.Fatalf("quarantine 最严: DMARC=%q disp=%q", r.DMARC, r.DMARCDisposition)
+	}
+	// 失败域 p=none → fail（结论最严呈现）但处置不分派
+	if r := eval("v=DMARC1; p=none"); r.DMARC != "fail" || r.DMARCDisposition != "" {
+		t.Fatalf("p=none 不分派: DMARC=%q disp=%q", r.DMARC, r.DMARCDisposition)
+	}
+}
+
+// TestVerifyMultiFromAllLegitPass E-3③：全部域合法（同域双地址对齐 pass——
+// _dmarc.other.net 记录在位使对齐判定可达 pass）——整封 pass＋处置空＋
+// violation false（合法多地址照收锚）。
+func TestVerifyMultiFromAllLegitPass(t *testing.T) {
+	resolver := newStubResolver().
+		withTXT("other.net", "v=spf1 ip4:192.0.2.0/24 -all").
+		withTXT("_dmarc.other.net", "v=DMARC1; p=none")
+	svc := NewVerifierService(resolver, "mx.test",
+		config.AuthStack{SPFEnabled: true, DMARCEnabled: true})
+	res, err := svc.Verify(context.Background(), incoming("mail.other.net", net.ParseIP("192.0.2.1"),
+		"user@other.net", multiFromMessage("a@other.net, b@other.net", "s@other.net")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.FromHeaderViolation || res.DMARC != "pass" || res.DMARCDisposition != "" {
+		t.Fatalf("全合法应 pass 不分派: violation=%v DMARC=%q disp=%q",
+			res.FromHeaderViolation, res.DMARC, res.DMARCDisposition)
+	}
+}
