@@ -22,13 +22,17 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION} 
 
 # ── 运行层：最小基底（纯 Go 静态产物，零运行时依赖） ──
 FROM alpine:3.20
-RUN adduser -D -u 10001 grmail && mkdir -p /app/data && chown -R grmail:grmail /app
+# GRM高危处置批（GRM-002/E-2-B，G2 批准 2026-10-19 07:06:11「B」）：配置持久卷——
+# config.json 经 GRMAIL_CONFIG 指向 /app/config/（main.go 环境变量覆盖链），随
+# grmail-config 卷持久（删容器重开向导建第二管理员的缺陷收口；data 卷既有保持）
+RUN adduser -D -u 10001 grmail && mkdir -p /app/data /app/config && chown -R grmail:grmail /app
 WORKDIR /app
+ENV GRMAIL_CONFIG=/app/config/config.json
 COPY --from=build /out/mail-server ./mail-server
 # U20：容器健康探测（alpine busybox wget——GET / →302→/setup/1→200 链路健康退出 0；
 # start-period 10s 容纳迁移/启动，30s 周期+S4 容器内实测验证锚——计划书 1.5③）
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 CMD wget -q --spider http://127.0.0.1/ || exit 1
 USER grmail
-VOLUME ["/app/data"]
+VOLUME ["/app/data", "/app/config"]
 EXPOSE 80 443 25 465 587 993 995
 ENTRYPOINT ["./mail-server"]

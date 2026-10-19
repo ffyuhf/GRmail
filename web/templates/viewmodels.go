@@ -135,7 +135,8 @@ type SetupData struct {
 	Title         string
 	Error         string          // 表单错误（空=无）
 	Next          string          // 下一 slug（导航）
-	LangNext      string          // 语言切换回跳路径（缺陷④b——/setup/<slug> 当前步；langSwitchHref next 承载）
+	Token         string          // GRM-001：引导期一次性访问令牌（setupmode 注入——表单隐藏域承载；空=校验关闭形态）
+	LangNext      string          // 语言切换回跳路径（缺陷④b——/setup/<slug> 当前步；langSwitchHref next 承载；GRM-001 起含 ?setup_token= 透传）
 	Driver        string          // 步 1：sqlite/mysql/postgres
 	DSN           string          // 步 1：连接串（高级模式回填——分字段模式时拆解回显）
 	DSNHost       string          // 步 1 分字段：数据库主机名（P11 DSN 双模式——Setup向导新手可用性批次）
@@ -200,6 +201,8 @@ type SettingsData struct {
 	AbsoluteHours      int
 	LimitWindowMinutes int
 	LimitThreshold     int64
+	// GRM高危处置批（GRM-004）：提交端点连接上限（/admin/settings 会话限流节承载）
+	SubmissionMaxConns int
 	// 传输安全节（U13：FR-010——开关热加载生效，Web 关闭即端点停发/建议值停显）
 	MTAStsEnabled       bool
 	MTAStsMode          string // enforce | testing（rfc8461 §3.2）

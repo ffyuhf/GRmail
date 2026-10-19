@@ -378,11 +378,16 @@ func (sess *session) cmdData(ctx context.Context) bool {
 // - 终止序列首 CRLF 即最后一行行尾：消息字节=内容+单次 CRLF 收尾（不加多余空行）；
 // - 点透明还原（4.5.2）：CRLF 行界后的行首点剥一（单点行已被终止逻辑消费）；
 // - SIZE 累计超限即短路标记，继续消费至终止序列保持协议同步后返回（552 由调用方应答）。
-// 返回：消息字节、是否超限、IO 错误。
+// GRM高危处置批（GRM-003/E-3-A，G2 批准 2026-10-19 07:06:11「A」）：超限标记置位后
+// 停止累积（内存上界=limit+单块——原标记后 buf 继续无界 append，对端持续发送不终止
+// 构成内存耗尽面，NFR-002 防线）；终止检测改滑窗（保留尾部 len(dataTerminator)-1
+// 字节衔接跨块终止序列）；被拒邮件本即 552 不投递——内容不完整无功能损失（计划书 1.2 披露）。
+// 返回：消息字节（超限态为截断前缀）、是否超限、IO 错误。
 func (sess *session) readData() ([]byte, bool, error) {
 	limit := sess.srv.cfg.MaxMessageSize()
 	var buf []byte
-	scanned := 0 // 已扫描偏移（终止序列跨块边界回退 4 字节重扫）
+	scanned := 0     // 已扫描偏移（终止序列跨块边界回退 4 字节重扫）
+	tail := []byte{} // GRM-003：超限态滑窗（跨块终止序列衔接）
 	tooBig := false
 
 	for {
@@ -390,20 +395,31 @@ func (sess *session) readData() ([]byte, bool, error) {
 		chunk := make([]byte, readChunk)
 		n, err := sess.conn.Read(chunk)
 		if n > 0 {
-			buf = append(buf, chunk[:n]...)
-			// 自上次扫描点-3 回退扫描（终止序列最长跨块 4 字节）
-			start := scanned - len(dataTerminator) + 1
-			if start < 0 {
-				start = 0
-			}
-			if idx := indexDataTerminator(buf, start); idx >= 0 {
-				msg := unstuffDots(buf[:idx])
-				// 超限以实际消息长度终判（单块读入时累计标记尚未置位的路径——缺陷修正 2026-09-17）
-				return msg, tooBig || int64(len(msg)) > limit, nil
-			}
-			scanned = len(buf)
-			if !tooBig && int64(len(buf)) > limit {
-				tooBig = true // 标记后继续消费至终止序列（协议同步）
+			if tooBig {
+				// GRM-003：超限后仅滑窗检测终止序列（协议同步——消费至 <CRLF>.<CRLF> 后 552）
+				tail = append(tail, chunk[:n]...)
+				if idx := indexDataTerminator(tail, 0); idx >= 0 {
+					return nil, true, nil
+				}
+				if keep := len(dataTerminator) - 1; len(tail) > keep {
+					tail = tail[len(tail)-keep:]
+				}
+			} else {
+				buf = append(buf, chunk[:n]...)
+				// 自上次扫描点-3 回退扫描（终止序列最长跨块 4 字节）
+				start := scanned - len(dataTerminator) + 1
+				if start < 0 {
+					start = 0
+				}
+				if idx := indexDataTerminator(buf, start); idx >= 0 {
+					msg := unstuffDots(buf[:idx])
+					// 超限以实际消息长度终判（单块读入时累计标记尚未置位的路径——缺陷修正 2026-09-17）
+					return msg, tooBig || int64(len(msg)) > limit, nil
+				}
+				scanned = len(buf)
+				if int64(len(buf)) > limit {
+					tooBig = true // GRM-003：标记后停止累积（滑窗续接终止检测）
+				}
 			}
 		}
 		if err != nil {

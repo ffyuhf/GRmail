@@ -130,6 +130,8 @@ templ SettingsView(data SettingsData) {
 				<label>{ Tr(lang, "settings.absolute") } <input type="number" name="absoluteHours" min="1" value={ strconvItoa(data.AbsoluteHours) }/></label>
 				<label>{ Tr(lang, "settings.limitWin") } <input type="number" name="limitWindowMinutes" min="1" value={ strconvItoa(data.LimitWindowMinutes) }/></label>
 				<label>{ Tr(lang, "settings.limitThr") } <input type="number" name="limitThreshold" min="1" value={ strconvItoa64(data.LimitThreshold) }/></label>
+				// GRM高危处置批（GRM-004）：提交端点连接上限（G2 附加指示「必须在后台管理设置里可设置」）
+				<label>{ Tr(lang, "settings.subMaxConns") } <input type="number" name="submissionMaxConns" min="1" value={ strconvItoa(data.SubmissionMaxConns) }/></label>
 				<button class="primary" type="submit">{ Tr(lang, "common.save") }</button>
 			</form>
 		</details>

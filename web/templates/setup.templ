@@ -69,6 +69,10 @@ templ SetupView(data SetupData) {
 			</section>
 			<p class="desc">{ Tr(lang, "setup.desc1") }</p>
 			<form method="post" action="/setup/database">
+				// GRM-001：一次性访问令牌隐藏域（setupmode 注入；空=校验关闭形态零输出语义）
+				if data.Token != "" {
+					<input type="hidden" name="setup_token" value={ data.Token }/>
+				}
 				<fieldset>
 					<legend>{ Tr(lang, "setup.s1Legend") } <small class="ref">{ Tr(lang, "setup.s1Ref") }</small></legend>
 					<label><input type="radio" name="driver" value="sqlite" { checkedAttrs(data.Driver == "sqlite" || data.Driver == "")... }/> { Tr(lang, "setup.sqlite") }</label>
@@ -107,6 +111,9 @@ templ SetupView(data SetupData) {
 				<p class="notice">{ Tr(lang, "setup.adminExists") }</p>
 			}
 			<form method="post" action="/setup/admin">
+				if data.Token != "" {
+					<input type="hidden" name="setup_token" value={ data.Token }/>
+				}
 				<fieldset>
 					<legend>{ Tr(lang, "setup.s2Legend") } <small class="ref">{ Tr(lang, "setup.s2Ref") }</small></legend>
 						<label>{ Tr(lang, "login.username") } <input type="text" name="username" value={ data.Username } required maxlength="64" { disabledAttrs(data.HadAdmin)... }/></label>
@@ -119,13 +126,19 @@ templ SetupView(data SetupData) {
 				<button class="primary" type="submit" { disabledAttrs(data.HadAdmin)... }>{ Tr(lang, "setup.createGo") }</button>
 			</form>
 			<form method="post" action="/setup/admin">
-				<input type="hidden" name="action" value="skip"/>
+					if data.Token != "" {
+						<input type="hidden" name="setup_token" value={ data.Token }/>
+					}
+					<input type="hidden" name="action" value="skip"/>
 				<p class="hint">{ Tr(lang, "setup.s2Hint") }<button type="submit" class="linklike">{ Tr(lang, "setup.skip") }</button></p>
 			</form>
 		}
 		if data.Step == 3 {
 			<p class="desc">{ Tr(lang, "setup.desc3") }</p>
 			<form method="post" action="/setup/domain">
+				if data.Token != "" {
+					<input type="hidden" name="setup_token" value={ data.Token }/>
+				}
 				<fieldset>
 					<legend>{ Tr(lang, "setup.s3Legend") }</legend>
 					<label>{ Tr(lang, "setup.domain") } <input type="text" name="domain" value={ data.Domain } required maxlength="255"/></label>
@@ -151,6 +164,9 @@ templ SetupView(data SetupData) {
 		if data.Step == 4 {
 			<p class="desc">{ Tr(lang, "setup.desc4") }</p>
 			<form method="post" action="/setup/dns">
+				if data.Token != "" {
+					<input type="hidden" name="setup_token" value={ data.Token }/>
+				}
 				<fieldset>
 					<legend>{ Tr(lang, "setup.s4Legend") }</legend>
 					<div class="table-wrap">
@@ -176,6 +192,9 @@ templ SetupView(data SetupData) {
 				<p class="error" role="alert"><strong>{ Tr(lang, "setup.portWarnTitle") }{ colonFor(lang) }{ strconvItoa(data.HTTPPort) }</strong> —— { Tr(lang, "setup.portWarnBody") }</p>
 			}
 			<form method="post" action="/setup/ssl">
+				if data.Token != "" {
+					<input type="hidden" name="setup_token" value={ data.Token }/>
+				}
 				<fieldset>
 					<legend>{ Tr(lang, "setup.s5Legend") } <small class="ref">{ Tr(lang, "setup.s5Ref") }</small></legend>
 					<label><input type="radio" name="mode" value="acme" { checkedAttrs(data.SSLMode != "manual")... }/> { Tr(lang, "setup.acme") }</label>
@@ -199,6 +218,9 @@ templ SetupView(data SetupData) {
 			// 客户端参数表+details 技术细节折叠区（零信息丢失——细节降级呈现）。
 			<p class="desc">{ Tr(lang, "setup.desc6") }</p>
 			<form method="post" action="/setup/done">
+				if data.Token != "" {
+					<input type="hidden" name="setup_token" value={ data.Token }/>
+				}
 				<fieldset>
 					<legend>{ Tr(lang, "setup.s6Legend") }</legend>
 					<p class="desc">{ Tr(lang, "setup.s6Intro") }</p>

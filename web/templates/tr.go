@@ -372,6 +372,8 @@ var messages = map[string][2]string{
 	"settings.absolute":    {"会话绝对超时（小时）", "Session absolute timeout (hours)"},
 	"settings.limitWin":    {"登录失败窗口（分钟）", "Login failure window (minutes)"},
 	"settings.limitThr":    {"失败锁定阈值（次）", "Lockout threshold (attempts)"},
+	// GRM高危处置批（GRM-004）：提交端点连接上限（会话限流节承载——后台管理设置可配）
+	"settings.subMaxConns": {"提交端点连接上限（465/587 合计，热生效）", "Submission endpoint max connections (465/587 combined)"},
 	"settings.stsPub":      {"MTA-STS 策略发布（rfc8461——关闭即策略端点停发）", "MTA-STS policy publishing (rfc8461)"},
 	"settings.stsMode":     {"MTA-STS 模式", "MTA-STS mode"},
 	"settings.stsAge":      {"MTA-STS max_age（秒）", "MTA-STS max_age (seconds)"},
@@ -400,10 +402,13 @@ var messages = map[string][2]string{
 	"settings.errAbsolute":    {"会话绝对超时必须为正整数（小时）", "Session absolute timeout must be a positive integer (hours)"},
 	"settings.errLimitWin":    {"限流窗口必须为正整数（分钟）", "Throttle window must be a positive integer (minutes)"},
 	"settings.errLimitThr":    {"限流阈值必须为正整数（次）", "Lockout threshold must be a positive integer"},
+	"settings.errSubConns":    {"提交端点连接上限必须为正整数", "Submission max connections must be a positive integer"},
 	"settings.errStsMode":     {"MTA-STS 模式必须为 enforce 或 testing", "MTA-STS mode must be enforce or testing"},
 	"settings.errStsAge":      {"MTA-STS max_age 必须为 1..31557600 秒（rfc8461 §3.2）", "MTA-STS max_age must be 1..31557600 seconds (rfc8461 §3.2)"},
 	// ── Setup 向导深级（U18——setup.templ/setup.go 深级双语收口）──
-	"setup.title":         {"GRmail · 初始部署向导", "GRmail · Setup wizard"},
+	"setup.title": {"GRmail · 初始部署向导", "GRmail · Setup wizard"},
+	// GRM高危处置批（GRM-001）：token 拒绝页文案（errPage 消费——无 token 直接访问被拒）
+	"setup.tokenRequired": {"Setup 向导访问被拒：请从服务启动日志复制包含访问令牌（setup_token）的完整 URL 打开（直接访问 IP 被拒绝）", "Setup wizard access denied: open the URL containing the one-time token (setup_token) from the server startup log (direct IP access is rejected)"},
 	"setup.h1":            {"GRmail 初始部署（第 %d / %d 步：%s）", "GRmail setup (step %d / %d: %s)"},
 	"setup.s1Legend":      {"数据库选择（SQLite / MySQL / PostgreSQL 三种可选）", "Database (SQLite / MySQL / PostgreSQL)"},
 	"setup.s1Ref":         {"需求条目 FR-014", "Requirement FR-014"},

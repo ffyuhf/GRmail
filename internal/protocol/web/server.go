@@ -108,6 +108,12 @@ type ServerConfig struct {
 
 	// ── Webmail管理职能批次增量注入位（nil=/admin/plugins 端点 503——渐进部署形态）──
 	Plugins PluginStatusSource // 插件状态只读供给（G6——main 装配桥接 supervisor.StatusSnapshot）
+
+	// ── GRM高危处置批增量注入位（GRM-001/Setup Token 鉴权——PMail C4 形态）──
+	// SetupToken 引导期一次性访问令牌（setupmode 启动生成 32B CSPRNG hex 注入；空=校验
+	// 关闭——测试直构/既有部署形态兼容锚，沿 Tokens/SieveScripts nil 渐进态先例；生产
+	// 引导态恒注入——setupGate 对 /setup 族 GET query/POST 表单域校验，无 token 访问被拒）。
+	SetupToken string
 }
 
 // Server Web 服务端（Gin 引擎宿主）。

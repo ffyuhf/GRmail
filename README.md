@@ -95,8 +95,10 @@ docker build -t grmail --build-arg VERSION=$(git describe --tags --always) \
   --build-arg GIT_COMMIT=$(git rev-parse --short HEAD) \
   --build-arg BUILD_TIME=$(date -Iseconds) .
 docker run -d -p 80:80 -p 443:443 -p 25:25 -p 465:465 -p 587:587 -p 993:993 -p 995:995 \
-  -v grmail-data:/app/data grmail
+  -v grmail-data:/app/data -v grmail-config:/app/config grmail
 ```
+
+配置文件（`config.json`）经 `GRMAIL_CONFIG` 环境变量指向 `/app/config/`——**务必挂载 grmail-config 卷**（不挂则容器重建丢失配置，重开向导可创建第二管理员）。
 
 ### 方式三：源码构建
 

@@ -114,8 +114,17 @@ var (
 	buildTime = "unknown"
 )
 
-// configPath 运行时配置文件路径（CON-003：单一 config.json）
-const configPath = "config.json"
+// configPath 运行时配置文件路径（CON-003：单一 config.json）。
+// GRM高危处置批（GRM-002/E-2-B，G2 批准 2026-10-19 07:06:11「B」）：GRMAIL_CONFIG
+// 环境变量覆盖——Docker 形态经 ENV 指向卷内路径（/app/config/config.json，配置随
+// grmail-config 卷持久——删容器重开向导建第二管理员的缺陷收口）；缺省 config.json
+// 裸机/手动部署形态零变化（沿 PMail PMail_ROOT 环境变量覆盖先例）。
+var configPath = func() string {
+	if p := os.Getenv("GRMAIL_CONFIG"); p != "" {
+		return p
+	}
+	return "config.json"
+}()
 
 // loginAttemptPurgeWindow login_attempts 记录保留窗（U18——U14b 登记项①收口：
 // 限流窗口 15min 的远超上限，窗口外计数行全清防表膨胀；ClearSubject 成功清零
@@ -561,6 +570,10 @@ func main() {
 		MaxMessageSize: func() int64 { return configWatcher.Current().Mail.MaxMessageSizeBytes },
 		TLSConfig:      func() *tls.Config { return tlsMgr.ServerTLSConfig(domain) },
 		ProtocolDebug:  func() bool { return configWatcher.Current().Log.ProtocolDebug }, // U23 协议 debug 快照（proto=submission）
+		// GRM高危处置批（GRM-004/E-4-A+附加指示「必须在后台管理设置里可设置」，G2 批准
+		// 2026-10-19 07:06:11）：提交端点连接上限快照（config Server.SubmissionMaxConns——
+		// /admin/settings 会话限流节可配热生效；0 值由服务端缺省档 256 兜底——沿 F8 端点同档）
+		MaxConns: func() int { return configWatcher.Current().Server.SubmissionMaxConns },
 		// 提交端点对齐批（F3①/B-S10①）：AUTH 失败限流——login_attempts 仓储窄接口
 		// 注入+LoginLimit 快照（与 web 登录限流同源同参热生效；nil 渐进态防御在包内）。
 		Attempts: loginAttemptRepo,

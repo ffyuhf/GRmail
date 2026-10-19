@@ -83,6 +83,11 @@ func (s *Server) buildSettingsData(c *gin.Context, cfg *config.Config, msg strin
 		AbsoluteHours:      cfg.Session.AbsoluteHours,
 		LimitWindowMinutes: cfg.LoginLimit.WindowMinutes,
 		LimitThreshold:     cfg.LoginLimit.Threshold,
+		// GRM高危处置批（GRM-004）：提交端点连接上限（零值兜底呈现 256——config.Load 同口径）
+		SubmissionMaxConns: cfg.Server.SubmissionMaxConns,
+	}
+	if data.SubmissionMaxConns <= 0 {
+		data.SubmissionMaxConns = 256
 	}
 	// U13 传输安全节（FR-010：当前值回填+DNS 建议值只读区——判定①部署对照物）
 	data.MTAStsEnabled = cfg.MTASts.Enabled
@@ -258,9 +263,24 @@ func (s *Server) settingsSaveSession(c *gin.Context) {
 		s.settingsReject(c, templates.Tr(langOf(c), "settings.errLimitThr"))
 		return
 	}
+	// GRM高危处置批（GRM-004）：提交端点连接上限（附加指示「必须在后台管理设置里可设置」）。
+	// 空值保留语义（沿 B5「未提交字段保留现值」——旧表单/既有部署零适配兼容锚）：
+	// 表单缺字段或空串=不修改现值；有值时正整数校验拒绝。
+	subMaxConns := 0
+	if strings.TrimSpace(c.PostForm("submissionMaxConns")) != "" {
+		v, verr := parsePositiveForm(c, "submissionMaxConns")
+		if verr != nil {
+			s.settingsReject(c, templates.Tr(langOf(c), "settings.errSubConns"))
+			return
+		}
+		subMaxConns = int(v)
+	}
 	if err := s.cfg.SaveConfig(func(cfg *config.Config) {
 		cfg.Session = config.SessionConf{IdleMinutes: int(idleMinutes), AbsoluteHours: int(absoluteHours)}
 		cfg.LoginLimit = config.LoginLimitConf{WindowMinutes: int(limitWindow), Threshold: limitThreshold}
+		if subMaxConns > 0 {
+			cfg.Server.SubmissionMaxConns = subMaxConns
+		}
 	}); err != nil {
 		s.settingsSaveFailed(c, "会话限流节", err)
 		return

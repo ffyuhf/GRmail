@@ -98,6 +98,8 @@ type ServerConf struct {
 	IMAPPort           int    `json:"imapPort"`           // IMAP4rev2 993 端口（仅隐式 TLS——U6 Q1-A 2026-09-18 00:00:04，rfc8314 §1/§3.2 推荐形态；缺省 993，重启生效）
 	POP3Port           int    `json:"pop3Port"`           // POP3 995 端口（仅隐式 TLS——U7 计划书 v1.0.0 步骤 1，rfc8314 §3.2；缺省 995，重启生效）
 	ManageSievePort    int    `json:"manageSievePort"`    // ManageSieve 4190 端口（明文承载+STARTTLS 可选升级——U12b 计划书 1.5①，rfc5804 §1.8；缺省 4190，重启生效）
+	// ── GRM高危处置批增量（GRM-004/E-4-A+附加指示「必须在后台管理设置里可设置」，G2 批准 2026-10-19 07:06:11）──
+	SubmissionMaxConns int `json:"submissionMaxConns"` // SMTP 提交端点（465/587 合计）连接数上限（快照热生效——/admin/settings 会话限流节可配；缺省 256=25/IMAP/POP3 F8 同档；0 值兜底 256）
 }
 
 // TLSConf 服务端 TLS 证书配置（U5 Q2-A：transport 域最小集的输入；ACME 自动签发归 U10，
@@ -197,7 +199,7 @@ type Config struct {
 // Default 返回内置默认配置（Setup 未完成前的引导态）
 func Default() *Config {
 	return &Config{
-		Server:   ServerConf{Domain: "localhost", HTTPPort: 443, SMTPPort: 25, SubmissionPort: 587, SubmissionTLSPort: 465, IMAPPort: 993, POP3Port: 995, ManageSievePort: 4190},
+		Server:   ServerConf{Domain: "localhost", HTTPPort: 443, SMTPPort: 25, SubmissionPort: 587, SubmissionTLSPort: 465, IMAPPort: 993, POP3Port: 995, ManageSievePort: 4190, SubmissionMaxConns: 256}, // GRM-004：提交端点连接上限缺省 256（F8 同档）
 		Database: DatabaseConf{Driver: "sqlite", DSN: "data/grmail.db"},
 		Auth: AuthStack{
 			SPFEnabled: true, DKIMEnabled: true, DMARCEnabled: true, ARCEnabled: true,
@@ -255,6 +257,10 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.MTASts.MaxAgeSeconds <= 0 || cfg.MTASts.MaxAgeSeconds > 31557600 {
 		cfg.MTASts.MaxAgeSeconds = 604800
+	}
+	// GRM高危处置批（GRM-004）：连接上限零值兜底（旧 JSON 缺键=0——恢复缺省档 256；负值拒绝上限语义一并兜底）
+	if cfg.Server.SubmissionMaxConns <= 0 {
+		cfg.Server.SubmissionMaxConns = 256
 	}
 	// 两项变更实施批：档位键非法值兜底（沿 MTASts.Mode 先例——零值/非枚举=缺省档）
 	if cfg.Auth.SPFPolicy != "soft" && cfg.Auth.SPFPolicy != "hard" {

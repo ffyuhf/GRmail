@@ -99,7 +99,7 @@ func (s *Server) setupFail(c *gin.Context, idx int, err error) {
 func (s *Server) setupGET(c *gin.Context) {
 	idx := setupStepIndex(c.Param("step"))
 	if idx < 0 {
-		c.Redirect(http.StatusFound, "/setup/1")
+		c.Redirect(http.StatusFound, s.setupEntryURL()) // GRM-001：token 附加
 		return
 	}
 	renderPage(c, http.StatusOK, templates.SetupView(s.buildSetupData(c, idx, "")))
@@ -107,8 +107,22 @@ func (s *Server) setupGET(c *gin.Context) {
 
 // buildSetupData 装配向导页数据（当前配置快照回填）。
 // 参数：c 上下文；idx 步序号；errMsg 错误消息（空=无）。
+// setupEntryURL 引导态向导入口 URL（GRM-001/Setup Token——token 附加；空=裸路径）。
+func (s *Server) setupEntryURL() string {
+	if s.cfg.SetupToken != "" {
+		return "/setup/1?setup_token=" + s.cfg.SetupToken
+	}
+	return "/setup/1"
+}
+
 func (s *Server) buildSetupData(c *gin.Context, idx int, errMsg string) templates.SetupData {
 	cfg := s.currentConfig(c)
+	// GRM-001：token 注入（表单隐藏域+语言切换回跳链路——query value 内 "?" 合法
+	// 无需转义，gin Query 解析完整保留）
+	nextSuffix := ""
+	if s.cfg.SetupToken != "" {
+		nextSuffix = "?setup_token=" + s.cfg.SetupToken
+	}
 	data := templates.SetupData{
 		Lang:  string(langOf(c)), // U18：深级双语承载（向导无会话仍可读 cookie lang）
 		Step:  idx + 1,
@@ -116,9 +130,11 @@ func (s *Server) buildSetupData(c *gin.Context, idx int, errMsg string) template
 		Title: setupSteps[idx].Title,
 		Error: errMsg,
 		Next:  setupSteps[min(idx+1, len(setupSteps)-1)].Slug,
+		// GRM-001：一次性访问令牌（模板表单隐藏域承载）
+		Token: s.cfg.SetupToken,
 		// 语言切换回跳当前步（缺陷④b——Setup向导缺陷修复批次：/lang?next= 承载，
-		// 切换后留在发起步而非跳回首步）
-		LangNext: "/setup/" + setupSteps[idx].Slug,
+		// 切换后留在发起步而非跳回首步；GRM-001：token 随 next 透传）
+		LangNext: "/setup/" + setupSteps[idx].Slug + nextSuffix,
 		// P3 端口警示（Setup向导新手可用性批次）：当前 HTTP 明文端口注入
 		// （ServerConfig.HTTPPort——setupmode 装配的 -p 覆盖值/缺省 80；零值=未注入
 		// 按 80 缺省口径呈现——警示不触发）
@@ -299,7 +315,7 @@ func (s *Server) saveStep(c *gin.Context, modify func(*config.Config)) error {
 func (s *Server) setupPOST(c *gin.Context) {
 	idx := setupStepIndex(c.Param("step"))
 	if idx < 0 {
-		c.Redirect(http.StatusFound, "/setup/1")
+		c.Redirect(http.StatusFound, s.setupEntryURL()) // GRM-001：token 附加
 		return
 	}
 	var err error
@@ -325,7 +341,11 @@ func (s *Server) setupPOST(c *gin.Context) {
 		return // 完成步在内部渲染终态页（SetupCompleted 已置位——setupGate 对后续请求禁入）
 	}
 	next := setupSteps[min(idx+1, len(setupSteps)-1)]
-	c.Redirect(http.StatusSeeOther, "/setup/"+next.Slug)
+	nextURL := "/setup/" + next.Slug
+	if s.cfg.SetupToken != "" { // GRM-001：303 随 token（GET query 链路续接）
+		nextURL += "?setup_token=" + s.cfg.SetupToken
+	}
+	c.Redirect(http.StatusSeeOther, nextURL)
 }
 
 // setupPostDatabase 步 1：数据库选择与连接探活（FR-014；重启生效口径注记随页呈现）。

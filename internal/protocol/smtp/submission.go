@@ -97,6 +97,11 @@ type SubmissionConfig struct {
 	// AttemptLimit 限流参数快照（窗口/阈值——与 web 登录限流同源 config.LoginLimitConf；
 	// nil=15min/5 次兜底档，沿 web limitConf 形态）。
 	AttemptLimit func() (window time.Duration, threshold int64)
+	// MaxConns 连接数上限快照（GRM高危处置批 GRM-004/E-4-A+附加指示「必须在后台管理
+	// 设置里可设置」，G2 批准 2026-10-19 07:06:11）：config Server.SubmissionMaxConns
+	// （/admin/settings 会话限流节可配热生效）；nil=缺省档 256（与 25/IMAP/POP3 F8 同档；
+	// 465/587 双端口合计口径——track 登记集为服务级单集）。
+	MaxConns func() int
 }
 
 // SubmissionServer 提交端点服务端（465 隐式+587 STARTTLS 双端口；接入层零业务）。
@@ -186,6 +191,10 @@ func (s *SubmissionServer) ListenAndServe(implicitAddr, explicitAddr string) err
 
 // acceptLoop 单监听 Accept 循环（A 重构：原 serveListener 循环段独立——
 // Shutdown 关闭后 Accept 错误视为正常返回；非关闭异常 Error 日志后该端口停止）。
+// GRM高危处置批（GRM-004/E-4-A，G2 批准 2026-10-19 07:06:11）：连接上限——
+// 复用 track 登记集锁内长度判定（沿 25 端点 F8 形态——登记与判定原子完成避免
+// 双源漂移）；超限连接即时关闭（连接风暴下 goroutine/内存无界防御，NFR-002）；
+// 上限经 MaxConns 快照读取热生效（后台管理设置可配——G2 附加指示承载）。
 func (s *SubmissionServer) acceptLoop(ln net.Listener, implicitTLS bool) {
 	for {
 		conn, err := ln.Accept()
@@ -204,13 +213,36 @@ func (s *SubmissionServer) acceptLoop(ln net.Listener, implicitTLS bool) {
 				conn = tls.Server(conn, tc)
 			}
 		}
-		s.track(conn, true)
+		s.mu.Lock()
+		overLimit := len(s.conns) >= s.maxConns()
+		if !overLimit {
+			s.conns[conn] = struct{}{}
+		}
+		s.mu.Unlock()
+		if overLimit {
+			_ = conn.Close()
+			slog.Default().Warn("提交端点连接超上限拒绝", "max", s.maxConns(), "remote", conn.RemoteAddr().String())
+			continue
+		}
 		go func() {
 			defer s.track(conn, false)
 			s.serveSubmission(conn, implicitTLS)
 		}()
 	}
 }
+
+// maxConns 连接上限快照（GRM-004——nil/非正值兜底缺省档 256；每连接读取热生效）。
+func (s *SubmissionServer) maxConns() int {
+	if s.cfg.MaxConns != nil {
+		if n := s.cfg.MaxConns(); n > 0 {
+			return n
+		}
+	}
+	return submissionDefaultMaxConns
+}
+
+// submissionDefaultMaxConns 连接上限缺省档（GRM-004——与 25/IMAP/POP3 F8 端点同档）。
+const submissionDefaultMaxConns = 256
 
 // protocolDebug 协议 debug 快照读取（U23；nil 注入=禁用——缺省零输出零行为变化）。
 func (s *SubmissionServer) protocolDebug() bool {
@@ -741,56 +773,71 @@ func (ss *submitSession) data() {
 	ss.reply(354, "End data with <CR><LF>.<CR><LF>")
 	limit := ss.srv.cfg.MaxMessageSize()
 	var raw []byte
-	scanned := 0 // 已扫描偏移（终止序列跨块边界回退重扫——母版形态）
+	var tail []byte // GRM-003：超限态滑窗（跨块终止序列衔接——母版同款）
+	scanned := 0    // 已扫描偏移（终止序列跨块边界回退重扫——母版形态）
 	tooBig := false
 	for {
 		_ = ss.conn.SetReadDeadline(time.Now().Add(dataIdleTimeout)) // F4：数据块 3min 逐块（rfc5321bis §4.5.3.2.5）
 		chunk := make([]byte, readChunk)
 		n, err := ss.rw.Reader.Read(chunk)
 		if n > 0 {
-			raw = append(raw, chunk[:n]...)
-			// 自上次扫描点-3 回退扫描（终止序列最长跨块 4 字节——readData 母版同款）
-			start := scanned - len(dataTerminator) + 1
-			if start < 0 {
-				start = 0
-			}
-			if idx := indexDataTerminator(raw, start); idx >= 0 {
-				body := unstuffDots(raw[:idx])
-				if tooBig || int64(len(body)) > limit {
-					// F1：实际长度终判（超限标记或超限事实——552 rfc1870 §6.1 L231-233）
+			if tooBig {
+				// GRM高危处置批（GRM-003/E-3-A）：超限后停止累积——滑窗检测终止序列
+				// （内存上界=limit+单块；被拒邮件本即 552 不投递，内容不完整无功能损失）
+				tail = append(tail, chunk[:n]...)
+				if idx := indexDataTerminator(tail, 0); idx >= 0 {
 					ss.reply(552, "5.3.4 message size exceeds fixed maximum")
 					ss.resetTx()
 					return
 				}
-				// F6/B-F10：改传 ss.ctx（会话 LogID 链闭环——NFR-016）。
-				// E-乙（生产缺陷修复批 v1.52.0）：Submit 增返回投递 CAS 键——端点应答与
-				// 键无关，显式忽略（键消费归 Webmail Sent 副本）。
-				_, res := ss.srv.pipeline.Submit(ss.ctx, &mail.Submission{
-					// F-9：RemoteIP+TLSCipher 承载（MSA 接收 trace 头构造输入——rfc8314 §7.4）
-					Envelope:   auth.Envelope{MailFrom: ss.mailFrom, Helo: "submission", RemoteIP: ss.remoteIP()},
-					AuthUser:   ss.authUser,
-					Recipients: ss.rcpts,
-					DSNParams:  ss.dsnParams,
-					TLSCipher:  ss.tlsCipherName(),
-				}, body)
-				// U15：插件拒绝识别（提交客户端可见——计划偏离裁决 A；纯增量 case）
-				var pluginRej *mail.PluginRejectError
-				switch {
-				case res == nil:
-					ss.reply(250, "ok: queued as accepted") // 已接受非已投递（流程设计 3.1）
-				case errors.As(res, &pluginRej):
-					ss.reply(pluginRej.Code, pluginRej.Message) // 插件给定码（4xx/5xx）
-				case errors.Is(res, mail.ErrUnauthorized):
-					ss.reply(550, "5.7.1 sender not authorized") // rfc6409 6.1/FR-002
-				default:
-					ss.reply(451, "temporary failure, try again") // ErrRetryable（CON-004 提交侧）
+				if keep := len(dataTerminator) - 1; len(tail) > keep {
+					tail = tail[len(tail)-keep:]
 				}
-				ss.resetTx()
-				return
-			}
-			scanned = len(raw)
-			if !tooBig && int64(len(raw)) > limit {
-				tooBig = true // 标记后继续消费至终止序列（协议同步——母版语义）
+			} else {
+				raw = append(raw, chunk[:n]...)
+				// 自上次扫描点-3 回退扫描（终止序列最长跨块 4 字节——readData 母版同款）
+				start := scanned - len(dataTerminator) + 1
+				if start < 0 {
+					start = 0
+				}
+				if idx := indexDataTerminator(raw, start); idx >= 0 {
+					body := unstuffDots(raw[:idx])
+					if tooBig || int64(len(body)) > limit {
+						// F1：实际长度终判（超限标记或超限事实——552 rfc1870 §6.1 L231-233）
+						ss.reply(552, "5.3.4 message size exceeds fixed maximum")
+						ss.resetTx()
+						return
+					}
+					// F6/B-F10：改传 ss.ctx（会话 LogID 链闭环——NFR-016）。
+					// E-乙（生产缺陷修复批 v1.52.0）：Submit 增返回投递 CAS 键——端点应答与
+					// 键无关，显式忽略（键消费归 Webmail Sent 副本）。
+					_, res := ss.srv.pipeline.Submit(ss.ctx, &mail.Submission{
+						// F-9：RemoteIP+TLSCipher 承载（MSA 接收 trace 头构造输入——rfc8314 §7.4）
+						Envelope:   auth.Envelope{MailFrom: ss.mailFrom, Helo: "submission", RemoteIP: ss.remoteIP()},
+						AuthUser:   ss.authUser,
+						Recipients: ss.rcpts,
+						DSNParams:  ss.dsnParams,
+						TLSCipher:  ss.tlsCipherName(),
+					}, body)
+					// U15：插件拒绝识别（提交客户端可见——计划偏离裁决 A；纯增量 case）
+					var pluginRej *mail.PluginRejectError
+					switch {
+					case res == nil:
+						ss.reply(250, "ok: queued as accepted") // 已接受非已投递（流程设计 3.1）
+					case errors.As(res, &pluginRej):
+						ss.reply(pluginRej.Code, pluginRej.Message) // 插件给定码（4xx/5xx）
+					case errors.Is(res, mail.ErrUnauthorized):
+						ss.reply(550, "5.7.1 sender not authorized") // rfc6409 6.1/FR-002
+					default:
+						ss.reply(451, "temporary failure, try again") // ErrRetryable（CON-004 提交侧）
+					}
+					ss.resetTx()
+					return
+				}
+				scanned = len(raw)
+				if int64(len(raw)) > limit {
+					tooBig = true // GRM-003：标记后停止累积（滑窗续接终止检测）
+				}
 			}
 		}
 		if err != nil {

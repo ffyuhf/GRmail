@@ -19,7 +19,9 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"os"
@@ -44,6 +46,20 @@ func runSetupMode(ctx context.Context, logger *slog.Logger, watcher *config.Watc
 	users := storage.NewUserRepoFor(driver, db)
 	attempts := storage.NewLoginAttemptRepoFor(driver, db)
 
+	// GRM高危处置批（GRM-001/Setup Token 鉴权——PMail C4 形态，G2 批准 2026-10-19
+	// 07:11:50「A：仅 Setup Token 鉴权（PMail C4 形态，无顺序状态机）」）：引导期一次性
+	// 访问令牌——32B CSPRNG hex（进程内存态，不落盘不持久）；全部向导端点必须携带
+	// （GET query/POST 表单域）；带 token 的完整 URL 打印启动日志供部署者复制（无 token
+	// 直接访问 IP 被拒——零认证向导攻击面收口）；完成态 gate 禁入后随进程退出失效。
+	setupToken := make([]byte, 32)
+	if _, err := rand.Read(setupToken); err != nil {
+		logger.Error("Setup 访问令牌生成失败（CSPRNG 不可用）", "error", err)
+		os.Exit(1)
+	}
+	tokenHex := hex.EncodeToString(setupToken)
+	logger.Info("Setup 向导访问 URL（含一次性令牌——请从本行复制到浏览器打开；直接访问 IP 将被拒绝）",
+		"url", fmt.Sprintf("http://<主机>:%d/setup/1?setup_token=%s", httpPort, tokenHex))
+
 	setupServer := web.NewServer(web.ServerConfig{
 		Domain: watcher.Current().Server.Domain,
 		// 向导模式注入位（业务五依赖零注入——占位首页/向导不触业务路径）
@@ -53,6 +69,9 @@ func runSetupMode(ctx context.Context, logger *slog.Logger, watcher *config.Watc
 		SaveConfig:      saveConfig,
 		SessionSnapshot: func() config.SessionConf { return watcher.Current().Session },
 		LimitSnapshot:   func() config.LoginLimitConf { return watcher.Current().LoginLimit },
+		// GRM-001：引导期一次性访问令牌（空=校验关闭——测试直构形态兼容锚，沿 Tokens/
+		// SieveScripts nil 渐进态先例；生产 setupmode 恒注入）
+		SetupToken: tokenHex,
 	}, sessions, users, attempts, nil) // accounts=nil：向导不触账号域（nil 防御沿 U8/U9 形态）
 
 	go func() {

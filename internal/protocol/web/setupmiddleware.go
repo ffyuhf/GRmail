@@ -22,16 +22,40 @@ import (
 
 // setupGate Setup 完成态分流（挂载于 CSRF 之后——向导匿名 POST 经 csrfProtect 匿名
 // 放行分支到达此处）。
+// GRM高危处置批（GRM-001/Setup Token 鉴权——PMail C4 形态，G2 批准 2026-10-19
+// 07:11:50）：引导态向导族端点（/setup*）增 token 校验——GET 查 query 参数
+// setup_token、POST 查表单域 setup_token；cfg.SetupToken 非空且不匹配（含缺失）一律
+// 403 错误整页（setup.tokenRequired 键——无 token 直接访问 IP 被拒）；SetupToken 空=
+// 校验关闭（测试直构兼容锚）。/static 与 /lang 白名单不涉 token（资源与语言偏好先于
+// 认证承载语义保持——语言切换后回跳经 next 携带 token 链路保持）。
 func (s *Server) setupGate() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		path := c.Request.URL.Path
 		if !s.setupCompleted() {
 			// 引导态（Q4-A）：向导族+静态资源+语言切换放行（/lang——缺陷④a 修复），其余一律 302 向导首步
-			if strings.HasPrefix(path, "/setup") || strings.HasPrefix(path, "/static/") || strings.HasPrefix(path, "/lang") {
+			if strings.HasPrefix(path, "/setup") {
+				// GRM-001：向导族 token 校验（SetupToken 空=关闭——测试兼容锚）
+				if s.cfg.SetupToken != "" {
+					presented := c.Query("setup_token")
+					if presented == "" && c.Request.Method != http.MethodGet {
+						presented = c.PostForm("setup_token")
+					}
+					if presented != s.cfg.SetupToken {
+						sessLogger(c).Warn("Setup 向导访问被拒（令牌缺失或不符）",
+							"method", c.Request.Method, "path", path, "remote", c.ClientIP())
+						s.errPage(c, http.StatusForbidden, "setup.tokenRequired")
+						c.Abort()
+						return
+					}
+				}
 				c.Next()
 				return
 			}
-			c.Redirect(http.StatusFound, "/setup/1")
+			if strings.HasPrefix(path, "/static/") || strings.HasPrefix(path, "/lang") {
+				c.Next()
+				return
+			}
+			c.Redirect(http.StatusFound, s.setupEntryURL()) // GRM-001：token 附加（非向导路径回入口不撞 403）
 			c.Abort()
 			return
 		}
