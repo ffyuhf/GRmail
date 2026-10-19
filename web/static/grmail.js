@@ -103,6 +103,31 @@
 		}
 	};
 
+	/* ───────────────────────── 详情正文高度自适应（前端四缺陷修复批 E-4-A） ─────────────────────────
+		*
+		* S4-W 裁决（2026-10-19 19:25「E-4 选 A」）：正文 iframe sandbox 增 allow-same-origin，
+		* 本模块经同源 contentDocument 读取正文实际高度动态设定（初始/加载/resize 三时机）；
+		* 正文端点独立 CSP script-src 'none' 保持——不向正文文档注入任何脚本（自适应逻辑
+		* 全在本文件——外层页面 CSP script-src 'self' 允许域内脚本）；跨源兜底静默维持
+		* CSS min-height（异常形态防御）。 */
+	var Detail = {
+		frames: function () { return $$(".detail iframe"); },
+		fit: function (f) {
+			try {
+				var doc = f.contentDocument;
+				if (!doc || !doc.body) { return; }
+				var h = doc.body.scrollHeight;
+				if (doc.documentElement && doc.documentElement.scrollHeight > h) {
+					h = doc.documentElement.scrollHeight;
+				}
+				if (h > 0 && Math.abs(f.offsetHeight - h) > 4) {
+					f.style.height = h + "px";
+				}
+			} catch (err) { /* 跨源/未就绪兜底：维持 min-height */ }
+		},
+		fitAll: function () { Detail.frames().forEach(Detail.fit); }
+	};
+
 	/* ───────────────────────── 批量选择（列表片段） ───────────────────────── */
 
 	var Selection = {
@@ -429,6 +454,16 @@
 		if (list) { list.setAttribute("aria-busy", "false"); }
 	});
 
+	/* 详情正文 iframe：加载完成即自适应高度（捕获阶段委托——load 不冒泡；HTMX
+	 * 交换换入的 iframe 同样覆盖）。 */
+	document.addEventListener("load", function (e) {
+		var t = e.target;
+		if (t && t.tagName === "IFRAME" && t.closest && t.closest(".detail")) {
+			Detail.fit(t);
+		}
+	}, true);
+	window.addEventListener("resize", Detail.fitAll);
+
 	/* 详情置已读事件：侧栏未读计数就地递减。 */
 	document.body.addEventListener("grmailRead", function (e) {
 		var detail = e && e.detail;
@@ -447,6 +482,7 @@
 	function init() {
 		if (isMobile()) { Drawer.open(false); }
 		Drawer.sync();
+		Detail.fitAll();
 		Menu.syncAll();
 		Selection.refresh();
 		/* /lang 链接补 next=当前路径（切换后保位；服务端校验 next 合法性）。 */

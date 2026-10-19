@@ -157,6 +157,12 @@ func (s *Server) fillFromDraft(c *gin.Context, view *mailboxView, data *template
 	data.Cc = trimJSONList(msg.CcAddrs)
 	data.Subject = msg.Subject
 	data.DraftID = msg.ID
+	// 前端四缺陷修复批 E-2-A（G2 批准 2026-10-19 19:18「全A」）：草稿原发件地址
+	// 回填——管理员草稿保留保存时输入的任意发件地址（FR-002 草稿态完整性）；空
+	// From 草稿维持 composeGET 预填兜底（D12 语义保持——仅非空覆盖）。
+	if msg.FromAddr != "" {
+		data.From = msg.FromAddr
+	}
 }
 
 // trimJSONList 缓存列 JSON 数组串 → 逗号分隔表单值（["a@x","b@y"] → a@x, b@y）。

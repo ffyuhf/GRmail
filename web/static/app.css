@@ -329,6 +329,11 @@ legend { padding: 0 var(--sp-2); font-size: var(--text-label); font-weight: 600;
 	transition: margin-left var(--dur-drawer-out) var(--ease-exit), transform var(--dur-drawer) var(--ease-out);
 }
 
+/* 前端四缺陷修复批 E-1-A（G2 全A 2026-10-19 19:18）：桌面折叠恢复——折叠规则
+	* 自移动端媒体查询提升至全态（收起=负 margin 滑出，内容区 flex 占满）；移动端
+	* 既有 fixed 抽屉形态不受影响（media query 内规则原样保持）。 */
+#nav-toggle:not(:checked) ~ .layout .sidebar { margin-left: calc(-1 * var(--sidebar-w)); }
+
 .main {
 	flex: 1 1 auto;
 	min-width: 0;
@@ -1017,8 +1022,9 @@ td.status-cell .flag { margin-right: var(--sp-1); }
 .pagesize a { color: var(--fg-secondary); }
 .pagesize a.active { color: var(--fg); background: var(--hover); font-weight: 600; }
 
-/* 详情：文档流，正文最大宽 760，元信息单行 */
-.detail { max-width: var(--reading-max); margin: 0; }
+/* 详情：文档流，正文最大宽放宽至 980（前端四缺陷修复批 E-4-A 宽度部分——G2 全A），
+ * 元信息单行 */
+.detail { max-width: var(--content-max); margin: 0; }
 .detail .actions { display: flex; gap: var(--sp-2); margin-bottom: var(--sp-4); }
 .detail-head { margin-bottom: var(--sp-3); }
 .detail-head h2 {
@@ -1087,13 +1093,14 @@ form > hr { align-self: stretch; }
 
 #compose-toolbar {
 	position: sticky; top: var(--topbar-h); z-index: 5;
-	display: flex; flex-wrap: nowrap; align-items: center; gap: 1px;
+	/* 前端四缺陷修复批 E-3（G2 全A 2026-10-19 19:18）：nowrap+overflow-x 裁剪
+	 * picker 下拉（"选择框被输入框盖住/小框内滚动"根因）——改 wrap 折行承载，
+	 * 溢出可见（picker 浮层正常展开覆盖编辑区）。 */
+	display: flex; flex-wrap: wrap; align-items: center; gap: 1px;
 	padding: var(--sp-1) 0;
 	margin: 0 0 var(--sp-2);
 	background: var(--surface);
 	border-bottom: 1px solid var(--border-soft);
-	overflow-x: auto;
-	scrollbar-width: thin;
 }
 
 #compose-toolbar button, #compose-toolbar .ql-picker-label {
@@ -1118,7 +1125,19 @@ form > hr { align-self: stretch; }
 #compose-toolbar .ql-picker.ql-expanded .ql-picker-label { color: var(--fg); }
 #compose-toolbar button { width: 26px; height: 26px; flex: 0 0 auto; }
 
-#compose-toolbar .ql-picker.ql-expanded .ql-picker-options { z-index: 20; }
+/* 前端四缺陷修复批 E-3：picker 浮层层叠提升（30＞工具栏 5 与编辑区）＋图标可见性
+ * 强化——quill.snow.css 为无 @layer 规则，层叠优先级高于本文件 @layer 内规则，
+ * 其 .ql-stroke{stroke:#444} 固定深灰在暗色 surface 上不可见（"图标不显示"根因）；
+ * 以 !important 承载明暗自适应前景色（沿本区 border-color !important 先例）。 */
+#compose-toolbar .ql-picker.ql-expanded .ql-picker-options { z-index: 30; }
+#compose-toolbar .ql-stroke { stroke: var(--fg) !important; }
+#compose-toolbar .ql-fill { fill: var(--fg) !important; }
+#compose-toolbar button:hover .ql-stroke { stroke: var(--fg) !important; }
+#compose-toolbar button:hover .ql-fill { fill: var(--fg) !important; }
+#compose-toolbar .ql-picker.ql-expanded .ql-picker-label .ql-stroke,
+#compose-toolbar .ql-picker.ql-expanded .ql-picker-label .ql-fill { stroke: var(--fg) !important; fill: var(--fg) !important; }
+#compose-toolbar .ql-picker-item .ql-stroke,
+#compose-toolbar .ql-picker-item .ql-fill { stroke: var(--fg) !important; fill: var(--fg) !important; }
 #compose-toolbar svg { width: 17px; height: 17px; }
 @media (hover: hover) { #compose-toolbar button:hover { background: var(--hover); color: var(--fg); } }
 #compose-toolbar.ql-toolbar.ql-snow {

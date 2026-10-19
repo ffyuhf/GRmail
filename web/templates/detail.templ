@@ -79,8 +79,13 @@ templ DetailView(lang Lang, msg *storage.Detail, disp *mail.Display, safeBody st
 			// D3-B（Webmail前端缺陷修复批批一——干系人裁决 2026-10-10 20:52）：iframe
 			// src 指向同源正文代理端点（响应头独立 CSP style-src 'unsafe-inline'——全浏览器
 			// 内联样式恢复；原 srcdoc 继承父页 CSP 剥离全部内联样式且 iframe csp 属性
-			// Firefox/Safari 未实现——MDN BCD 实证）；sandbox 属性保持（沙箱隔离不降级）。
-			<iframe sandbox="" loading="lazy" referrerpolicy="no-referrer" src={ fmt.Sprintf("/mails/%d/body", msg.ID) } title={ Tr(lang, "detail.bodyFrame") }></iframe>
+			// Firefox/Safari 未实现——MDN BCD 实证）。
+			// 前端四缺陷修复批 E-4-A（S4-W 裁决 2026-10-19 19:25「E-4 选 A」）：sandbox
+			// 增 allow-same-origin——grmail.js 经同源 contentDocument 读取正文实际高度
+			// 自适应（"查看框太小"收口）；安全面：正文端点独立 CSP script-src 'none'
+			// 保持（无脚本执行——allow-same-origin 的同源访问面需脚本才可利用），
+			// sandbox 其余限制（表单/弹窗/顶层导航/指针锁定等）全部保持。
+			<iframe sandbox="allow-same-origin" loading="lazy" referrerpolicy="no-referrer" src={ fmt.Sprintf("/mails/%d/body", msg.ID) } title={ Tr(lang, "detail.bodyFrame") }></iframe>
 		} else {
 			<pre>{ safeBody }</pre>
 		}
