@@ -342,7 +342,9 @@ legend { padding: 0 var(--sp-2); font-size: var(--text-label); font-weight: 600;
 	overflow-x: visible;
 }
 
-.content-page { max-width: 52rem; margin: 0; }
+/* 前端缺陷修复批 F-1-A（G2 批准 2026-10-20 23:54:32「F-1 A」）：M-B 居中裁决恢复
+ * （Webmail管理职能批 S3-W Q1-A margin-inline:auto——v5 重写丢失收口）。 */
+.content-page { max-width: 52rem; margin-inline: auto; }
 
 .drawer-scrim {
 	position: fixed; inset: var(--topbar-h) 0 0 0;
@@ -1024,7 +1026,8 @@ td.status-cell .flag { margin-right: var(--sp-1); }
 
 /* 详情：文档流，正文最大宽放宽至 980（前端四缺陷修复批 E-4-A 宽度部分——G2 全A），
  * 元信息单行 */
-.detail { max-width: var(--content-max); margin: 0; }
+/* F-1-A：三容器居中——详情页承载（margin:0 左贴即 M-B 裁决所指「蜗居」形态）。 */
+.detail { max-width: var(--content-max); margin-inline: auto; }
 .detail .actions { display: flex; gap: var(--sp-2); margin-bottom: var(--sp-4); }
 .detail-head { margin-bottom: var(--sp-3); }
 .detail-head h2 {
@@ -1064,7 +1067,7 @@ td.status-cell .flag { margin-right: var(--sp-1); }
 .attach a .attach-name { max-width: 20rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* 写信：单卡片，工具栏粘顶，动作栏粘底 */
-#compose-page { max-width: var(--content-max); margin: 0; }
+#compose-page { max-width: var(--content-max); margin-inline: auto; } /* F-1-A：三容器居中——写信页承载 */
 #compose-page form { display: flex; flex-direction: column; gap: var(--sp-3); }
 form > button, form > a.primary, form > a.secondary, form > .btn { align-self: flex-start; }
 form > hr { align-self: stretch; }
@@ -1160,8 +1163,9 @@ form > hr { align-self: stretch; }
 }
 .compose-actions { flex-wrap: wrap; }
 .compose-actions .spacer { flex: 1 1 auto; }
-/* D2/E-3-A：save_draft DOM 序在前（回车兜底误存），发送经 order 回视觉主位。 */
-.compose-actions button[name="action"][value="send"] { order: -1; }
+/* 前端缺陷修复批 F-3-A（G2 批准 2026-10-20 23:54:32「F-3 A」）：order:-1 废除——
+ * send DOM 序前置（compose.templ），焦点序=视觉序；批五 D2/E-3-A「save_draft DOM
+ * 前置+order 视觉恢复」形态就此被覆盖（JS 失效隐式提交兜底方向反转已披露获选）。 */
 .compose-actions .btn-text { height: var(--btn-h); min-height: var(--btn-h); padding: 0 var(--sp-3); }
 
 #compose-page:fullscreen { background: var(--bg); padding: var(--sp-4); overflow: auto; height: 100vh; }
@@ -1538,6 +1542,12 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 	border: 0; border-bottom: 1px solid var(--border-soft);
 	overflow-x: auto; scrollbar-width: thin;
 }
+/* 前端缺陷修复批 F-2-D（G2 批准 2026-10-20 23:54:32「F-2 D」；差异指示 23:50:05
+ * 「保留横向滚动」承载）：横滚保持（上块 nowrap/overflow-x 原样——桌面/移动横滚
+ * 均不动）＋任一 picker 展开期间临时解除裁剪——下拉浮层完整展开盖编辑区，收起即
+ * 恢复横滚；置于 unlayered 块内且特异性（#id+:has 双类）高于上块基础声明——:has
+ * 兼容基线为项目既有消费（批量条 :has 联动先例），不支持浏览器降级维持裁剪现状。 */
+#compose-toolbar:has(.ql-picker.ql-expanded) { overflow: visible; }
 #compose-toolbar .ql-formats { display: inline-flex; align-items: center; margin-right: 10px; }
 #compose-toolbar .ql-formats:last-child { margin-right: 0; }
 #compose-toolbar.ql-toolbar button,

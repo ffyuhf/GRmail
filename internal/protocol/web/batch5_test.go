@@ -285,10 +285,12 @@ func TestBatch5C8XFOOverride(t *testing.T) {
 
 // ───────── D2/E-3-A 草稿前置 + E-5-A 超时落点分流 ─────────
 
-// TestBatch5D2OrderAndE5Redirect D2/E-3-A：compose 动作栏 save_draft 按钮 DOM 序
-// 前置（回车隐式提交兜底命中草稿——视觉主位由 CSS order 恢复）；E-5-A：会话失效
-// 落点按 grmail_login_kind 记忆分流（mailbox→/webmail/login、无记忆/未知→/login
-// 契约缺省保持）。
+// TestBatch5D2OrderAndE5Redirect 动作序断言——前端缺陷修复批 F-3-A 适配（G2 批准
+// 2026-10-20 23:54:32 逐字「F-3 A」；批准面行为变化支撑——JS 失效隐式提交兜底方向
+// 反转已披露获选）：send 按钮 DOM 序前置（焦点序=视觉序——误触存草稿风险收口；
+// 批五 D2/E-3-A「save_draft DOM 前置+CSS order 视觉恢复」旧形态断言就此反转）；
+// E-5-A：会话失效落点按 grmail_login_kind 记忆分流（mailbox→/webmail/login、
+// 无记忆/未知→/login 契约缺省保持）。
 func TestBatch5D2OrderAndE5Redirect(t *testing.T) {
 	env := newU9Env(t)
 	cookie := env.u9Session(t, storage.SubjectTypeMailbox, env.mailbox.ID, "csrf-b5f")
@@ -301,10 +303,10 @@ func TestBatch5D2OrderAndE5Redirect(t *testing.T) {
 	draftIdx := strings.Index(page, `value="save_draft"`)
 	sendIdx := strings.Index(page, `value="send"`)
 	if draftIdx < 0 || sendIdx < 0 {
-		t.Fatal("compose 动作栏两按钮应在位（D2 前置断言前提）")
+		t.Fatal("compose 动作栏两按钮应在位（F-3-A 前置断言前提）")
 	}
-	if draftIdx > sendIdx {
-		t.Fatal("save_draft 应 DOM 序前置（D2/E-3-A——回车兜底命中草稿）")
+	if sendIdx > draftIdx {
+		t.Fatal("send 应 DOM 序前置（F-3-A——焦点序=视觉序；批五 D2 旧序断言被批准面覆盖反转）")
 	}
 
 	// E-5-A：302 直测（noFollow——env.get 默认客户端跟随重定向，测试形态自纠）。

@@ -22,6 +22,10 @@
 //   2026-10-03 07:40:00 | 扩展 | 编辑器收尾与e2e批次（计划书步骤 3/4，G2 批准 2026-10-03 07:34:18）
 //   2026-10-14 20:45:00 | 修正 | Webmail前端可用性收口批 B3/B4：main 增 data-attach-err/
 //   data-rcpt-err 双语注入（前端预检与失焦提示文案通道——G2 批准 2026-10-14 20:37）
+//   2026-10-20 23:59:00 | 修正 | 前端缺陷修复批 F-3-A（G2 批准 2026-10-20 23:54:32
+//   逐字「F-3 A」）：send 按钮 DOM 序前置——焦点序=视觉序（误触存草稿风险收口）；
+//   JS 失效极端场景回车隐式提交兜底方向反转〔误存→误发〕已披露获选；grmail.js
+//   composeEnter 防线保持（正常路径 Enter 不提交/Ctrl+Enter 发送零变化）
 package templates
 
 import "fmt"
@@ -178,12 +182,14 @@ templ ComposeView(d *ComposeData) {
 					</label>
 				</section>
 				<div class="compose-actions">
-					// D2/E-3-A（批五——干系人指示 2026-10-13 08:42:57 逐字「D2 回车误发缓解
-					// Ctrl+回车发送 直接回车是换行处理。」+G2 五组候选全 A）：save_draft DOM 序
-					// 前置（回车隐式提交兜底命中草稿——误发变误存）；发送按钮视觉主位经 CSS
-					// order 恢复（app.css D2 块——send 恒显示在先，视觉主次零变化锚）。
-					<button class="secondary" type="submit" name="action" value="save_draft">{ Tr(lang, "compose.saveDraft") }</button>
+					// F-3-A（前端缺陷修复批——G2 批准 2026-10-20 23:54:32 逐字「F-3 A」）：
+					// send DOM 序前置（焦点序=视觉序——键盘/读屏首达发送，误触存草稿风险
+					// 收口）；批五 D2/E-3-A「save_draft DOM 前置+CSS order 视觉恢复」形态被
+					// 覆盖——JS 失效极端场景回车隐式提交兜底方向反转〔误存→误发〕已披露
+					// 获选；D2 核心语义保持：grmail.js composeEnter 输入框 Enter preventDefault
+					// ＋Ctrl/Cmd+Enter 显式发送（正常路径回车不提交零变化）。
 					<button class="primary" type="submit" name="action" value="send">{ Tr(lang, "compose.send") }</button>
+					<button class="secondary" type="submit" name="action" value="save_draft">{ Tr(lang, "compose.saveDraft") }</button>
 					<span class="spacer"></span>
 					<a class="btn-text" href="/">{ Tr(lang, "common.cancel") }</a>
 				</div>
