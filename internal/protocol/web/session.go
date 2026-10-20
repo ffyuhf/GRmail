@@ -11,6 +11,10 @@
 //	2026-09-24 02:56:00 | 扩展 | U14 API Token 管理（计划书步骤 4，G2 批准 2026-09-24 02:30:51；
 //	  契约 v1.10.0 2.4）：sessionMiddleware 匿名三分支后统一追加 Bearer 并列认证判定
 //	  （Q1-A——Authorization: Bearer <64hex>→合成 admin 会话注入；无效/过期/IP 不符 401 Abort）
+//	2026-10-20 12:50:00 | 修正 | GRM代码侧批 E-3-A/E-5-A（GRM-010/012）：safeRedirectPath
+//	  收敛 isSafeLocalRedirectPath（原始态+URL 解码态双检——反斜杠变体与编码形态同拒，
+//	  i18n.go 同批同步）；会话超时分支增客户端 cookie 清除头（logout.go 同款双侧失效
+//	  形态——OWASP Session Expiration 口径；G2 批准 2026-10-20 12:06:32）
 package web
 
 import (
@@ -23,6 +27,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -221,6 +226,19 @@ func (s *Server) sessionMiddleware() gin.HandlerFunc {
 		idle, _ := s.sess.sessionTimeouts()
 		if now.After(sess.AbsoluteExpiresAt) || now.Sub(sess.LastSeenAt) > idle {
 			_ = s.sessions.Delete(ctx, idHash)
+			// GRM-012（GRM代码侧批 E-5-A——G2 批准 2026-10-20 12:06:32）：超时双侧
+			// 失效补全——服务端 Delete 后同步清除客户端 cookie（logout.go 同款形态：
+			// 置空值+过期时间戳置于过去；OWASP Session Expiration 口径——原仅服务端
+			// 删除，浏览器残留已失效凭据不洁）。
+			http.SetCookie(c.Writer, &http.Cookie{
+				Name:     sessionCookieName,
+				Value:    "",
+				Path:     "/",
+				Expires:  time.Unix(0, 0),
+				Secure:   true,
+				HttpOnly: true,
+				SameSite: http.SameSiteStrictMode,
+			})
 			logger.Info("会话超时失效", "session", s.sess.logHashOf(raw), "reason", "timeout")
 			s.tryBearerAuth(c) // U14：cookie 会话超时后 Bearer 仍可认证（两通道独立）
 			c.Next()
@@ -311,11 +329,35 @@ const loginRedirectCookie = "grmail_login_redirect"
 
 // safeRedirectPath 站内回跳路径校验（沿 /lang next 先例：绝对路径且非协议相对形态；
 // 非法值回 /——防开放重定向）。
+// GRM-010（GRM代码侧批 E-3-A——G2 批准 2026-10-20 12:06:32）：原校验仅拒 "//"——
+// 反斜杠变体 "/\evil.com" 与编码形态 "/%5Cevil.com" 放行（部分浏览器将 "\" 当路径
+// 分隔处理可致外跳）；本版收紧为原始态+URL 解码态双检（isSafeLocalRedirectPath，
+// 与 i18n.go langSetGET 两消费点同批同步收敛）。
 func safeRedirectPath(p string) string {
-	if p == "" || !strings.HasPrefix(p, "/") || strings.HasPrefix(p, "//") {
+	if !isSafeLocalRedirectPath(p) {
 		return "/"
 	}
 	return p
+}
+
+// isSafeLocalRedirectPath 站内重定向路径安全判定（GRM-010 E-3-A）：路径须以 "/"
+// 开头且第二字符不得为 "/" 或 "\"；URL 解码态复检（%5C 解码后为 "\" 同拒——双态
+// 防线；解码失败〔非法 % 序列〕保守拒绝）。合法站内路径（/mails、/settings 等
+// 第二字符为字母/数字）零影响。
+func isSafeLocalRedirectPath(p string) bool {
+	if !localPathShapeOK(p) {
+		return false
+	}
+	u, err := url.PathUnescape(p)
+	return err == nil && localPathShapeOK(u)
+}
+
+// localPathShapeOK 路径形态单态检查（空/非 "/" 开头/第二字符为 "/" 或 "\" 均拒）。
+func localPathShapeOK(p string) bool {
+	if p == "" || p[0] != '/' {
+		return false
+	}
+	return !(len(p) >= 2 && (p[1] == '/' || p[1] == '\\'))
 }
 
 // isPublicAssetPath 公开自动加载资源判定（F13/C24，2026-10-10 C级债务收尾批——

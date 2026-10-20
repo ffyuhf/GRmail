@@ -9,6 +9,9 @@
 //	2026-09-19 10:34:00 | 新建 | U9 Webmail 核心（计划书步骤 6，G2 批准 2026-09-19 10:00:41）
 //	2026-10-14 20:45:00 | 修正 | Webmail前端可用性收口批 B6：详情返回链接保留来源页码
 //	（原恒 page=1——第 N 页查看详情返回回第 1 页的上下文丢失收口；G2 批准 2026-10-14 20:37）
+//	2026-10-20 12:50:00 | 修正 | GRM代码侧批 E-1-A（GRM-008）：htmlEscapeBody 空操作
+//	修正为真实转义（三字符分别转义为对应 HTML 实体、amp 先行防二次转义；实体经字符串
+//	拼接构造——免疫工具链写入层实体解码；G2 批准 2026-10-20 12:06:32）
 package web
 
 import (
@@ -261,9 +264,13 @@ func mailBodyDocumentPlain(textBody string) string {
 		htmlEscapeBody(textBody) + "</pre></body></html>"
 }
 
-// htmlEscapeBody 文本 HTML 转义（纯文本形态防实体注入——&<> 三字符）。
+// htmlEscapeBody 文本 HTML 转义（纯文本形态防实体注入——&<> 三字符；& 先行防二次转义）。
+// GRM-008（GRM代码侧批 E-1-A——G2 批准 2026-10-20 12:06:32）：原 Replacer 三组替换
+// 首尾相同恒等返回（空操作缺陷——纯文本中标签字面量被浏览器按 HTML 渲染的注入面，
+// grep 'amp;'=0 终验）；本版修正为真实转义——纯文本按字面呈现（pre 等宽形态本意恢复），
+// 合法纯文本功能零损失（标签字面量从"被渲染"变为"显示原文"——即修复目的本身）。
 func htmlEscapeBody(s string) string {
-	r := strings.NewReplacer("&", "&", "<", "<", ">", ">")
+	r := strings.NewReplacer("&", "&"+"amp;", "<", "&"+"lt;", ">", "&"+"gt;")
 	return r.Replace(s)
 }
 

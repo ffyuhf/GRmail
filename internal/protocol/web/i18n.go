@@ -11,6 +11,9 @@
 //	2026-10-15 00:40:00 | 修正 | Webmail前端可见性一致性令牌批 β C2/E-1-A：候选表
 //	容器挂 .table-wrap 类（并入统一表格体系——仅类名消费零逻辑变化）
 //	（依据：β批计划书 v1.0.0 1.2 C2+候选 E-1-A，G2 批准 2026-10-15 00:12）
+//	2026-10-20 12:50:00 | 修正 | GRM代码侧批 E-3-A（GRM-010）：langSetGET next 校验
+//	收敛共用 isSafeLocalRedirectPath（反斜杠变体与编码形态同拒——与 session.go
+//	safeRedirectPath 双消费点同批同步；G2 批准 2026-10-20 12:06:32）
 package web
 
 import (
@@ -47,8 +50,11 @@ func langOf(c *gin.Context) templates.Lang {
 func (s *Server) langSetGET(c *gin.Context) {
 	target := templates.NormalizeLang(c.Query("l"))
 	next := c.Query("next")
-	if next == "" || !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") {
-		next = "/" // 站内相对路径白名单（// 协议相对形态同拒）
+	// GRM-010（GRM代码侧批 E-3-A——G2 批准 2026-10-20 12:06:32）：校验收敛共用
+	// isSafeLocalRedirectPath（session.go）——反斜杠变体 "/\evil.com" 与编码形态
+	// "/%5Cevil.com" 同拒（原仅拒 "//"；本端点与 safeRedirectPath 双点同步）。
+	if !isSafeLocalRedirectPath(next) {
+		next = "/" // 站内相对路径白名单（// 与 /\ 反斜杠/编码形态同拒）
 	}
 	// F12（C23，2026-10-10 C级债务收尾批）：HttpOnly=true——非凭据偏好 cookie 的
 	// 防御纵深（JS 侧零消费实证——grmail.js 仅操作 /lang 链接 href；服务端读取

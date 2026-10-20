@@ -6,6 +6,9 @@
 // 修改历史：
 //
 //	2026-09-19 05:15:00 | 新建 | U8 Web 会话与登录
+//	2026-10-20 12:50:00 | 修正 | GRM代码侧批 E-2-A（GRM-009）：verifyAdmin 用户不存在
+//	分支增 adminDummyVerify 等成本校验（sync.Once 惰性生成 argon2id dummy PHC——两路径
+//	响应时序一致，管理员用户名枚举面收口；G2 批准 2026-10-20 12:06:32）
 package web
 
 import (
@@ -15,6 +18,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/a-h/templ"
@@ -100,6 +104,28 @@ func (s *Server) adminLoginPOST(c *gin.Context) {
 	c.Redirect(http.StatusSeeOther, redirectAfterLogin(c)) // 303（G6——D15 登录后回跳原页）
 }
 
+// adminDummyHashOnce / adminDummyHash GRM-009（GRM代码侧批 E-2-A——G2 批准
+// 2026-10-20 12:06:32）：管理员登录 dummy 哈希惰性生成（sync.Once——首次命中不存在
+// 用户名时对固定哑口令生成 argon2id PHC，与真实校验同参数档同成本）；用户不存在路径
+// 执行等成本校验使两路径响应时序一致——管理员用户名枚举面（响应计时区分存在性）收口。
+var (
+	adminDummyHashOnce sync.Once
+	adminDummyHash     string
+)
+
+// adminDummyVerify 用户不存在路径的等成本校验（dummy 哈希——校验结果恒弃用仅取时序；
+// 生成失败〔系统级 CSPRNG 故障〕时跳过——拒绝语义不受影响，仅时序对齐尽力）。
+func adminDummyVerify(password string) {
+	adminDummyHashOnce.Do(func() {
+		if h, err := account.HashPassword("grmail-dummy-password"); err == nil {
+			adminDummyHash = h
+		}
+	})
+	if adminDummyHash != "" {
+		_, _ = account.VerifyPassword(password, adminDummyHash)
+	}
+}
+
 // verifyAdmin 管理员凭据校验（三态：无效/有效/存储故障）。
 // 参数：ctx 上下文；username 用户名（已小写）；password 明文。
 // 返回：valid 判定；subjectID 管理员 ID（valid 为真时有效）；err 存储故障（非凭据问题）。
@@ -110,7 +136,8 @@ func (s *Server) verifyAdmin(ctx context.Context, username, password string) (va
 	user, err := s.users.FindByName(ctx, username)
 	if err != nil {
 		if errors.Is(err, storage.ErrUserNotFound) {
-			return false, 0, nil // 不存在 → 统一拒绝（防枚举）
+			adminDummyVerify(password) // GRM-009：不存在 → 等成本校验后统一拒绝（时序对齐防枚举）
+			return false, 0, nil
 		}
 		return false, 0, err
 	}
