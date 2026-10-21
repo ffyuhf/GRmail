@@ -7,6 +7,20 @@
 // 架构总览 v1.0.0 5.2（组件禁止缓存旧配置指针——开关经 RWMutex 快照读取）。
 // 修改历史：
 //
+//	2026-10-21 23-30-00 | 修正 | DMARC域批（G2 批准 2026-10-21 23:20:02 逐字
+//	  「E-1 B 正常域名，他妈谁会放测试模式给别人发信/E-2 B/ E-3 A/ E-4 A/
+//	  E-5 B/E-6 A/E-7 A/E-8 A/」——四实施四登记）：①E-3-A（GRM-017）多域评估
+//	  去重＋循环外共享 cachedTXT（同域仅评估一次；Tree Walk 查询按域纯函数——
+//	  共享缓存语义与单域一致；8 同域地址 65→9 次查询）②E-4-A（GRM-018）
+//	  hasSender 判定升级为 mail.ParseAddress 可解析校验（"Sender: not-an-
+//	  address" 等非法取值视为无有效 Sender→violation 拒收档——V批 E-3② 批准面
+//	  旁路收口）③E-6-A（GRM-020）buildAuthResultsHeader temperror 无签名上下文
+//	  裸条目（与 permerror 形态对齐——rfc8601 §2.2 propspec 可选）④E-8-A
+//	  （GRM-022）多域聚合增 permerror 分支（fail>temperror>permerror>pass>none
+//	  ——与 aggregateDKIM 聚合序对齐；防御位完整性：Evaluate permerror 实际
+//	  不可达〔queryLevel 消化语法坏〕）；登记不处理四项：E-1-B（t=y——干系人
+//	  理由落档）/E-2-B（缺 p= 丢弃上探维持）/E-5-B（violation 维持 DMARC 开关内）
+//	  /E-7-A（GRM-021 维持 SRS「permerror 恒照收」既定裁决＋登记差异——零代码）
 //	2026-10-18 10-32-00 | 修正 | permerror可见性批（G2 批准 2026-10-18 10:28:07
 //	  「E-1 A / E-2 A / E-3 A / F-1 B」；V批 G3 遗留登记①/S4-W Q1=B）：①aggregateDKIM
 //	  增 permerror 显式分支——解析失败〔Signature=nil〕不再落 none、公钥/参数永久
@@ -256,15 +270,19 @@ func (v *VerifierService) Verify(ctx context.Context, msg *IncomingMail) (*Verif
 			// 处置；结论按 fail>temperror>pass>none 最严呈现；A-R header.from
 			// 首域（rfc8601 单值呈现限制）
 			fromDomain = fi.domains[0]
-			anyFail, anyTemp, anyPass := false, false, false
+			anyFail, anyTemp, anyPerm, anyPass := false, false, false, false
 			sawReject, sawQuarantine := false, false
-			evaluated := fi.domains
+			// E-3-A（DMARC域批——GRM-017）：去重（同域仅评估一次——逐域结论对同域
+			// 恒同；报告实测 8 同域地址 DNS 查询放大 7.2 倍收口）＋循环外共享单一
+			// cachedTXT 实例（Tree Walk 查询按域纯函数——B-S批 F6 缓存语义一致；
+			// 请求级生命周期保持，跨调用零共享）
+			evaluated := dedupeDomains(fi.domains)
 			if len(evaluated) > maxFromDomains {
 				evaluated = evaluated[:maxFromDomains] // §11.5 L2506-2510 DoS 限数：超限域不评估
 			}
+			sharedCache := &cachedTXT{inner: txtResolverAdapter{r: v.resolver}}
 			for _, dom := range evaluated {
-				dmResult, disc, _ := dmarc.Evaluate(ctx, &cachedTXT{inner: txtResolverAdapter{r: v.resolver}},
-					dom, dkimSigs, spfPass, spfDomain)
+				dmResult, disc, _ := dmarc.Evaluate(ctx, sharedCache, dom, dkimSigs, spfPass, spfDomain)
 				switch dmResult {
 				case dmarc.ResultFail:
 					anyFail = true
@@ -278,15 +296,23 @@ func (v *VerifierService) Verify(ctx context.Context, msg *IncomingMail) (*Verif
 					}
 				case dmarc.ResultTemperror:
 					anyTemp = true
+				case dmarc.ResultPermerror:
+					anyPerm = true // E-8-A：permerror 域不再被静默丢弃（原全 permerror 回落 none——A-R 虚假标注）
 				case dmarc.ResultPass:
 					anyPass = true
 				}
 			}
+			// E-8-A（DMARC域批——GRM-022）：聚合序 fail>temperror>permerror>pass>none
+			// （与 aggregateDKIM 聚合序对齐；permerror 恒不分派处置——照收仅标注，
+			// E-7-A 维持 SRS「permerror 恒照收」裁决承载）；anyPerm 为防御位完整性
+			// （Evaluate 返 permerror 仅防御分支——queryLevel 已消化语法坏，实际不可达）
 			switch {
 			case anyFail:
 				res.DMARC = "fail"
 			case anyTemp:
 				res.DMARC = "temperror"
+			case anyPerm:
+				res.DMARC = "permerror"
 			case anyPass:
 				res.DMARC = "pass"
 			default:
@@ -410,6 +436,21 @@ func aggregateDKIM(results []ravendkim.Result) (conclusion, reportDomain string)
 // 上限档）。
 const maxFromDomains = 8
 
+// dedupeDomains 域列表保序去重（E-3-A——DMARC域批 GRM-017：同域仅保留首见，
+// 逐域 DMARC 评估对同域结论恒同——重复评估纯耗 DNS 查询；输入序保持稳定）。
+func dedupeDomains(domains []string) []string {
+	seen := make(map[string]struct{}, len(domains))
+	out := make([]string, 0, len(domains))
+	for _, d := range domains {
+		if _, ok := seen[d]; ok {
+			continue
+		}
+		seen[d] = struct{}{}
+		out = append(out, d)
+	}
+	return out
+}
+
 // fromHeaderInfo RFC5322 From 头提取产物（V批 E-3——rfc5322bis §3.6.2+rfc9989
 // §5.3.1/§11.5 锚定）。
 type fromHeaderInfo struct {
@@ -440,8 +481,19 @@ func extractFromHeader(raw []byte) (*fromHeaderInfo, error) {
 	if err != nil || len(addrs) == 0 {
 		return nil, fmt.Errorf("%w: From 头不可解析", ErrMissingFrom)
 	}
+	// E-4-A（DMARC域批——GRM-018）：Sender 头须可解析出合法邮箱地址方视为在位——
+	// net/mail.ParseAddress 对无 @/畸形形态返回错误（"Sender: not-an-address" 等
+	// 非法取值=无有效 Sender→violation 置位拒收档，多地址 From 无 Sender 拒收
+	// 批准面旁路收口；合法 Sender 零变化；单地址 From SHOULD NOT 使用 Sender 恒 false）
+	senderRaw := strings.TrimSpace(msg.Header.Get("Sender"))
+	hasSender := false
+	if senderRaw != "" {
+		if _, serr := mail.ParseAddress(senderRaw); serr == nil {
+			hasSender = true
+		}
+	}
 	fi := &fromHeaderInfo{
-		hasSender: strings.TrimSpace(msg.Header.Get("Sender")) != "",
+		hasSender: hasSender,
 		multiFrom: len(fromLines) > 1,
 	}
 	for _, a := range addrs {
@@ -492,11 +544,13 @@ func buildAuthResultsHeader(authservID string, stack config.AuthStack, res *Veri
 	if stack.SPFEnabled && spfDomain != "" {
 		fmt.Fprintf(&b, ";\r\n\tspf=%s %s=%s", res.SPF, spfProp, spfDomain)
 	}
-	if stack.DKIMEnabled && (dkimDomain != "" || res.DKIM == "permerror") {
-		// permerror可见性批 E-2-A：permerror 无签名上下文（全 nil 解析失败）时以裸
-		// resinfo 呈现——rfc8601 §2.2 ABNF「resinfo = ";" method "=" result [propspec]」
-		// propspec 可选，裸 dkim=permerror 为合法形态（消费者可见性——dkim=none 与
-		// 签名损坏可区分）；其余结论（pass/fail/temperror 带上下文）既有形态零变化
+	if stack.DKIMEnabled && (dkimDomain != "" || res.DKIM == "permerror" || res.DKIM == "temperror") {
+		// permerror可见性批 E-2-A＋DMARC域批 E-6-A（GRM-020）：permerror/temperror
+		// 无签名上下文（全 nil 解析失败/查询故障）时以裸 resinfo 呈现——rfc8601 §2.2
+		// ABNF「resinfo = ";" method "=" result [propspec]」propspec 可选，裸条目为
+		// 合法形态（消费者可见性——dkim=none 与「签名损坏」「查询故障」可区分；
+		// temperror 原整条丢失与 permerror 形态不一致收口）；其余结论（pass/fail/
+		// temperror 带上下文）既有形态零变化
 		if dkimDomain != "" {
 			fmt.Fprintf(&b, ";\r\n\tdkim=%s header.d=%s", res.DKIM, dkimDomain)
 		} else {
