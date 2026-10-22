@@ -4,12 +4,14 @@
 #   2026-09-20 06:02:00 | 新建 | U11 三库验收（计划书步骤 8）
 #   2026-09-27 05:43:00 | 扩展 | U20 Docker 交付优化（ldflags 版本三元组注入与 Makefile
 #                             #   LDFLAGS 对齐+HEALTHCHECK 健康探测——Q1-A 裁决）
+#   2026-10-22 12:23:00 | 升级 | Go版本升级批：构建层 golang:1.26-alpine→golang:1.27.3-alpine
+#                             （干系人指令 2026-10-22 12:04:39；G2 批准 12:17:11 V-1-A 三锚点同步）
 
 # ── 构建层：Go 工具链编译单二进制 ──
 # U20：版本三元组 stage 内 ARG（缺省 unknown 兜底沿 Makefile LDFLAGS 语义——无参构建
 # 合法；传值形态：docker build --build-arg VERSION=... --build-arg GIT_COMMIT=...
 # --build-arg BUILD_TIME=...）
-FROM golang:1.26-alpine AS build
+FROM golang:1.27.3-alpine AS build
 ARG VERSION=unknown
 ARG GIT_COMMIT=unknown
 ARG BUILD_TIME=unknown

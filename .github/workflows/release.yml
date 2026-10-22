@@ -7,8 +7,10 @@
 # 修改历史：
 #   2026-10-03 17:16:00 | 新建 | 发布准备批次（G2 批准 2026-10-03 17:09:00）
 #   2026-10-03 22:23:00 | 修正 | 工作流落位修正批次：文件迁入 server/（仓库根=server/——
-#   G2 批准 2026-10-03 22:21:37 含前提确认）；三处根假设消除——defaults.working-directory
-#   删除（make 于仓库根直达）/cache-dependency-path 与 Release files 去除 server/ 前缀
+#                             G2 批准 2026-10-03 22:21:37 含前提确认）；三处根假设消除——defaults.working-directory
+#                             删除（make 于仓库根直达）/cache-dependency-path 与 Release files 去除 server/ 前缀
+#   2026-10-22 12:23:00 | 升级 | Go版本升级批：go-version 1.26→1.27.3（干系人指令 2026-10-22
+#                             12:04:39；G2 批准 12:17:11 V-1-A 三锚点同步）
 name: release
 
 on:
@@ -30,7 +32,7 @@ jobs:
       - name: 安装 Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.26" # 与 go.mod 基线一致（T1-A 裁决：goose v3.28.0 要求 ≥1.26）
+          go-version: "1.27.3" # 与 go.mod 基线一致（Go版本升级批 2026-10-22：1.27.3——T1-A ≥1.26 下限语义保持）
           cache: true
           cache-dependency-path: go.sum # 仓库根=server/（工作流落位修正批次——go.sum 即仓库根相对路径）
 
