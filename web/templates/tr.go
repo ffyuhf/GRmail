@@ -29,6 +29,10 @@
 //	消除逐次手动执行；生成物入库形态不变（CI 直接构建零生成依赖）
 //	（依据：发布准备计划书 v1.0.0 1.2-MF 组/阶段 2，G2 批准 2026-10-03 17:09:00）
 //	2026-10-15 16:39:00 | 扩展 | Webmail前端品牌焕新批 δ D-7：brand.tagline
+//	2026-10-22 23:10:00 | 扩展 | DKIM管理缺陷修复批（G2 批准 2026-10-22 23:02:54 三段
+//	  闭合链）：settings 域八键（重新生成强度/二次确认文案/成功与三类错误反馈/私钥不可读
+//	  提示）+setup 域一键（selector 输入——E-2-A 乙·即时落盘）
+//	  （依据：DKIM管理缺陷修复批计划书 v1.0.0 1.2 E-1-A/E-2-A/E-3-A；SRS FR-008/009/015）
 //	品牌语键（zh「自有服务器，自持信箱」/en "Self-hosted. Self-owned."——登录页
 //	品牌区+manifest description 消费；G2 批准 2026-10-15 16:28:59）
 
@@ -355,23 +359,32 @@ var messages = map[string][2]string{
 	"tokens.errGen":    {"Token 生成失败", "Token generation failed"},
 	"tokens.errRevoke": {"Token 撤销失败", "Token revoke failed"},
 	// ── 设置页深级（U18——settings.templ/adminsettings.go；title/h1/legend 系 U16 已埋键本单元接线）──
-	"settings.spf":         {"SPF 验证（rfc7208）", "SPF verification (rfc7208)"},
-	"settings.dkim":        {"DKIM 验证与签名（rfc6376）", "DKIM verify & sign (rfc6376)"},
-	"settings.dmarc":       {"DMARC 验证（rfc9989）", "DMARC verification (rfc9989)"},
-	"settings.arc":         {"ARC 验证与封装（rfc8617）", "ARC verify & seal (rfc8617)"},
-	"settings.dkimSel":     {"DKIM 选择器", "DKIM selector"},
-	"settings.dkimKey":     {"DKIM 私钥路径", "DKIM private key path"},
-	"settings.dkimAlgo":    {"DKIM 算法", "DKIM algorithm"},
-	"settings.catchAll":    {"catch-all 聚合（未注册来信转交管理员——FR-003）", "catch-all aggregation (FR-003)"},
-	"settings.maxSize":     {"邮件大小上限（MiB）", "Max message size (MiB)"},
-	"settings.retryBase":   {"退避基数（秒）", "Retry base (seconds)"},
-	"settings.retryFactor": {"退避倍数", "Retry factor"},
-	"settings.retryCap":    {"退避封顶（秒）", "Retry cap (seconds)"},
-	"settings.maxAttempts": {"最大尝试次数", "Max attempts"},
-	"settings.idle":        {"会话空闲超时（分钟）", "Session idle timeout (minutes)"},
-	"settings.absolute":    {"会话绝对超时（小时）", "Session absolute timeout (hours)"},
-	"settings.limitWin":    {"登录失败窗口（分钟）", "Login failure window (minutes)"},
-	"settings.limitThr":    {"失败锁定阈值（次）", "Lockout threshold (attempts)"},
+	"settings.spf":      {"SPF 验证（rfc7208）", "SPF verification (rfc7208)"},
+	"settings.dkim":     {"DKIM 验证与签名（rfc6376）", "DKIM verify & sign (rfc6376)"},
+	"settings.dmarc":    {"DMARC 验证（rfc9989）", "DMARC verification (rfc9989)"},
+	"settings.arc":      {"ARC 验证与封装（rfc8617）", "ARC verify & seal (rfc8617)"},
+	"settings.dkimSel":  {"DKIM 选择器", "DKIM selector"},
+	"settings.dkimKey":  {"DKIM 私钥路径", "DKIM private key path"},
+	"settings.dkimAlgo": {"DKIM 算法", "DKIM algorithm"},
+	// ── DKIM管理缺陷修复批（G2 批准 2026-10-22 23:02:54——E-1-A 重新生成/E-3-A 公钥呈现）──
+	"settings.dkimRegenStrength":    {"重新生成密钥强度", "Regeneration key strength"},
+	"settings.dkimRegenConfirm":     {"我确认重新生成：将覆盖现有私钥，旧公钥 DNS 记录即刻失配", "I confirm regeneration: the existing private key will be overwritten and the old public-key DNS record mismatches immediately"},
+	"settings.dkimRegenBtn":         {"重新生成 DKIM 密钥", "Regenerate DKIM key"},
+	"settings.dkimRegenOk":          {"DKIM 密钥已重新生成——请将下方新公钥发布到 DNS 后再删除旧记录", "DKIM key regenerated — publish the new public key below to DNS before removing the old record"},
+	"settings.dkimRegenConfirmErr":  {"请先勾选确认复选框（重新生成将覆盖现有私钥）", "Check the confirmation box first (regeneration overwrites the existing private key)"},
+	"settings.dkimRegenStrengthErr": {"密钥强度档位非法", "Invalid key strength"},
+	"settings.dkimRegenFail":        {"DKIM 密钥生成失败（详见服务端日志）", "DKIM key generation failed (see server logs)"},
+	"settings.dkimKeyUnreadable":    {"DKIM 私钥文件不可读——请检查上方私钥路径（文件丢失或格式错误）", "DKIM private key unreadable — check the key path above (missing file or bad format)"},
+	"settings.catchAll":             {"catch-all 聚合（未注册来信转交管理员——FR-003）", "catch-all aggregation (FR-003)"},
+	"settings.maxSize":              {"邮件大小上限（MiB）", "Max message size (MiB)"},
+	"settings.retryBase":            {"退避基数（秒）", "Retry base (seconds)"},
+	"settings.retryFactor":          {"退避倍数", "Retry factor"},
+	"settings.retryCap":             {"退避封顶（秒）", "Retry cap (seconds)"},
+	"settings.maxAttempts":          {"最大尝试次数", "Max attempts"},
+	"settings.idle":                 {"会话空闲超时（分钟）", "Session idle timeout (minutes)"},
+	"settings.absolute":             {"会话绝对超时（小时）", "Session absolute timeout (hours)"},
+	"settings.limitWin":             {"登录失败窗口（分钟）", "Login failure window (minutes)"},
+	"settings.limitThr":             {"失败锁定阈值（次）", "Lockout threshold (attempts)"},
 	// GRM高危处置批（GRM-004）：提交端点连接上限（会话限流节承载——后台管理设置可配）
 	"settings.subMaxConns": {"提交端点连接上限（465/587 合计，热生效）", "Submission endpoint max connections (465/587 combined)"},
 	"settings.stsPub":      {"MTA-STS 策略发布（rfc8461——关闭即策略端点停发）", "MTA-STS policy publishing (rfc8461)"},
@@ -516,6 +529,8 @@ var messages = map[string][2]string{
 	"setup.dkimLegend":   {"DKIM 签名密钥（自动生成——发信签名用）", "DKIM signing key (auto-generated)"},
 	"setup.dkimStrength": {"密钥强度", "Key strength"},
 	"setup.dkimRegen":    {"重新生成密钥（不勾选则沿用已有密钥）", "Regenerate key (reuse existing if unchecked)"},
+	// DKIM管理缺陷修复批（E-2-A 乙·即时落盘——G2 批准 2026-10-22）
+	"setup.dkimSelector": {"DKIM 选择器（DNS 记录名前缀——留空默认 grmail）", "DKIM selector (DNS record-name prefix — grmail if blank)"},
 	"setup.dkimExisting": {"已生成密钥——下一步 DNS 建议将包含其公钥记录", "Key exists — its public record appears in the next step"},
 	// ── 2FA（U24——twofactor.templ/登录二步/顶栏入口/admin 强制标记）──
 	"top.twofactor":         {"2FA 设置", "2FA Settings"},

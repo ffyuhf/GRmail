@@ -15,16 +15,27 @@
 //	  本节字段（既有校验规则逐字迁移零增减；未提交节保留现值）；「一次保存全部五节」
 //	  批量交互移除（计划书 1.3 已披露获批）
 //	  （依据：γ批计划书 v1.0.0 1.2 B5，G2 批准 2026-10-15 01:22 候选 E-1-A）
+//	2026-10-22 23:10:00 | 扩展 | DKIM管理缺陷修复批（E-1-A/E-3-A——G2 批准 2026-10-22
+//	  23:02:54 三段闭合链）：①buildSettingsData 增 DKIM 公钥 TXT 装配（E-3-A——
+//	  auth.DKIMPublicKeyDNSValue 既有纯函数消费+记录名三元；不可读态错误提示行）②
+//	  adminSettingsGET 增 ?regen=1 成功反馈③新增 dkimRegenPOST 独立端点（E-1-A 形态 b
+//	  POST /admin/settings/dkim/regen——服务端强制二次确认复选框+强度四档；生成链复用
+//	  向导 setupPostDomain 同源：GenerateDKIMKeyPair→覆写现 keyPath→SaveConfig 回写
+//	  algorithm→OnConfigChange 热生效）
+//	  （依据：DKIM管理缺陷修复批计划书 v1.0.0 1.2 E-1-A/E-3-A+第七章；SRS FR-008/FR-009/NFR-012）
 package web
 
 import (
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
+	"GRmail/internal/auth"
 	"GRmail/internal/config"
 	"GRmail/web/templates"
 )
@@ -48,6 +59,10 @@ func (s *Server) adminSettingsGET(c *gin.Context) {
 	data := s.buildSettingsData(c, cfg(), "")
 	if c.Query("saved") == "1" {
 		data.Notice = templates.Tr(langOf(c), "settings.saved")
+	}
+	// DKIM管理缺陷修复批（E-1-A）：重新生成成功反馈（?regen=1——公钥呈现行同步显示新键）
+	if c.Query("regen") == "1" {
+		data.DKIMRegenNotice = true
 	}
 	// Webmail管理职能批次 G1：管理员改密成功反馈（/admin/password 303 回带 ?pwchanged=1）
 	if c.Query("pwchanged") == "1" {
@@ -100,6 +115,21 @@ func (s *Server) buildSettingsData(c *gin.Context, cfg *config.Config, msg strin
 	data.Domain = cfg.Server.Domain
 	data.StsTXTRecord = stsTXTSuggestion(cfg)
 	data.TLSRPTRecord = tlsrptTXTSuggestion(cfg)
+	// ── DKIM管理缺陷修复批（E-3-A——G2 批准 2026-10-22）：DKIM 公钥完成态再查看 ──
+	// DKIMPublicKeyDNSValue 既有纯函数消费（向导步 4 同源）；未配置→行不呈现（零占位）；
+	// keyPath 已配置但不可读→DKIMKeyErr 错误提示（原静默态——配置指向丢失文件当场暴露）。
+	data.DKIMRegenStrength = auth.DefaultDKIMStrength
+	if cfg.Auth.DKIM.Algorithm == "ed25519-sha256" {
+		data.DKIMRegenStrength = "ed25519"
+	}
+	if cfg.Auth.DKIM.Selector != "" && cfg.Auth.DKIM.KeyPath != "" {
+		data.DKIMDNSName = cfg.Auth.DKIM.Selector + "._domainkey." + cfg.Server.Domain
+		if txt, kerr := auth.DKIMPublicKeyDNSValue(cfg.Auth.DKIM.KeyPath); kerr == nil && txt != "" {
+			data.DKIMTXTRecord = txt
+		} else if kerr != nil {
+			data.DKIMKeyErr = true
+		}
+	}
 	if data.MaxMessageSizeMB <= 0 {
 		data.MaxMessageSizeMB = 35 // 缺省档呈现（零值兜底语义）
 	}
@@ -344,3 +374,75 @@ func parsePositiveForm(c *gin.Context, field string) (int64, error) {
 
 // errBadFormValue 表单数值字段非法哨兵。
 var errBadFormValue = &errSetupStep{msg: "数值字段非法"}
+
+// dkimRegenPOST DKIM 密钥重新生成（DKIM管理缺陷修复批 E-1-A——G2 批准 2026-10-22
+// 23:02:54「E-1 A要加二次确认」+实现形态 b 独立端点）。
+// 二次确认=服务端强制复选框（dkimConfirm 未勾选即拒绝——JS 无关防线；误点换键面收口）。
+// 能力影响（计划书 1.2 已披露获批）：换键后旧公钥 DNS 记录即刻失配——新公钥发布 DNS
+// 前出站邮件 DKIM 验证 fail（rfc6376 §3.6.1 键轮换过渡期语义）；旧私钥被覆盖不可恢复
+// （可随时再生成新对）；热重载失败保留旧键并告警（OnConfigChange 既有语义）。
+// 生成链复用向导 setupPostDomain 同源：GenerateDKIMKeyPair（强度四档）→覆写现 keyPath
+// （空则 data/dkim.pem 缺省档）→SaveConfig 原子回写 algorithm（selector/keyPath 保持
+// 现值）→fsnotify→SignerService.OnConfigChange 新键即时生效（全程无重启）。
+// 成功 303 /admin/settings?regen=1（E-3-A 呈现行同步显示新公钥）。
+func (s *Server) dkimRegenPOST(c *gin.Context) {
+	if !s.adminGuard(c) {
+		return
+	}
+	if s.cfg.CfgSnapshot == nil || s.cfg.SaveConfig == nil {
+		sessLogger(c).Error("配置读写未注入：DKIM 重新生成不可用")
+		s.errPage(c, http.StatusServiceUnavailable, "err.page503")
+		return
+	}
+	// 二次确认（服务端强制——未勾选拒绝重渲染）
+	if c.PostForm("dkimConfirm") != "on" {
+		renderPage(c, http.StatusOK, templates.SettingsView(
+			s.buildSettingsData(c, s.cfg.CfgSnapshot(), templates.Tr(langOf(c), "settings.dkimRegenConfirmErr"))))
+		return
+	}
+	strength := strings.TrimSpace(c.PostForm("dkimStrength"))
+	valid := false
+	for _, st := range auth.DKIMStrengths {
+		if strength == st {
+			valid = true
+			break
+		}
+	}
+	if !valid {
+		renderPage(c, http.StatusOK, templates.SettingsView(
+			s.buildSettingsData(c, s.cfg.CfgSnapshot(), templates.Tr(langOf(c), "settings.dkimRegenStrengthErr"))))
+		return
+	}
+	privPEM, _, algorithm, err := auth.GenerateDKIMKeyPair(strength)
+	if err != nil {
+		sessLogger(c).Error("DKIM 密钥生成失败", "error", err)
+		renderPage(c, http.StatusOK, templates.SettingsView(
+			s.buildSettingsData(c, s.cfg.CfgSnapshot(), templates.Tr(langOf(c), "settings.dkimRegenFail"))))
+		return
+	}
+	keyPath := s.cfg.CfgSnapshot().Auth.DKIM.KeyPath
+	if keyPath == "" {
+		keyPath = "data/dkim.pem" // 向导缺省档同源（裁决四a）
+	}
+	if err := os.MkdirAll(filepath.Dir(keyPath), 0o700); err != nil {
+		sessLogger(c).Error("DKIM 私钥目录创建失败", "error", err)
+		renderPage(c, http.StatusOK, templates.SettingsView(
+			s.buildSettingsData(c, s.cfg.CfgSnapshot(), templates.Tr(langOf(c), "settings.dkimRegenFail"))))
+		return
+	}
+	if err := os.WriteFile(keyPath, privPEM, 0o600); err != nil {
+		sessLogger(c).Error("DKIM 私钥写入失败", "error", err)
+		renderPage(c, http.StatusOK, templates.SettingsView(
+			s.buildSettingsData(c, s.cfg.CfgSnapshot(), templates.Tr(langOf(c), "settings.dkimRegenFail"))))
+		return
+	}
+	if err := s.cfg.SaveConfig(func(cfg *config.Config) {
+		cfg.Auth.DKIM.Algorithm = algorithm // selector/keyPath 保持现值；热重载经 OnConfigChange 加载新键
+	}); err != nil {
+		s.settingsSaveFailed(c, "DKIM 重新生成", err)
+		return
+	}
+	sessLogger(c).Info("DKIM 密钥已重新生成（热加载生效）", "log_id", c.GetString(ctxKeyLogID),
+		"strength", strength, "keyPath", keyPath)
+	c.Redirect(http.StatusSeeOther, "/admin/settings?regen=1")
+}

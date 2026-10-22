@@ -342,6 +342,9 @@ func (s *Server) mountRoutes() {
 	// admin 门卫在 handler 内沿 U9 admin.go 同形态）
 	s.engine.GET("/admin/settings", requireAuth(), s.adminSettingsGET)
 	s.engine.POST("/admin/settings", requireAuth(), s.adminSettingsPOST)
+	// DKIM管理缺陷修复批（E-1-A 形态 b——G2 批准 2026-10-22 23:02:54）：密钥重新生成
+	// 独立端点（服务端强制二次确认复选框；admin 门卫在 handler 内沿同形态）
+	s.engine.POST("/admin/settings/dkim/regen", requireAuth(), s.dkimRegenPOST)
 
 	// API Token 管理端点族（U14：Q3-B 独立路由——/admin/tokens；admin 门卫沿 admin.go
 	// 形态（requireAuth+handler 内 SubjectType==admin）；Tokens nil=503 渐进态）

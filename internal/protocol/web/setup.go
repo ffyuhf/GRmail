@@ -25,6 +25,11 @@
 //	SRS FR-013 双语子项向导页承载收口）
 //	2026-10-14 20:45:00 | 修正 | Webmail前端可用性收口批 C5：DNS 建议占位词「你的域名」
 //	与 A 记录引导串键承载（en 中文残留收口；G2 批准 2026-10-14 20:37）
+//	2026-10-22 23:10:00 | 扩展 | DKIM管理缺陷修复批（E-2-A 乙·即时落盘——G2 批准
+//	  2026-10-22 23:02:54 三段闭合链）：①setupPostDomain 增 selector 表单值承载
+//	  （缺省 grmail 零变化+isValidDKIMSelector 校验〔rfc6376 §3.6.1+rfc5321bis
+//	  sub-domain 语法锚定〕+已生成态即时落盘）②buildSetupData 增 DKIMSelector 回填
+//	  （依据：DKIM管理缺陷修复批计划书 v1.0.0 1.2 E-2-A；SRS FR-015/FR-008）
 package web
 
 import (
@@ -175,6 +180,11 @@ func (s *Server) buildSetupData(c *gin.Context, idx int, errMsg string) template
 		data.DKIMStrength = "ed25519"
 	}
 	data.DKIMGenerated = cfg.Auth.DKIM.KeyPath != "" && cfg.Auth.DKIM.Selector != ""
+	// DKIM管理缺陷修复批（E-2-A 乙）：selector 输入回填现值（空=缺省 grmail——不填零变化）
+	data.DKIMSelector = cfg.Auth.DKIM.Selector
+	if data.DKIMSelector == "" {
+		data.DKIMSelector = "grmail"
+	}
 	if idx == 3 { // DNS 建议步：按当前域名计算呈现（计划书 1.5⑤；真实值化——IP 探测/DKIM 公钥）
 		data.DNSRecords = buildDNSRecords(cfg, langOf(c)) // C5（α 批）：lang 注入（占位词/引导串键承载）
 	}
@@ -585,6 +595,33 @@ func isValidLocalPart(s string) bool {
 	return len(s) > 0
 }
 
+// isValidDKIMSelector DKIM selector 语法校验（DKIM管理缺陷修复批 E-2-A——rfc6376
+// §3.6.1 L581「selector = sub-domain *( "." sub-domain )」+rfc5321bis L2460
+// 「sub-domain = Let-dig [Ldh-str]」原文锚定）：点分隔组件，每组件字母/数字开头结尾、
+// 中间可含连字符、单组件 ≤63 字符（DNS 单标签上限）；整体 ≤253 字符（域名形态上限）。
+func isValidDKIMSelector(s string) bool {
+	if s == "" || len(s) > 253 {
+		return false
+	}
+	for _, label := range strings.Split(s, ".") {
+		runes := []rune(label)
+		if len(runes) == 0 || len(label) > 63 {
+			return false
+		}
+		for i, r := range runes {
+			isLetDig := (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')
+			isLdh := isLetDig || r == '-'
+			if !isLdh {
+				return false // 非 ASCII/非法字符统一拒绝（Let-dig/Ldh-str 值域外）
+			}
+			if (i == 0 || i == len(runes)-1) && !isLetDig {
+				return false // 首尾必须字母/数字（Ldh-str 语义）
+			}
+		}
+	}
+	return true
+}
+
 // setupPostDomain 步 3：主域名（发信身份/收信判定/证书 CN——后续步骤依赖）
 // +DKIM 密钥生成（向导占位符与布局修复批次——裁决一a：生成本步承载；FR-015
 // 「无需手工编辑任何配置文件」收口：密钥原需管理员 openssl 手工生成放置）。
@@ -600,6 +637,16 @@ func (s *Server) setupPostDomain(c *gin.Context) error {
 	strength := strings.TrimSpace(c.PostForm("dkimStrength"))
 	if strength == "" {
 		strength = auth.DefaultDKIMStrength
+	}
+	// DKIM管理缺陷修复批（E-2-A 乙·即时落盘——G2 批准 2026-10-22 23:02:54）：selector
+	// 表单值承载（缺省 grmail 零变化——向导占位符批裁决二a 缺省形态保持；已生成态不勾
+	// 重新生成时输入值同样落盘——表单所见即所得，公钥不变仅记录名变、DNS 需同步）。
+	selector := strings.TrimSpace(c.PostForm("dkimSelector"))
+	if selector == "" {
+		selector = "grmail"
+	}
+	if !isValidDKIMSelector(selector) {
+		return &errSetupStep{msg: "DKIM 选择器格式非法（小写字母/数字/连字符，点分隔，每段 ≤63 字符）"}
 	}
 	regen := c.PostForm("dkimRegen") == "on"
 	cur := s.currentConfig(c)
@@ -617,13 +664,16 @@ func (s *Server) setupPostDomain(c *gin.Context) error {
 		if err := os.WriteFile(keyPath, privPEM, 0o600); err != nil {
 			return &errSetupStep{msg: "DKIM 私钥写入失败：" + err.Error()}
 		}
-		newDKIM = config.DKIMConf{Selector: "grmail", KeyPath: keyPath, Algorithm: algorithm}
+		newDKIM = config.DKIMConf{Selector: selector, KeyPath: keyPath, Algorithm: algorithm}
 	}
 	adminMailbox := ""
 	if err := s.saveStep(c, func(cfg *config.Config) {
 		cfg.Server.Domain = domain
 		if needKey {
 			cfg.Auth.DKIM = newDKIM
+		} else {
+			// E-2-A 乙·即时落盘：已生成态 selector 提交即改（签名 s= 标签热重载即时跟随）
+			cfg.Auth.DKIM.Selector = selector
 		}
 		// 管理员主体增强批次 G1（D4）：前缀+域名组合管理员主邮箱（步 2 前缀落盘态；
 		// 未走过步 2 新字段的部署保持空——mailboxview 回退 postmaster 兼容锚）

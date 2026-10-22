@@ -149,6 +149,7 @@ type SetupData struct {
 	Domain        string          // 步 3
 	DKIMStrength  string          // 步 3：DKIM 密钥强度选择回显（生成档位——rsa-2048 缺省；向导占位符与布局修复批次）
 	DKIMGenerated bool            // 步 3：已有密钥提示态（config.DKIM.KeyPath 非空——向导占位符与布局修复批次）
+	DKIMSelector  string          // 步 3：selector 输入回显（E-2-A 乙·即时落盘——空=缺省 grmail；DKIM管理缺陷修复批）
 	DNSRecords    []DNSRecordView // 步 4
 	SSLMode       string          // 步 5：acme/manual
 	ACMEMail      string
@@ -214,4 +215,10 @@ type SettingsData struct {
 	StsTXTRecord string // _mta-sts.<domain> TXT 记录值
 	TLSRPTRecord string // _smtp._tls.<domain> TXT 记录值（ReportEnabled=false 时空）
 	Domain       string // E9（批二）：真实主域（TXT 记录名渲染——替代「主域」占位词，用户照抄即合法记录名）
+	// ── DKIM管理缺陷修复批增量（G2 批准 2026-10-22 23:02:54——E-1-A/E-3-A）──
+	DKIMRegenStrength string // 重新生成强度档回显（auth.DKIMStrengths 值域；rsa-2048 缺省档）
+	DKIMRegenNotice   bool   // 重新生成成功反馈（?regen=1 态——公钥呈现行同步更新）
+	DKIMDNSName       string // DKIM 记录名（selector._domainkey.<主域>；空=未配置行不呈现）
+	DKIMTXTRecord     string // DKIM 公钥 TXT 值（E-3-A——DKIMPublicKeyDNSValue 产物，随时可复制发布）
+	DKIMKeyErr        bool   // keyPath 已配置但私钥文件不可读（错误提示行——原静默态当场暴露）
 }

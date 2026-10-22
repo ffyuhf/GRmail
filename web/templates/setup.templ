@@ -27,6 +27,10 @@
 //   ⑦步 2 已设置态徽标（P6——HadAdmin 禁用呈现）
 //   （依据：Setup向导新手可用性计划书 v1.0.0 1.2 P1~P13 组，G2 批准 2026-10-05
 //   01:27:29；参考对照 PMail 前端 SetupView；白话+细节分层原则——零信息丢失）
+//   2026-10-22 23:10:00 | 扩展 | DKIM管理缺陷修复批（E-2-A 乙·即时落盘——G2 批准
+//   2026-10-22 23:02:54）：步 3 DKIM 区增 selector 输入（缺省 grmail 零变化；
+//   已生成态提交同样落盘——表单所见即所得；服务端 isValidDKIMSelector 校验）
+//   （依据：DKIM管理缺陷修复批计划书 v1.0.0 1.2 E-2-A；SRS FR-015/FR-008）
 package templates
 
 // SetupView 向导步骤页（六步共用组件按 Step 分支渲染；当前值回填支持部分完成态恢复）。
@@ -145,6 +149,9 @@ templ SetupView(data SetupData) {
 				</fieldset>
 				<fieldset>
 					<legend>{ Tr(lang, "setup.dkimLegend") }</legend>
+					// DKIM管理缺陷修复批（E-2-A 乙·即时落盘——G2 批准 2026-10-22 23:02:54）：
+					// selector 输入（缺省 grmail 零变化；已生成态提交同样落盘——表单所见即所得）。
+					<label>{ Tr(lang, "setup.dkimSelector") } <input type="text" name="dkimSelector" value={ data.DKIMSelector } maxlength="63"/></label>
 					<label>{ Tr(lang, "setup.dkimStrength") }
 						<select name="dkimStrength">
 							<option value="rsa-2048" { selectedAttrs(data.DKIMStrength != "rsa-3072" && data.DKIMStrength != "rsa-4096" && data.DKIMStrength != "ed25519")... }>RSA 2048</option>

@@ -22,6 +22,11 @@
 //   已披露获批）+C3/E-2-A 组件化——枢纽导航抽 settingsNavHub、返回链抽 settingsNavBack
 //   （三形态语义保持，批二 F7 双分支语义参数化）+E2/E-3-A 分组折叠——details 默认全展开
 //   （<768 可折叠；≥768 summary 禁交互恒展开——桌面呈现零变化锚，app.css .settings-fold 承载）
+//   2026-10-22 23:10:00 | 扩展 | DKIM管理缺陷修复批（E-1-A/E-3-A——G2 批准 2026-10-22
+//   23:02:54 三段闭合链）：①认证栈节增重新生成独立表单（服务端强制二次确认复选框+
+//   强度四档——POST /admin/settings/dkim/regen）②?regen=1 成功反馈③DNS 建议节增
+//   DKIM TXT 只读行（未配置不呈现/不可读错误提示/值可复制发布）
+//   （依据：DKIM管理缺陷修复批计划书 v1.0.0 1.2 E-1-A/E-3-A；SRS FR-008/FR-009/NFR-012）
 package templates
 
 import "fmt"
@@ -73,6 +78,10 @@ templ SettingsView(data SettingsData) {
 		if data.Notice != "" {
 			<p class="notice" role="status">{ data.Notice }</p>
 		}
+		// DKIM管理缺陷修复批（E-1-A）：重新生成成功反馈（?regen=1——下行 DKIM TXT 呈现同步更新）
+		if data.DKIMRegenNotice {
+			<p class="notice" role="status">{ Tr(lang, "settings.dkimRegenOk") }</p>
+		}
 		if data.Message != "" {
 			<p class="error" role="alert">{ data.Message }</p>
 		}
@@ -105,6 +114,23 @@ templ SettingsView(data SettingsData) {
 					<label><input type="radio" name="dkimPolicy" value="hard" { checkedAttrs(data.DKIMPolicy == "hard")... }/> { Tr(lang, "settings.policyHard") }</label>
 				</fieldset>
 				<button class="primary" type="submit">{ Tr(lang, "common.save") }</button>
+			</form>
+			// DKIM管理缺陷修复批（E-1-A——G2 批准 2026-10-22「E-1 A要加二次确认」+形态 b）：
+			// 重新生成独立表单（HTML 表单不可嵌套——置于本节保存表单之后）。二次确认=
+			// 服务端强制复选框（文案明示旧公钥失配——dkimRegenPOST 校验承载）；强度四档
+			// 复用向导 DKIMStrengths；生成后热加载即时生效（呈现行同步显示新公钥）。
+			<form method="post" action="/admin/settings/dkim/regen" class="dkim-regen">
+				<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+				<label>{ Tr(lang, "settings.dkimRegenStrength") }
+					<select name="dkimStrength">
+						<option value="rsa-2048" { selectedAttrs(data.DKIMRegenStrength != "rsa-3072" && data.DKIMRegenStrength != "rsa-4096" && data.DKIMRegenStrength != "ed25519")... }>RSA 2048</option>
+						<option value="rsa-3072" { selectedAttrs(data.DKIMRegenStrength == "rsa-3072")... }>RSA 3072</option>
+						<option value="rsa-4096" { selectedAttrs(data.DKIMRegenStrength == "rsa-4096")... }>RSA 4096</option>
+						<option value="ed25519" { selectedAttrs(data.DKIMRegenStrength == "ed25519")... }>Ed25519</option>
+					</select>
+				</label>
+				<label><input type="checkbox" name="dkimConfirm"/> { Tr(lang, "settings.dkimRegenConfirm") }</label>
+				<button class="secondary" type="submit">{ Tr(lang, "settings.dkimRegenBtn") }</button>
 			</form>
 		</details>
 		<details class="settings-fold" open>
@@ -168,6 +194,15 @@ templ SettingsView(data SettingsData) {
 					{ data.TLSRPTRecord }
 				}
 			</code></p>
+			// DKIM管理缺陷修复批（E-3-A——G2 批准 2026-10-22）：DKIM 公钥 TXT 完成态再查看
+			// （未配置→行不呈现；不可读→错误提示行——原静默态当场暴露；值直接可复制发布）。
+			if data.DKIMDNSName != "" {
+				if data.DKIMKeyErr {
+					<p class="error" role="alert">{ Tr(lang, "settings.dkimKeyUnreadable") }</p>
+				} else {
+					<p class="hint">TXT <code>{ data.DKIMDNSName }</code>{ colonFor(lang) }<code>{ data.DKIMTXTRecord }</code></p>
+				}
+			}
 		</details>
 			</main>
 		}
